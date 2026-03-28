@@ -533,6 +533,22 @@
   .sort-btn:hover { border-color: var(--teal); color: var(--text); }
   .sort-btn.active { background: var(--teal-dim); border-color: var(--teal); color: var(--teal-light); }
 
+  /* ── Print Button ── */
+  .print-btn {
+    padding: 0.35rem 0.85rem;
+    border-radius: 20px;
+    border: 1px solid var(--border);
+    background: none;
+    color: var(--text-muted);
+    font-size: 0.8rem;
+    font-weight: 600;
+    cursor: pointer;
+    transition: all 0.2s;
+    margin-left: auto;
+  }
+
+  .print-btn:hover { border-color: var(--teal); color: var(--text); }
+
   /* ── Responsive ── */
   @media (max-width: 768px) {
     .top-bar { padding: 0.75rem 1rem; gap: 1rem; }
@@ -541,6 +557,43 @@
     .tab-btn { padding: 0.65rem 1rem; font-size: 0.8rem; }
     .summary-card .value { font-size: 1.5rem; }
   }
+
+  /* ── Print Styles ── */
+  @media print {
+    body { background: #fff !important; color: #000 !important; }
+    #pin-screen, #setup-screen, #loading-overlay, .top-bar, .tab-bar,
+    .summary-row, .sort-bar, #tab-search, .error-banner,
+    .refresh-btn, .btn-outline { display: none !important; }
+    #dashboard { display: block !important; }
+    #tab-overview { display: block !important; }
+    .main-content { padding: 0 !important; }
+
+    .course-section { page-break-inside: avoid; margin-bottom: 1rem; }
+    .course-header h2 { color: #000 !important; font-size: 14pt; }
+    .course-badge { background: #eee !important; color: #000 !important; }
+    .period-label { color: #007474 !important; font-size: 11pt; border-bottom: 1px solid #ccc; padding-bottom: 2px; }
+    .period-group { page-break-inside: avoid; margin-bottom: 0.75rem; }
+
+    .student-list { border: 1px solid #ccc !important; border-radius: 0 !important; }
+    .student-row { border-bottom: 1px solid #ddd !important; cursor: default !important; }
+    .student-row:hover { background: none !important; }
+    .student-row-header { padding: 4px 8px !important; }
+    .student-name { color: #000 !important; font-size: 10pt; }
+    .missing-count { background: none !important; color: #333 !important; font-size: 9pt; }
+    .expand-icon { display: none !important; }
+
+    /* Force all details open for print */
+    .student-detail { display: block !important; }
+    .assignment-list li { border-left: 2px solid #007474 !important; color: #333 !important; font-size: 9pt; padding: 2px 6px !important; margin-bottom: 1px !important; }
+    .assignment-list li .asgn-due { color: #666 !important; }
+
+    /* Print header */
+    .print-header { display: block !important; text-align: center; margin-bottom: 1rem; }
+    .print-header h1 { font-size: 16pt; margin-bottom: 2px; }
+    .print-header p { font-size: 9pt; color: #666; }
+  }
+
+  .print-header { display: none; }
 </style>
 </head>
 <body>
@@ -603,6 +656,10 @@
 
   <!-- Main Content -->
   <div class="main-content">
+    <div class="print-header" id="print-header">
+      <h1>PVHS Missing Assignments Report</h1>
+      <p id="print-date"></p>
+    </div>
     <div id="error-banner" class="error-banner"></div>
 
     <!-- Overview Tab -->
@@ -613,6 +670,7 @@
         <button class="sort-btn active" data-sort="last" onclick="changeSort('last')">Last Name</button>
         <button class="sort-btn" data-sort="first" onclick="changeSort('first')">First Name</button>
         <button class="sort-btn" data-sort="most" onclick="changeSort('most')">Most Missing</button>
+        <button class="print-btn" onclick="printReport()">&#128424; Print Report</button>
       </div>
       <div id="courses-container"></div>
     </div>
@@ -1062,6 +1120,66 @@ function sortStudents(students) {
     // default: last name (sortable_name already sorts by last)
     return a.sortable_name.localeCompare(b.sortable_name);
   });
+}
+
+// ── Print Report ──
+function printReport() {
+  // Set print date
+  const now = new Date();
+  document.getElementById('print-date').textContent =
+    `Printed ${now.toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric', year: 'numeric' })} at ${now.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' })} — Students with 3+ missing assignments`;
+
+  // Temporarily re-render with only 3+ missing, all expanded
+  const container = document.getElementById('courses-container');
+  const originalHTML = container.innerHTML;
+
+  // Build print-specific HTML
+  container.innerHTML = dashboardData.map(cd => {
+    const filtered = cd.students.filter(s => s.missing.length >= 3);
+    if (filtered.length === 0) return '';
+
+    const periods = {};
+    filtered.forEach(s => {
+      const p = s.period;
+      if (!periods[p]) periods[p] = [];
+      periods[p].push(s);
+    });
+
+    const sortedPeriods = Object.keys(periods).sort((a, b) => {
+      const na = parseInt(a.replace(/\D/g, '')) || 999;
+      const nb = parseInt(b.replace(/\D/g, '')) || 999;
+      return na - nb;
+    });
+
+    return `
+      <div class="course-section">
+        <div class="course-header">
+          <h2>${escHtml(cd.course.name)}</h2>
+          <span class="course-badge">${filtered.length} students</span>
+        </div>
+        ${sortedPeriods.map(p => {
+          const students = sortStudents(periods[p]);
+          return `
+            <div class="period-group">
+              <div class="period-label">${escHtml(p)} &middot; ${students.length} student${students.length !== 1 ? 's' : ''}</div>
+              <div class="student-list">
+                ${students.map(s => renderStudentRow(s)).join('')}
+              </div>
+            </div>
+          `;
+        }).join('')}
+      </div>
+    `;
+  }).join('');
+
+  // Expand all student details for print
+  container.querySelectorAll('.student-row').forEach(r => r.classList.add('expanded'));
+
+  // Print
+  window.print();
+
+  // Restore original view
+  container.innerHTML = originalHTML;
 }
 
 // ── Tab Switching ──

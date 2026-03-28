@@ -133,6 +133,22 @@
     color: var(--teal-light);
   }
 
+  .btn-install {
+    background: rgba(0,180,180,0.14) !important;
+    border: 1px solid var(--teal-light) !important;
+    color: var(--teal-light) !important;
+    animation: pulse-glow 2s ease-in-out infinite;
+  }
+
+  .btn-install:hover {
+    background: rgba(0,180,180,0.25) !important;
+  }
+
+  @keyframes pulse-glow {
+    0%, 100% { box-shadow: 0 0 0 0 rgba(64,222,222,0); }
+    50% { box-shadow: 0 0 8px 2px rgba(64,222,222,0.3); }
+  }
+
   .setup-error {
     color: var(--danger);
     font-size: 0.85rem;
@@ -745,6 +761,7 @@
         </svg>
       </button>
       <button class="btn btn-small btn-outline" onclick="resetToken()">Change Token</button>
+      <button class="btn btn-small btn-install" id="install-btn" onclick="installApp()" style="display:none;">Install App</button>
     </div>
   </div>
 
@@ -1392,6 +1409,36 @@ window.addEventListener('DOMContentLoaded', () => {
     document.getElementById('pin-input').focus();
   }
 });
+
+// ── PWA Install ──
+let deferredInstallPrompt = null;
+
+window.addEventListener('beforeinstallprompt', (e) => {
+  e.preventDefault();
+  deferredInstallPrompt = e;
+  document.getElementById('install-btn').style.display = 'inline-block';
+});
+
+window.addEventListener('appinstalled', () => {
+  document.getElementById('install-btn').style.display = 'none';
+  deferredInstallPrompt = null;
+});
+
+async function installApp() {
+  if (!deferredInstallPrompt) return;
+  deferredInstallPrompt.prompt();
+  const result = await deferredInstallPrompt.userChoice;
+  if (result.outcome === 'accepted') {
+    document.getElementById('install-btn').style.display = 'none';
+  }
+  deferredInstallPrompt = null;
+}
+
+// Hide install button if already in standalone mode
+if (window.matchMedia('(display-mode: standalone)').matches || window.navigator.standalone) {
+  const ib = document.getElementById('install-btn');
+  if (ib) ib.style.display = 'none';
+}
 
 // ── PWA Service Worker ──
 if ('serviceWorker' in navigator) {

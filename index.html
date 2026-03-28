@@ -2,24 +2,34 @@
 <html lang="en">
 <head>
 <meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="PVHS Missing">
+<meta name="theme-color" content="#007474">
+<link rel="manifest" href="manifest.json">
+<link rel="apple-touch-icon" href="PV_Logo.png">
 <title>PVHS Missing Assignments Dashboard</title>
 <style>
   *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
 
   :root {
-    --bg: #000000;
-    --surface: #111111;
-    --surface2: #1a1a1a;
-    --border: #2a2a2a;
+    --bg: #021414;
+    --surface: rgba(255,255,255,0.02);
+    --surface2: rgba(255,255,255,0.05);
+    --border: rgba(255,255,255,0.05);
+    --border-hover: rgba(255,255,255,0.14);
     --teal: #007474;
-    --teal-light: #00a3a3;
-    --teal-dim: #005555;
-    --text: #e0e0e0;
-    --text-muted: #888888;
-    --text-bright: #ffffff;
-    --danger: #ff4d4d;
-    --warning: #f0a030;
+    --teal-light: #40dede;
+    --teal-dim: rgba(0,180,180,0.07);
+    --text: #cfe3e3;
+    --text-muted: rgba(207,227,227,0.5);
+    --text-bright: #f7fbfb;
+    --danger: #ff5b5b;
+    --warning: #ffac39;
+    --panel-radius: 22px;
+    --btn-radius: 16px;
+    --shadow: 0 12px 24px rgba(0,0,0,0.22);
   }
 
   body {
@@ -40,12 +50,15 @@
 
   .setup-card {
     background: var(--surface);
-    border: 1px solid var(--border);
-    border-radius: 16px;
+    border: 1px solid var(--border-hover);
+    border-radius: var(--panel-radius);
     padding: 3rem;
     max-width: 500px;
     width: 100%;
     text-align: center;
+    backdrop-filter: blur(10px);
+    -webkit-backdrop-filter: blur(10px);
+    box-shadow: var(--shadow);
   }
 
   .setup-card img { width: 120px; margin-bottom: 1.5rem; }
@@ -66,10 +79,10 @@
   .setup-card input[type="text"] {
     width: 100%;
     padding: 0.85rem 1rem;
-    border-radius: 8px;
-    border: 1px solid var(--border);
-    background: var(--bg);
-    color: var(--text);
+    border-radius: var(--btn-radius);
+    border: 1px solid var(--border-hover);
+    background: rgba(0,0,0,0.18);
+    color: var(--text-bright);
     font-size: 0.95rem;
     font-family: monospace;
     margin-bottom: 1rem;
@@ -78,7 +91,7 @@
   }
 
   .setup-card input[type="text"]:focus {
-    border-color: var(--teal);
+    border-color: var(--teal-light);
   }
 
   .btn {
@@ -93,11 +106,15 @@
   }
 
   .btn-primary {
-    background: var(--teal);
-    color: var(--text-bright);
+    background: rgba(0,180,180,0.14);
+    border: 1px solid rgba(0,210,210,0.16);
+    color: var(--teal-light);
+    backdrop-filter: blur(6px);
+    -webkit-backdrop-filter: blur(6px);
   }
 
-  .btn-primary:hover { background: var(--teal-light); }
+  .btn-primary:hover { background: rgba(0,180,180,0.22); }
+  .btn-primary:active { transform: scale(0.97); }
 
   .btn-small {
     padding: 0.4rem 1rem;
@@ -127,7 +144,7 @@
   #dashboard { display: none; }
 
   .top-bar {
-    background: var(--surface);
+    background: rgba(2,20,20,0.85);
     border-bottom: 1px solid var(--border);
     padding: 1rem 2rem;
     display: flex;
@@ -136,15 +153,19 @@
     position: sticky;
     top: 0;
     z-index: 100;
+    backdrop-filter: blur(16px);
+    -webkit-backdrop-filter: blur(16px);
   }
 
   .top-bar img { height: 48px; }
 
   .top-bar-title {
-    font-size: 1.35rem;
+    font-size: 15px;
     font-weight: 700;
     color: var(--text-bright);
     flex-shrink: 0;
+    text-transform: uppercase;
+    letter-spacing: 0.14em;
   }
 
   .top-bar-spacer { flex: 1; }
@@ -187,9 +208,11 @@
   .tab-bar {
     display: flex;
     gap: 0;
-    background: var(--surface);
+    background: rgba(2,20,20,0.6);
     border-bottom: 1px solid var(--border);
     padding: 0 2rem;
+    backdrop-filter: blur(10px);
+    -webkit-backdrop-filter: blur(10px);
   }
 
   .tab-btn {
@@ -197,11 +220,13 @@
     border: none;
     background: none;
     color: var(--text-muted);
-    font-size: 0.9rem;
-    font-weight: 600;
+    font-size: 10px;
+    font-weight: 700;
     cursor: pointer;
     border-bottom: 2px solid transparent;
     transition: all 0.2s;
+    text-transform: uppercase;
+    letter-spacing: 0.12em;
   }
 
   .tab-btn:hover { color: var(--text); }
@@ -227,17 +252,18 @@
 
   .search-box input {
     flex: 1;
-    padding: 0.7rem 1rem;
-    border-radius: 8px;
-    border: 1px solid var(--border);
-    background: var(--surface);
-    color: var(--text);
-    font-size: 0.9rem;
+    padding: 11px 14px;
+    border-radius: var(--btn-radius);
+    border: 1px solid var(--border-hover);
+    background: rgba(0,0,0,0.18);
+    color: var(--text-bright);
+    font-size: 15px;
+    font-weight: 500;
     outline: none;
     transition: border-color 0.2s;
   }
 
-  .search-box input:focus { border-color: var(--teal); }
+  .search-box input:focus { border-color: var(--teal-light); }
 
   .search-box input::placeholder { color: var(--text-muted); }
 
@@ -252,18 +278,22 @@
   .summary-card {
     background: var(--surface);
     border: 1px solid var(--border);
-    border-radius: 12px;
+    border-radius: var(--panel-radius);
     padding: 1.25rem 1.5rem;
     flex: 1;
     min-width: 200px;
+    backdrop-filter: blur(10px);
+    -webkit-backdrop-filter: blur(10px);
+    box-shadow: var(--shadow);
   }
 
   .summary-card .label {
-    font-size: 0.75rem;
+    font-size: 9px;
     text-transform: uppercase;
-    letter-spacing: 0.05em;
+    letter-spacing: 0.12em;
     color: var(--text-muted);
     margin-bottom: 0.35rem;
+    font-weight: 700;
   }
 
   .summary-card .value {
@@ -313,21 +343,45 @@
   }
 
   .period-label {
-    font-size: 0.8rem;
+    font-size: 10px;
     font-weight: 700;
     text-transform: uppercase;
-    letter-spacing: 0.05em;
-    color: var(--teal);
+    letter-spacing: 0.12em;
+    color: var(--teal-light);
     margin-bottom: 0.5rem;
     padding-left: 0.25rem;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+  }
+
+  .period-print-btn {
+    background: none;
+    border: 1px solid var(--border);
+    color: var(--text-muted);
+    border-radius: 10px;
+    padding: 3px 8px;
+    font-size: 14px;
+    cursor: pointer;
+    transition: all 0.2s;
+    line-height: 1;
+  }
+
+  .period-print-btn:hover {
+    border-color: var(--teal-light);
+    color: var(--teal-light);
+    background: var(--teal-dim);
   }
 
   /* ── Student Rows ── */
   .student-list {
     background: var(--surface);
     border: 1px solid var(--border);
-    border-radius: 10px;
+    border-radius: var(--panel-radius);
     overflow: hidden;
+    backdrop-filter: blur(10px);
+    -webkit-backdrop-filter: blur(10px);
+    box-shadow: var(--shadow);
   }
 
   .student-row {
@@ -986,9 +1040,14 @@ function renderCourses() {
 
     const periodHTML = sortedPeriods.map(p => {
       const students = sortStudents(periods[p]);
+      const cname = cd.course.name.replace(/'/g, "\\'");
+      const pname = p.replace(/'/g, "\\'");
       return `
         <div class="period-group">
-          <div class="period-label">${escHtml(p)} &middot; ${students.length} student${students.length !== 1 ? 's' : ''}</div>
+          <div class="period-label">
+            <span>${escHtml(p)} &middot; ${students.length} student${students.length !== 1 ? 's' : ''}</span>
+            <button class="period-print-btn" onclick="event.stopPropagation(); printPeriod('${cname}', '${pname}')" title="Print this period">&#128424;</button>
+          </div>
           <div class="student-list">
             ${students.map(s => renderStudentRow(s)).join('')}
           </div>
@@ -1123,6 +1182,40 @@ function sortStudents(students) {
 }
 
 // ── Print Report ──
+function printPeriod(courseName, periodName) {
+  const now = new Date();
+  document.getElementById('print-date').textContent =
+    `${courseName} — ${periodName} | Printed ${now.toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric' })} | Students with 3+ missing`;
+
+  const container = document.getElementById('courses-container');
+  const originalHTML = container.innerHTML;
+
+  // Find the matching course and period
+  const cd = dashboardData.find(c => c.course.name === courseName);
+  if (!cd) return;
+
+  const filtered = cd.students.filter(s => s.period === periodName && s.missing.length >= 3);
+  if (filtered.length === 0) { alert('No students with 3+ missing in this period.'); return; }
+
+  const students = sortStudents(filtered);
+  container.innerHTML = `
+    <div class="course-section">
+      <div class="course-header"><h2>${escHtml(courseName)}</h2></div>
+      <div class="period-group">
+        <div class="period-label"><span>${escHtml(periodName)} &middot; ${students.length} students</span></div>
+        <div class="student-list">
+          ${students.map(s => renderStudentRow(s)).join('')}
+        </div>
+      </div>
+    </div>
+  `;
+
+  container.querySelectorAll('.student-row').forEach(r => r.classList.add('expanded'));
+  container.querySelectorAll('.period-print-btn').forEach(b => b.style.display = 'none');
+  window.print();
+  container.innerHTML = originalHTML;
+}
+
 function printReport() {
   // Set print date
   const now = new Date();
@@ -1253,6 +1346,11 @@ window.addEventListener('DOMContentLoaded', () => {
     document.getElementById('pin-input').focus();
   }
 });
+
+// ── PWA Service Worker ──
+if ('serviceWorker' in navigator) {
+  navigator.serviceWorker.register('/sw.js').catch(() => {});
+}
 </script>
 </body>
 </html>

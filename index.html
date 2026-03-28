@@ -480,6 +480,30 @@
     white-space: nowrap;
   }
 
+  .assignment-list li .asgn-pts {
+    font-size: 0.75rem;
+    color: var(--teal-light);
+    white-space: nowrap;
+    opacity: 0.8;
+  }
+
+  .student-num {
+    font-size: 0.75rem;
+    color: var(--text-muted);
+    min-width: 1.5rem;
+    text-align: right;
+  }
+
+  .missing-pts {
+    font-size: 0.8rem;
+    font-weight: 700;
+    background: rgba(64, 222, 222, 0.1);
+    color: var(--teal-light);
+    padding: 0.15rem 0.5rem;
+    border-radius: 999px;
+    white-space: nowrap;
+  }
+
   /* ── Search Results ── */
   .search-results {
     margin-top: 1rem;
@@ -680,6 +704,9 @@
     .student-row-header { padding: 2pt 6pt !important; gap: 4pt !important; }
     .student-name { font-size: 9pt !important; font-weight: 600 !important; }
     .missing-count { font-size: 8pt !important; font-weight: 700 !important; padding: 0 !important; }
+    .missing-pts { font-size: 8pt !important; font-weight: 700 !important; padding: 0 !important; background: none !important; color: #007474 !important; }
+    .student-num { font-size: 8pt !important; color: #666 !important; min-width: 1rem !important; }
+    .asgn-pts { font-size: 7pt !important; color: #007474 !important; }
     .expand-icon { display: none !important; }
 
     /* Force all details open */
@@ -1007,7 +1034,8 @@ async function loadCourse(course) {
             studentMap[sub.user_id].missing.push({
               name: asgn.name,
               due: asgn.due_at ? formatDate(asgn.due_at) : 'No due date',
-              due_raw: asgn.due_at || ''
+              due_raw: asgn.due_at || '',
+              points: asgn.points_possible || 0
             });
           }
         });
@@ -1112,7 +1140,7 @@ function renderCourses() {
             <button class="period-print-btn" onclick="event.stopPropagation(); printPeriod('${cname}', '${pname}')" title="Print this period">&#128424;</button>
           </div>
           <div class="student-list">
-            ${students.map(s => renderStudentRow(s)).join('')}
+            ${students.map((s, i) => renderStudentRow(s, i + 1)).join('')}
           </div>
         </div>
       `;
@@ -1130,19 +1158,22 @@ function renderCourses() {
   }).join('');
 }
 
-function renderStudentRow(s) {
+function renderStudentRow(s, index) {
   const countClass = s.missing.length >= 5 ? '' : (s.missing.length >= 3 ? 'warning' : 'low');
+  const totalPoints = s.missing.reduce((sum, a) => sum + (a.points || 0), 0);
   const assignmentItems = s.missing
     .sort((a, b) => (a.due_raw || '').localeCompare(b.due_raw || ''))
-    .map(a => `<li><span class="asgn-name">${escHtml(a.name)}</span><span class="asgn-due">${escHtml(a.due)}</span></li>`)
+    .map(a => `<li><span class="asgn-name">${escHtml(a.name)}</span><span class="asgn-due">${escHtml(a.due)}</span>${a.points ? `<span class="asgn-pts">${a.points} pts</span>` : ''}</li>`)
     .join('');
 
   return `
     <div class="student-row" onclick="this.classList.toggle('expanded')">
       <div class="student-row-header">
         <span class="expand-icon">&#9654;</span>
+        ${index != null ? `<span class="student-num">${index}</span>` : ''}
         <span class="student-name">${escHtml(s.sortable_name)}</span>
         <span class="missing-count ${countClass}">${s.missing.length} missing</span>
+        ${totalPoints > 0 ? `<span class="missing-pts">${totalPoints} pts</span>` : ''}
       </div>
       <div class="student-detail">
         <ul class="assignment-list">${assignmentItems}</ul>
@@ -1267,7 +1298,7 @@ function printPeriod(courseName, periodName) {
       <div class="period-group">
         <div class="period-label"><span>${escHtml(periodName)} &middot; ${students.length} students</span></div>
         <div class="student-list">
-          ${students.map(s => renderStudentRow(s)).join('')}
+          ${students.map((s, i) => renderStudentRow(s, i + 1)).join('')}
         </div>
       </div>
     </div>
@@ -1319,7 +1350,7 @@ function printReport() {
             <div class="period-group">
               <div class="period-label">${escHtml(p)} &middot; ${students.length} student${students.length !== 1 ? 's' : ''}</div>
               <div class="student-list">
-                ${students.map(s => renderStudentRow(s)).join('')}
+                ${students.map((s, i) => renderStudentRow(s, i + 1)).join('')}
               </div>
             </div>
           `;

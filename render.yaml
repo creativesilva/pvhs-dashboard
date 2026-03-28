@@ -1,0 +1,10 @@
+services:
+  - type: web
+    name: pvhs-dashboard
+    runtime: python
+    buildCommand: echo "No build needed"
+    startCommand: python server.py
+    plan: free
+    envVars:
+      - key: PYTHON_VERSION
+        value: "3.11"

@@ -1,0 +1,1140 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>PVHS Missing Assignments Dashboard</title>
+<style>
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+  :root {
+    --bg: #000000;
+    --surface: #111111;
+    --surface2: #1a1a1a;
+    --border: #2a2a2a;
+    --teal: #007474;
+    --teal-light: #00a3a3;
+    --teal-dim: #005555;
+    --text: #e0e0e0;
+    --text-muted: #888888;
+    --text-bright: #ffffff;
+    --danger: #ff4d4d;
+    --warning: #f0a030;
+  }
+
+  body {
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, sans-serif;
+    background: var(--bg);
+    color: var(--text);
+    min-height: 100vh;
+  }
+
+  /* ── Setup Screen ── */
+  #setup-screen {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    min-height: 100vh;
+    padding: 2rem;
+  }
+
+  .setup-card {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 16px;
+    padding: 3rem;
+    max-width: 500px;
+    width: 100%;
+    text-align: center;
+  }
+
+  .setup-card img { width: 120px; margin-bottom: 1.5rem; }
+
+  .setup-card h1 {
+    font-size: 1.5rem;
+    color: var(--text-bright);
+    margin-bottom: 0.5rem;
+  }
+
+  .setup-card p {
+    color: var(--text-muted);
+    margin-bottom: 2rem;
+    font-size: 0.9rem;
+    line-height: 1.5;
+  }
+
+  .setup-card input[type="text"] {
+    width: 100%;
+    padding: 0.85rem 1rem;
+    border-radius: 8px;
+    border: 1px solid var(--border);
+    background: var(--bg);
+    color: var(--text);
+    font-size: 0.95rem;
+    font-family: monospace;
+    margin-bottom: 1rem;
+    outline: none;
+    transition: border-color 0.2s;
+  }
+
+  .setup-card input[type="text"]:focus {
+    border-color: var(--teal);
+  }
+
+  .btn {
+    display: inline-block;
+    padding: 0.75rem 2rem;
+    border-radius: 8px;
+    border: none;
+    font-size: 1rem;
+    font-weight: 600;
+    cursor: pointer;
+    transition: all 0.2s;
+  }
+
+  .btn-primary {
+    background: var(--teal);
+    color: var(--text-bright);
+  }
+
+  .btn-primary:hover { background: var(--teal-light); }
+
+  .btn-small {
+    padding: 0.4rem 1rem;
+    font-size: 0.8rem;
+    border-radius: 6px;
+  }
+
+  .btn-outline {
+    background: transparent;
+    border: 1px solid var(--border);
+    color: var(--text-muted);
+  }
+
+  .btn-outline:hover {
+    border-color: var(--teal);
+    color: var(--teal-light);
+  }
+
+  .setup-error {
+    color: var(--danger);
+    font-size: 0.85rem;
+    margin-bottom: 1rem;
+    display: none;
+  }
+
+  /* ── Dashboard ── */
+  #dashboard { display: none; }
+
+  .top-bar {
+    background: var(--surface);
+    border-bottom: 1px solid var(--border);
+    padding: 1rem 2rem;
+    display: flex;
+    align-items: center;
+    gap: 1.5rem;
+    position: sticky;
+    top: 0;
+    z-index: 100;
+  }
+
+  .top-bar img { height: 48px; }
+
+  .top-bar-title {
+    font-size: 1.35rem;
+    font-weight: 700;
+    color: var(--text-bright);
+    flex-shrink: 0;
+  }
+
+  .top-bar-spacer { flex: 1; }
+
+  .status-area {
+    display: flex;
+    align-items: center;
+    gap: 1rem;
+    flex-shrink: 0;
+  }
+
+  .last-updated {
+    font-size: 0.75rem;
+    color: var(--text-muted);
+    text-align: right;
+    line-height: 1.4;
+  }
+
+  .refresh-btn {
+    background: none;
+    border: 1px solid var(--border);
+    color: var(--teal-light);
+    width: 36px;
+    height: 36px;
+    border-radius: 8px;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    transition: all 0.2s;
+    font-size: 1.1rem;
+  }
+
+  .refresh-btn:hover { border-color: var(--teal); background: var(--teal-dim); }
+  .refresh-btn.spinning svg { animation: spin 1s linear infinite; }
+
+  @keyframes spin { from { transform: rotate(0deg); } to { transform: rotate(360deg); } }
+
+  /* ── Tabs ── */
+  .tab-bar {
+    display: flex;
+    gap: 0;
+    background: var(--surface);
+    border-bottom: 1px solid var(--border);
+    padding: 0 2rem;
+  }
+
+  .tab-btn {
+    padding: 0.85rem 1.5rem;
+    border: none;
+    background: none;
+    color: var(--text-muted);
+    font-size: 0.9rem;
+    font-weight: 600;
+    cursor: pointer;
+    border-bottom: 2px solid transparent;
+    transition: all 0.2s;
+  }
+
+  .tab-btn:hover { color: var(--text); }
+  .tab-btn.active { color: var(--teal-light); border-bottom-color: var(--teal); }
+
+  .tab-content { display: none; }
+  .tab-content.active { display: block; }
+
+  /* ── Main Area ── */
+  .main-content { padding: 1.5rem 2rem 3rem; }
+
+  /* ── Search Panel ── */
+  .search-panel {
+    margin-bottom: 1.5rem;
+  }
+
+  .search-box {
+    display: flex;
+    gap: 0.75rem;
+    align-items: center;
+    max-width: 600px;
+  }
+
+  .search-box input {
+    flex: 1;
+    padding: 0.7rem 1rem;
+    border-radius: 8px;
+    border: 1px solid var(--border);
+    background: var(--surface);
+    color: var(--text);
+    font-size: 0.9rem;
+    outline: none;
+    transition: border-color 0.2s;
+  }
+
+  .search-box input:focus { border-color: var(--teal); }
+
+  .search-box input::placeholder { color: var(--text-muted); }
+
+  /* ── Summary Cards ── */
+  .summary-row {
+    display: flex;
+    gap: 1rem;
+    margin-bottom: 1.5rem;
+    flex-wrap: wrap;
+  }
+
+  .summary-card {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    padding: 1.25rem 1.5rem;
+    flex: 1;
+    min-width: 200px;
+  }
+
+  .summary-card .label {
+    font-size: 0.75rem;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    color: var(--text-muted);
+    margin-bottom: 0.35rem;
+  }
+
+  .summary-card .value {
+    font-size: 2rem;
+    font-weight: 700;
+    color: var(--teal-light);
+  }
+
+  .summary-card .sub {
+    font-size: 0.8rem;
+    color: var(--text-muted);
+    margin-top: 0.2rem;
+  }
+
+  /* ── Course Sections ── */
+  .course-section {
+    margin-bottom: 2rem;
+  }
+
+  .course-header {
+    display: flex;
+    align-items: center;
+    gap: 0.75rem;
+    margin-bottom: 1rem;
+  }
+
+  .course-header h2 {
+    font-size: 1.15rem;
+    color: var(--text-bright);
+    font-weight: 700;
+  }
+
+  .course-badge {
+    background: var(--teal-dim);
+    color: var(--teal-light);
+    font-size: 0.7rem;
+    font-weight: 600;
+    padding: 0.2rem 0.6rem;
+    border-radius: 20px;
+    text-transform: uppercase;
+    letter-spacing: 0.03em;
+  }
+
+  /* ── Period Groups ── */
+  .period-group {
+    margin-bottom: 1rem;
+  }
+
+  .period-label {
+    font-size: 0.8rem;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    color: var(--teal);
+    margin-bottom: 0.5rem;
+    padding-left: 0.25rem;
+  }
+
+  /* ── Student Rows ── */
+  .student-list {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    overflow: hidden;
+  }
+
+  .student-row {
+    border-bottom: 1px solid var(--border);
+    cursor: pointer;
+    transition: background 0.15s;
+  }
+
+  .student-row:last-child { border-bottom: none; }
+  .student-row:hover { background: var(--surface2); }
+
+  .student-row-header {
+    display: flex;
+    align-items: center;
+    padding: 0.7rem 1rem;
+    gap: 1rem;
+  }
+
+  .student-name {
+    font-weight: 600;
+    font-size: 0.95rem;
+    color: var(--text-bright);
+    flex: 1;
+  }
+
+  .missing-count {
+    font-size: 0.8rem;
+    font-weight: 700;
+    padding: 0.2rem 0.65rem;
+    border-radius: 20px;
+    background: rgba(255, 77, 77, 0.15);
+    color: var(--danger);
+  }
+
+  .missing-count.warning {
+    background: rgba(240, 160, 48, 0.15);
+    color: var(--warning);
+  }
+
+  .missing-count.low {
+    background: rgba(0, 116, 116, 0.15);
+    color: var(--teal-light);
+  }
+
+  .expand-icon {
+    color: var(--text-muted);
+    font-size: 0.75rem;
+    transition: transform 0.2s;
+  }
+
+  .student-row.expanded .expand-icon { transform: rotate(90deg); }
+
+  .student-detail {
+    display: none;
+    padding: 0 1rem 0.75rem 1rem;
+  }
+
+  .student-row.expanded .student-detail { display: block; }
+
+  .assignment-list {
+    list-style: none;
+  }
+
+  .assignment-list li {
+    padding: 0.4rem 0.75rem;
+    font-size: 0.85rem;
+    color: var(--text-muted);
+    border-left: 2px solid var(--border);
+    margin-bottom: 0.25rem;
+    display: flex;
+    justify-content: space-between;
+    gap: 1rem;
+  }
+
+  .assignment-list li .asgn-name { flex: 1; }
+
+  .assignment-list li .asgn-due {
+    font-size: 0.75rem;
+    color: var(--text-muted);
+    white-space: nowrap;
+  }
+
+  /* ── Search Results ── */
+  .search-results {
+    margin-top: 1rem;
+  }
+
+  .search-result-card {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    margin-bottom: 1rem;
+    overflow: hidden;
+  }
+
+  .search-result-header {
+    padding: 0.85rem 1rem;
+    border-bottom: 1px solid var(--border);
+    display: flex;
+    align-items: center;
+    gap: 0.75rem;
+  }
+
+  .search-result-header h3 {
+    font-size: 0.95rem;
+    color: var(--text-bright);
+    flex: 1;
+  }
+
+  .search-student-list {
+    list-style: none;
+  }
+
+  .search-student-list li {
+    padding: 0.55rem 1rem;
+    font-size: 0.9rem;
+    color: var(--text);
+    border-bottom: 1px solid var(--border);
+    display: flex;
+    justify-content: space-between;
+  }
+
+  .search-student-list li:last-child { border-bottom: none; }
+
+  .search-student-list li .period-tag {
+    font-size: 0.75rem;
+    color: var(--teal-light);
+  }
+
+  /* ── Loading / Error ── */
+  .loading-overlay {
+    display: none;
+    position: fixed;
+    inset: 0;
+    background: rgba(0,0,0,0.7);
+    z-index: 200;
+    align-items: center;
+    justify-content: center;
+    flex-direction: column;
+    gap: 1rem;
+  }
+
+  .loading-overlay.visible { display: flex; }
+
+  .spinner {
+    width: 48px;
+    height: 48px;
+    border: 4px solid var(--border);
+    border-top-color: var(--teal);
+    border-radius: 50%;
+    animation: spin 0.8s linear infinite;
+  }
+
+  .loading-text {
+    color: var(--text-muted);
+    font-size: 0.9rem;
+  }
+
+  .error-banner {
+    background: rgba(255, 77, 77, 0.1);
+    border: 1px solid rgba(255, 77, 77, 0.3);
+    border-radius: 10px;
+    padding: 1rem 1.25rem;
+    margin-bottom: 1.5rem;
+    color: var(--danger);
+    font-size: 0.9rem;
+    display: none;
+  }
+
+  .empty-state {
+    text-align: center;
+    padding: 3rem;
+    color: var(--text-muted);
+    font-size: 1rem;
+  }
+
+  /* ── Sort Bar ── */
+  .sort-bar {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    margin-bottom: 1.5rem;
+  }
+
+  .sort-label {
+    font-size: 0.8rem;
+    color: var(--text-muted);
+    margin-right: 0.25rem;
+  }
+
+  .sort-btn {
+    padding: 0.35rem 0.85rem;
+    border-radius: 20px;
+    border: 1px solid var(--border);
+    background: none;
+    color: var(--text-muted);
+    font-size: 0.8rem;
+    font-weight: 600;
+    cursor: pointer;
+    transition: all 0.2s;
+  }
+
+  .sort-btn:hover { border-color: var(--teal); color: var(--text); }
+  .sort-btn.active { background: var(--teal-dim); border-color: var(--teal); color: var(--teal-light); }
+
+  /* ── Responsive ── */
+  @media (max-width: 768px) {
+    .top-bar { padding: 0.75rem 1rem; gap: 1rem; }
+    .top-bar-title { font-size: 1rem; }
+    .main-content { padding: 1rem; }
+    .tab-btn { padding: 0.65rem 1rem; font-size: 0.8rem; }
+    .summary-card .value { font-size: 1.5rem; }
+  }
+</style>
+</head>
+<body>
+
+<!-- ── PIN Screen ── -->
+<div id="pin-screen" style="display:flex; align-items:center; justify-content:center; min-height:100vh; padding:2rem;">
+  <div class="setup-card">
+    <img src="PV_Logo.png" alt="PVHS Panther Logo">
+    <h1>PVHS Dashboard</h1>
+    <p>Enter PIN to access the dashboard.</p>
+    <div id="pin-error" class="setup-error"></div>
+    <input type="password" id="pin-input" placeholder="Enter PIN..." style="width:100%;padding:0.85rem 1rem;border-radius:8px;border:1px solid var(--border);background:var(--bg);color:var(--text);font-size:1.5rem;text-align:center;letter-spacing:0.3em;outline:none;" onkeydown="if(event.key==='Enter')checkPin()">
+    <br><br>
+    <button class="btn btn-primary" onclick="checkPin()">Unlock</button>
+  </div>
+</div>
+
+<!-- ── Setup Screen ── -->
+<div id="setup-screen" style="display:none;">
+  <div class="setup-card">
+    <img src="PV_Logo.png" alt="PVHS Panther Logo">
+    <h1>PVHS Missing Assignments</h1>
+    <p>Enter your Canvas API token to get started. The token is stored only in this browser and never sent anywhere except your Canvas instance.</p>
+    <div id="setup-error" class="setup-error"></div>
+    <input type="text" id="token-input" placeholder="Paste your Canvas API token here...">
+    <br><br>
+    <button class="btn btn-primary" onclick="saveTokenAndLoad()">Connect to Canvas</button>
+  </div>
+</div>
+
+<!-- ── Loading Overlay ── -->
+<div id="loading-overlay" class="loading-overlay">
+  <div class="spinner"></div>
+  <div class="loading-text" id="loading-text">Loading missing assignments...</div>
+</div>
+
+<!-- ── Dashboard ── -->
+<div id="dashboard">
+  <!-- Top Bar -->
+  <div class="top-bar">
+    <img src="PV_Logo.png" alt="PVHS">
+    <div class="top-bar-title">Missing Assignments Dashboard</div>
+    <div class="top-bar-spacer"></div>
+    <div class="status-area">
+      <div class="last-updated" id="last-updated">Loading...</div>
+      <button class="refresh-btn" id="refresh-btn" onclick="manualRefresh()" title="Refresh now">
+        <svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round">
+          <path d="M1 1v5h5"/><path d="M2.5 10A5.5 5.5 0 1 0 3 5.5L1 6"/>
+        </svg>
+      </button>
+      <button class="btn btn-small btn-outline" onclick="resetToken()">Change Token</button>
+    </div>
+  </div>
+
+  <!-- Tabs -->
+  <div class="tab-bar">
+    <button class="tab-btn active" data-tab="overview" onclick="switchTab('overview')">Overview</button>
+    <button class="tab-btn" data-tab="search" onclick="switchTab('search')">Search Assignment</button>
+  </div>
+
+  <!-- Main Content -->
+  <div class="main-content">
+    <div id="error-banner" class="error-banner"></div>
+
+    <!-- Overview Tab -->
+    <div id="tab-overview" class="tab-content active">
+      <div class="summary-row" id="summary-row"></div>
+      <div class="sort-bar">
+        <span class="sort-label">Sort by:</span>
+        <button class="sort-btn active" data-sort="last" onclick="changeSort('last')">Last Name</button>
+        <button class="sort-btn" data-sort="first" onclick="changeSort('first')">First Name</button>
+        <button class="sort-btn" data-sort="most" onclick="changeSort('most')">Most Missing</button>
+      </div>
+      <div id="courses-container"></div>
+    </div>
+
+    <!-- Search Tab -->
+    <div id="tab-search" class="tab-content">
+      <div class="search-panel">
+        <div class="search-box">
+          <input type="text" id="assignment-search" placeholder="Type an assignment name to find students who haven't submitted it..." oninput="handleAssignmentSearch()">
+        </div>
+      </div>
+      <div id="search-results" class="search-results">
+        <div class="empty-state">Start typing an assignment name above to search.</div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script>
+// ── Configuration ──
+// API calls go through the local proxy server (canvas_server.py) to avoid CORS
+const CANVAS_BASE = '/api/v1';
+const COURSES = [
+  { id: 111811, name: 'CTE Photo 1B' },
+  { id: 111829, name: 'Digital Arts 1B' },
+  { id: 111831, name: 'Digital Arts 2B' }
+];
+const REFRESH_INTERVAL = 60 * 60 * 1000; // 1 hour
+
+// ── PIN Protection ──
+const PIN_HASH = '483029d526219f816e8e8f6a9de07b422633dba180ffc26faac22862a017519f';
+
+async function hashPin(pin) {
+  const data = new TextEncoder().encode(pin);
+  const buf = await crypto.subtle.digest('SHA-256', data);
+  return Array.from(new Uint8Array(buf)).map(b => b.toString(16).padStart(2, '0')).join('');
+}
+
+async function checkPin() {
+  const pin = document.getElementById('pin-input').value.trim();
+  if (!pin) return;
+  const hash = await hashPin(pin);
+  if (hash === PIN_HASH) {
+    sessionStorage.setItem('pvhs_unlocked', '1');
+    document.getElementById('pin-screen').style.display = 'none';
+    initAfterPin();
+  } else {
+    const err = document.getElementById('pin-error');
+    err.textContent = 'Incorrect PIN.';
+    err.style.display = 'block';
+    document.getElementById('pin-input').value = '';
+    document.getElementById('pin-input').focus();
+  }
+}
+
+function initAfterPin() {
+  TOKEN = getToken();
+  if (TOKEN) {
+    document.getElementById('dashboard').style.display = 'block';
+    loadDashboard();
+  } else {
+    document.getElementById('setup-screen').style.display = 'flex';
+  }
+}
+
+// ── State ──
+let TOKEN = '';
+let dashboardData = []; // [{ course, students: [{ name, sortable_name, period, missing: [{name, due}] }] }]
+let refreshTimer = null;
+let currentSort = 'last'; // 'last', 'first', 'most'
+
+// ── Token Management ──
+function getToken() {
+  const raw = localStorage.getItem('canvas_api_token') || '';
+  return sanitizeToken(raw);
+}
+
+function sanitizeToken(raw) {
+  // Map Cyrillic lookalikes to their Latin equivalents (common copy-paste corruption)
+  const cyrillicToLatin = {
+    '\u0410': 'A', '\u0412': 'B', '\u0421': 'C', '\u0415': 'E',
+    '\u041D': 'H', '\u041A': 'K', '\u041C': 'M', '\u041E': 'O',
+    '\u0420': 'P', '\u0422': 'T', '\u0425': 'X', '\u0423': 'Y',
+    '\u0417': 'Z', '\u0430': 'a', '\u0435': 'e', '\u043E': 'o',
+    '\u0440': 'p', '\u0441': 'c', '\u0443': 'y', '\u0445': 'x',
+    '\u043A': 'k', '\u0437': 'z', '\u0433': 'r',
+    // Also handle common Unicode dash/quote replacements
+    '\u2013': '-', '\u2014': '-', '\u2018': "'", '\u2019': "'",
+    '\u201C': '"', '\u201D': '"', '\u007E': '~'
+  };
+  let cleaned = '';
+  for (const ch of raw) {
+    cleaned += cyrillicToLatin[ch] || ch;
+  }
+  // Strip any remaining non-ASCII / non-printable characters
+  return cleaned.replace(/[^\x20-\x7E]/g, '').trim();
+}
+
+function saveTokenAndLoad() {
+  const input = document.getElementById('token-input');
+  const val = sanitizeToken(input.value);
+  if (!val) {
+    showSetupError('Please enter a valid API token.');
+    return;
+  }
+  localStorage.setItem('canvas_api_token', val);
+  TOKEN = val;
+  document.getElementById('setup-screen').style.display = 'none';
+  document.getElementById('dashboard').style.display = 'block';
+  loadDashboard();
+}
+
+function resetToken() {
+  localStorage.removeItem('canvas_api_token');
+  TOKEN = '';
+  document.getElementById('dashboard').style.display = 'none';
+  document.getElementById('setup-screen').style.display = 'flex';
+  document.getElementById('token-input').value = '';
+  if (refreshTimer) clearInterval(refreshTimer);
+}
+
+function showSetupError(msg) {
+  const el = document.getElementById('setup-error');
+  el.textContent = msg;
+  el.style.display = 'block';
+}
+
+// ── Canvas API Helpers ──
+async function canvasFetch(path) {
+  let allResults = [];
+  let url = `${CANVAS_BASE}${path}`;
+  if (!url.includes('?')) url += '?per_page=100';
+  else url += '&per_page=100';
+
+  while (url) {
+    const resp = await fetch(url, {
+      headers: { 'Authorization': `Bearer ${TOKEN}` }
+    });
+    if (!resp.ok) {
+      throw new Error(`Canvas API error ${resp.status}: ${resp.statusText} for ${path}`);
+    }
+    const data = await resp.json();
+    allResults = allResults.concat(data);
+
+    // Handle pagination via Link header
+    const linkHeader = resp.headers.get('Link');
+    url = null;
+    if (linkHeader) {
+      const next = linkHeader.split(',').find(s => s.includes('rel="next"'));
+      if (next) {
+        const match = next.match(/<([^>]+)>/);
+        if (match) url = match[1];
+      }
+    }
+  }
+  return allResults;
+}
+
+// ── Data Loading ──
+async function loadDashboard() {
+  showLoading(true, 'Loading missing assignments...');
+  hideError();
+  try {
+    const results = await Promise.all(COURSES.map(c => loadCourse(c)));
+    dashboardData = results;
+    renderDashboard();
+    updateTimestamp();
+    scheduleAutoRefresh();
+  } catch (err) {
+    showError('Failed to load data: ' + err.message);
+    console.error(err);
+  } finally {
+    showLoading(false);
+  }
+}
+
+async function loadCourse(course) {
+  // Step 1: Get enrollments and sections in parallel
+  const [enrollments, sections] = await Promise.all([
+    canvasFetch(`/courses/${course.id}/enrollments?type[]=StudentEnrollment&state[]=active`),
+    canvasFetch(`/courses/${course.id}/sections`)
+  ]);
+
+  const sectionMap = {};
+  sections.forEach(s => { sectionMap[s.id] = s.name; });
+
+  // Step 2: Build student list
+  const studentMap = {};
+  enrollments.forEach(e => {
+    if (!e.user) return;
+    const uid = e.user.id;
+    if (!studentMap[uid]) {
+      const sectionName = sectionMap[e.course_section_id] || 'Unknown';
+      studentMap[uid] = {
+        id: uid,
+        name: e.user.name,
+        sortable_name: e.user.sortable_name || e.user.name,
+        section: sectionName,
+        period: extractPeriod(sectionName),
+        missing: []
+      };
+    }
+  });
+
+  // Step 3: Get assignments and check submissions in batches of 6
+  const assignments = await canvasFetch(`/courses/${course.id}/assignments?order_by=due_at`);
+  const published = assignments.filter(a => a.published && a.submission_types && !a.submission_types.includes('not_graded'));
+
+  const BATCH = 6;
+  for (let i = 0; i < published.length; i += BATCH) {
+    const batch = published.slice(i, i + BATCH);
+    await Promise.all(batch.map(async asgn => {
+      try {
+        const submissions = await canvasFetch(`/courses/${course.id}/assignments/${asgn.id}/submissions`);
+        submissions.forEach(sub => {
+          if (sub.missing && studentMap[sub.user_id]) {
+            studentMap[sub.user_id].missing.push({
+              name: asgn.name,
+              due: asgn.due_at ? formatDate(asgn.due_at) : 'No due date',
+              due_raw: asgn.due_at || ''
+            });
+          }
+        });
+      } catch (e) {
+        console.warn(`Skipping assignment ${asgn.id}: ${e.message}`);
+      }
+    }));
+  }
+
+  // Only keep students with missing assignments
+  const students = Object.values(studentMap)
+    .filter(s => s.missing.length > 0)
+    .sort((a, b) => a.sortable_name.localeCompare(b.sortable_name));
+
+  return { course, students };
+}
+
+function extractPeriod(sectionName) {
+  // Try to extract period from section name, common patterns:
+  // "Period 3", "P3", "Per 3", "3rd Period", etc.
+  const m = sectionName.match(/(?:per(?:iod)?\.?\s*)(\d+)/i) ||
+            sectionName.match(/\bp\s*(\d+)\b/i) ||
+            sectionName.match(/^(\d+)/);
+  return m ? `Period ${m[1]}` : sectionName;
+}
+
+function formatDate(iso) {
+  if (!iso) return '';
+  const d = new Date(iso);
+  return d.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
+}
+
+// ── Rendering ──
+function renderDashboard() {
+  renderSummary();
+  renderCourses();
+}
+
+function renderSummary() {
+  let totalStudents = 0;
+  let totalMissing = 0;
+  let maxMissing = 0;
+
+  dashboardData.forEach(cd => {
+    totalStudents += cd.students.length;
+    cd.students.forEach(s => {
+      totalMissing += s.missing.length;
+      if (s.missing.length > maxMissing) maxMissing = s.missing.length;
+    });
+  });
+
+  document.getElementById('summary-row').innerHTML = `
+    <div class="summary-card">
+      <div class="label">Students with Missing Work</div>
+      <div class="value">${totalStudents}</div>
+      <div class="sub">across ${COURSES.length} courses</div>
+    </div>
+    <div class="summary-card">
+      <div class="label">Total Missing Assignments</div>
+      <div class="value">${totalMissing}</div>
+    </div>
+    <div class="summary-card">
+      <div class="label">Most Missing (Single Student)</div>
+      <div class="value">${maxMissing}</div>
+    </div>
+  `;
+}
+
+function renderCourses() {
+  const container = document.getElementById('courses-container');
+  if (dashboardData.every(cd => cd.students.length === 0)) {
+    container.innerHTML = '<div class="empty-state">No missing assignments found. Nice!</div>';
+    return;
+  }
+
+  container.innerHTML = dashboardData.map(cd => {
+    if (cd.students.length === 0) return '';
+
+    // Group students by period
+    const periods = {};
+    cd.students.forEach(s => {
+      const p = s.period;
+      if (!periods[p]) periods[p] = [];
+      periods[p].push(s);
+    });
+
+    // Sort periods
+    const sortedPeriods = Object.keys(periods).sort((a, b) => {
+      const na = parseInt(a.replace(/\D/g, '')) || 999;
+      const nb = parseInt(b.replace(/\D/g, '')) || 999;
+      return na - nb;
+    });
+
+    const periodHTML = sortedPeriods.map(p => {
+      const students = sortStudents(periods[p]);
+      return `
+        <div class="period-group">
+          <div class="period-label">${escHtml(p)} &middot; ${students.length} student${students.length !== 1 ? 's' : ''}</div>
+          <div class="student-list">
+            ${students.map(s => renderStudentRow(s)).join('')}
+          </div>
+        </div>
+      `;
+    }).join('');
+
+    return `
+      <div class="course-section">
+        <div class="course-header">
+          <h2>${escHtml(cd.course.name)}</h2>
+          <span class="course-badge">${cd.students.length} student${cd.students.length !== 1 ? 's' : ''}</span>
+        </div>
+        ${periodHTML}
+      </div>
+    `;
+  }).join('');
+}
+
+function renderStudentRow(s) {
+  const countClass = s.missing.length >= 5 ? '' : (s.missing.length >= 3 ? 'warning' : 'low');
+  const assignmentItems = s.missing
+    .sort((a, b) => (a.due_raw || '').localeCompare(b.due_raw || ''))
+    .map(a => `<li><span class="asgn-name">${escHtml(a.name)}</span><span class="asgn-due">${escHtml(a.due)}</span></li>`)
+    .join('');
+
+  return `
+    <div class="student-row" onclick="this.classList.toggle('expanded')">
+      <div class="student-row-header">
+        <span class="expand-icon">&#9654;</span>
+        <span class="student-name">${escHtml(s.sortable_name)}</span>
+        <span class="missing-count ${countClass}">${s.missing.length} missing</span>
+      </div>
+      <div class="student-detail">
+        <ul class="assignment-list">${assignmentItems}</ul>
+      </div>
+    </div>
+  `;
+}
+
+// ── Assignment Search ──
+let searchTimeout = null;
+
+function handleAssignmentSearch() {
+  clearTimeout(searchTimeout);
+  searchTimeout = setTimeout(doAssignmentSearch, 250);
+}
+
+function doAssignmentSearch() {
+  const query = document.getElementById('assignment-search').value.trim().toLowerCase();
+  const container = document.getElementById('search-results');
+
+  if (!query || query.length < 2) {
+    container.innerHTML = '<div class="empty-state">Start typing an assignment name above to search.</div>';
+    return;
+  }
+
+  // Search across all courses
+  const results = []; // { courseName, assignmentName, students: [{ name, period }] }
+
+  dashboardData.forEach(cd => {
+    // Gather all unique assignment names that match
+    const matchedAssignments = {};
+
+    cd.students.forEach(s => {
+      s.missing.forEach(a => {
+        if (a.name.toLowerCase().includes(query)) {
+          if (!matchedAssignments[a.name]) {
+            matchedAssignments[a.name] = [];
+          }
+          matchedAssignments[a.name].push({
+            name: s.sortable_name,
+            period: s.period
+          });
+        }
+      });
+    });
+
+    Object.entries(matchedAssignments).forEach(([asgnName, students]) => {
+      students.sort((a, b) => a.name.localeCompare(b.name));
+      results.push({
+        courseName: cd.course.name,
+        assignmentName: asgnName,
+        students
+      });
+    });
+  });
+
+  if (results.length === 0) {
+    container.innerHTML = `<div class="empty-state">No missing submissions found matching "${escHtml(query)}".</div>`;
+    return;
+  }
+
+  container.innerHTML = results.map(r => `
+    <div class="search-result-card">
+      <div class="search-result-header">
+        <h3>${escHtml(r.assignmentName)}</h3>
+        <span class="course-badge">${escHtml(r.courseName)}</span>
+        <span class="missing-count">${r.students.length} not submitted</span>
+      </div>
+      <ul class="search-student-list">
+        ${r.students.map(s => `
+          <li>
+            <span>${escHtml(s.name)}</span>
+            <span class="period-tag">${escHtml(s.period)}</span>
+          </li>
+        `).join('')}
+      </ul>
+    </div>
+  `).join('');
+}
+
+// ── Sorting ──
+function changeSort(mode) {
+  currentSort = mode;
+  document.querySelectorAll('.sort-btn').forEach(b => b.classList.toggle('active', b.dataset.sort === mode));
+  renderCourses();
+}
+
+function sortStudents(students) {
+  return [...students].sort((a, b) => {
+    if (currentSort === 'most') return b.missing.length - a.missing.length;
+    if (currentSort === 'first') {
+      // sortable_name is "Last, First" — extract first name
+      const aFirst = (a.sortable_name.split(',')[1] || a.name).trim();
+      const bFirst = (b.sortable_name.split(',')[1] || b.name).trim();
+      return aFirst.localeCompare(bFirst);
+    }
+    // default: last name (sortable_name already sorts by last)
+    return a.sortable_name.localeCompare(b.sortable_name);
+  });
+}
+
+// ── Tab Switching ──
+function switchTab(tab) {
+  document.querySelectorAll('.tab-btn').forEach(b => b.classList.toggle('active', b.dataset.tab === tab));
+  document.querySelectorAll('.tab-content').forEach(t => t.classList.toggle('active', t.id === `tab-${tab}`));
+}
+
+// ── Auto Refresh ──
+function scheduleAutoRefresh() {
+  if (refreshTimer) clearInterval(refreshTimer);
+  refreshTimer = setInterval(() => {
+    loadDashboard();
+  }, REFRESH_INTERVAL);
+}
+
+function manualRefresh() {
+  const btn = document.getElementById('refresh-btn');
+  btn.classList.add('spinning');
+  loadDashboard().finally(() => {
+    setTimeout(() => btn.classList.remove('spinning'), 500);
+  });
+}
+
+function updateTimestamp() {
+  const now = new Date();
+  const time = now.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' });
+  const date = now.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
+  document.getElementById('last-updated').innerHTML = `Last updated<br><strong>${time}</strong> &middot; ${date}`;
+}
+
+// ── UI Helpers ──
+function showLoading(show, text) {
+  const el = document.getElementById('loading-overlay');
+  if (text) document.getElementById('loading-text').textContent = text;
+  el.classList.toggle('visible', show);
+}
+
+function showError(msg) {
+  const el = document.getElementById('error-banner');
+  el.textContent = msg;
+  el.style.display = 'block';
+}
+
+function hideError() {
+  document.getElementById('error-banner').style.display = 'none';
+}
+
+function escHtml(str) {
+  const div = document.createElement('div');
+  div.textContent = str;
+  return div.innerHTML;
+}
+
+// ── Init ──
+window.addEventListener('DOMContentLoaded', () => {
+  // Clear any corrupted token from localStorage
+  const raw = localStorage.getItem('canvas_api_token') || '';
+  const clean = sanitizeToken(raw);
+  if (raw !== clean) {
+    if (clean) localStorage.setItem('canvas_api_token', clean);
+    else localStorage.removeItem('canvas_api_token');
+  }
+
+  // If already unlocked this session, skip PIN screen
+  if (sessionStorage.getItem('pvhs_unlocked') === '1') {
+    document.getElementById('pin-screen').style.display = 'none';
+    initAfterPin();
+  } else {
+    // Show PIN screen (default state)
+    document.getElementById('pin-input').focus();
+  }
+});
+</script>
+</body>
+</html>

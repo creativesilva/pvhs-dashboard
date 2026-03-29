@@ -414,7 +414,7 @@
     display: flex;
     align-items: center;
     padding: 0.7rem 1rem;
-    gap: 1rem;
+    gap: 0.6rem;
   }
 
   .student-name {
@@ -422,6 +422,7 @@
     font-size: 0.95rem;
     color: var(--text-bright);
     flex: 1;
+    min-width: 0;
   }
 
   .missing-count {
@@ -431,6 +432,8 @@
     border-radius: 20px;
     background: rgba(255, 77, 77, 0.15);
     color: var(--danger);
+    min-width: 7rem;
+    text-align: center;
   }
 
   .missing-count.warning {
@@ -503,6 +506,8 @@
     padding: 0.15rem 0.5rem;
     border-radius: 999px;
     white-space: nowrap;
+    min-width: 5rem;
+    text-align: center;
   }
 
   .station-badge {
@@ -512,6 +517,8 @@
     color: #f0c040;
     border: 1px solid rgba(255, 200, 60, 0.3);
     padding: 0.12rem 0.45rem;
+    min-width: 5rem;
+    text-align: center;
     border-radius: 999px;
     white-space: nowrap;
     letter-spacing: 0.02em;
@@ -716,10 +723,10 @@
     /* Student row — very compact */
     .student-row-header { padding: 2pt 6pt !important; gap: 4pt !important; }
     .student-name { font-size: 9pt !important; font-weight: 600 !important; }
-    .missing-count { font-size: 8pt !important; font-weight: 700 !important; padding: 0 !important; }
-    .missing-pts { font-size: 8pt !important; font-weight: 700 !important; padding: 0 !important; background: none !important; color: #007474 !important; }
+    .missing-count { font-size: 8pt !important; font-weight: 700 !important; padding: 0 !important; min-width: 5rem !important; text-align: center !important; }
+    .missing-pts { font-size: 8pt !important; font-weight: 700 !important; padding: 0 !important; background: none !important; color: #007474 !important; min-width: 3.5rem !important; text-align: right !important; }
     .student-num { font-size: 8pt !important; color: #666 !important; min-width: 1rem !important; }
-    .station-badge { font-size: 8pt !important; font-weight: 700 !important; background: none !important; border: none !important; color: #7a5f00 !important; padding: 0 !important; }
+    .station-badge { font-size: 8pt !important; font-weight: 700 !important; background: none !important; border: none !important; color: #7a5f00 !important; padding: 0 !important; min-width: 3.5rem !important; text-align: center !important; }
     .asgn-pts { font-size: 7pt !important; color: #007474 !important; }
     .expand-icon { display: none !important; }
 

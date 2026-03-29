@@ -514,6 +514,17 @@
     text-align: right;
   }
 
+  .student-id {
+    font-size: 0.75rem;
+    font-weight: 600;
+    color: var(--text-muted);
+    font-family: monospace;
+    min-width: 6rem;
+    text-align: center;
+    letter-spacing: 0.04em;
+    opacity: 0.7;
+  }
+
   .missing-pts {
     font-size: 0.8rem;
     font-weight: 700;
@@ -743,6 +754,7 @@
     .missing-count { font-size: 8pt !important; font-weight: 700 !important; padding: 0 !important; min-width: 5rem !important; text-align: center !important; }
     .missing-pts { font-size: 8pt !important; font-weight: 700 !important; padding: 0 !important; background: none !important; color: #007474 !important; min-width: 3.5rem !important; text-align: right !important; }
     .student-num { font-size: 8pt !important; color: #666 !important; min-width: 1rem !important; }
+    .student-id { font-size: 7.5pt !important; color: #555 !important; min-width: 4rem !important; text-align: center !important; font-family: monospace !important; opacity: 1 !important; }
     .station-badge { font-size: 8pt !important; font-weight: 700 !important; background: none !important; border: none !important; color: #7a5f00 !important; padding: 0 !important; min-width: 3.5rem !important; text-align: center !important; }
     .asgn-pts { font-size: 7pt !important; color: #007474 !important; }
     .expand-icon { display: none !important; }
@@ -1052,7 +1064,7 @@ async function loadDashboard() {
 async function loadCourse(course) {
   // Step 1: Get enrollments and sections in parallel
   const [enrollments, sections] = await Promise.all([
-    canvasFetch(`/courses/${course.id}/enrollments?type[]=StudentEnrollment&state[]=active`),
+    canvasFetch(`/courses/${course.id}/enrollments?type[]=StudentEnrollment&state[]=active&include[]=user`),
     canvasFetch(`/courses/${course.id}/sections`)
   ]);
 
@@ -1068,6 +1080,7 @@ async function loadCourse(course) {
       const sectionName = sectionMap[e.course_section_id] || 'Unknown';
       studentMap[uid] = {
         id: uid,
+        studentId: e.user.sis_user_id || e.user.login_id || '',
         name: e.user.name,
         sortable_name: e.user.sortable_name || e.user.name,
         section: sectionName,
@@ -1408,7 +1421,8 @@ function renderStudentRow(s, index) {
         <span class="expand-icon">&#9654;</span>
         ${index != null ? `<span class="student-num">${index}</span>` : ''}
         <span class="student-name">${escHtml(s.sortable_name)}</span>
-        ${station ? `<span class="station-badge" title="Desk number">Desk&nbsp;${station}</span>` : ''}
+        ${s.studentId ? `<span class="student-id">${escHtml(s.studentId)}</span>` : '<span class="student-id"></span>'}
+        ${station ? `<span class="station-badge" title="Desk number">Desk&nbsp;${station}</span>` : '<span class="station-badge" style="visibility:hidden">Desk&nbsp;00</span>'}
         <span class="missing-count ${countClass}">${s.missing.length} missing</span>
         ${totalPoints > 0 ? `<span class="missing-pts">${totalPoints} pts</span>` : ''}
       </div>

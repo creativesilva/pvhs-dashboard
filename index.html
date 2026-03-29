@@ -1070,12 +1070,13 @@ async function loadCourse(course) {
 }
 
 function extractPeriod(sectionName) {
-  // Try to extract period from section name, common patterns:
-  // "Period 3", "P3", "Per 3", "3rd Period", etc.
-  const m = sectionName.match(/(?:per(?:iod)?\.?\s*)(\d+)/i) ||
-            sectionName.match(/\bp\s*(\d+)\b/i) ||
-            sectionName.match(/^(\d+)/);
-  return m ? `Period ${m[1]}` : sectionName;
+  // Strip time ranges like "(1:05 PM - 1:55 PM)" first
+  const cleaned = sectionName.replace(/\s*\([^)]*\)/g, '').trim();
+  const m = cleaned.match(/(?:per(?:iod)?\.?\s*)(\d+)/i) ||
+            cleaned.match(/\bp\s*(\d+)\b/i) ||
+            cleaned.match(/[-\s](\d+)$/) ||   // e.g. "SILVA - 5" at end
+            cleaned.match(/^(\d+)/);
+  return m ? `Period ${m[1]}` : cleaned;
 }
 
 function formatDate(iso) {

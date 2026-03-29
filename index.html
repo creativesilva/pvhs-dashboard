@@ -851,9 +851,9 @@
     <div style="display:flex;align-items:center;justify-content:space-between;padding:1rem 1.2rem;border-bottom:1px solid rgba(0,116,116,0.25);background:rgba(2,20,20,0.95);">
       <span style="font-size:0.8rem;font-weight:700;letter-spacing:0.12em;color:#40dede;text-transform:uppercase;">PVHS Tools</span>
       <div style="display:flex;gap:0.5rem;">
-        <a href="https://creativesilva.github.io/pvhs_tools/" target="_blank" title="Open in new tab" style="background:transparent;border:1px solid rgba(0,116,116,0.4);color:#8ab;border-radius:6px;padding:0.3rem 0.6rem;font-size:0.75rem;cursor:pointer;text-decoration:none;display:flex;align-items:center;gap:4px;">
-          <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"/><polyline points="15 3 21 3 21 9"/><line x1="10" y1="14" x2="21" y2="3"/></svg>New Tab
-        </a>
+        <button onclick="popOutTools()" title="Pop out as app window" style="background:transparent;border:1px solid rgba(0,116,116,0.4);color:#8ab;border-radius:6px;padding:0.3rem 0.6rem;font-size:0.75rem;cursor:pointer;display:flex;align-items:center;gap:4px;">
+          <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><rect x="3" y="3" width="18" height="18" rx="2"/><path d="M9 3v18M3 9h6"/></svg>Pop Out
+        </button>
         <button onclick="closeTools()" style="background:transparent;border:1px solid rgba(0,116,116,0.4);color:#8ab;border-radius:6px;padding:0.3rem 0.7rem;font-size:0.85rem;cursor:pointer;">✕</button>
       </div>
     </div>
@@ -1391,7 +1391,13 @@ function renderCourses() {
     return;
   }
 
-  container.innerHTML = dashboardData.map(cd => {
+  // Sort courses by their lowest period number so display reads 1,2,3,5,6,7
+  const sortedData = [...dashboardData].sort((a, b) => {
+    const minPeriod = cd => Math.min(...cd.students.map(s => parseInt((s.period || '').replace(/\D/g, '')) || 999));
+    return minPeriod(a) - minPeriod(b);
+  });
+
+  container.innerHTML = sortedData.map(cd => {
     if (cd.students.length === 0) return '';
 
     // Group students by period
@@ -1613,7 +1619,12 @@ function printReport() {
   const originalHTML = container.innerHTML;
 
   // Build print-specific HTML
-  container.innerHTML = dashboardData.map(cd => {
+  const printSortedData = [...dashboardData].sort((a, b) => {
+    const minP = cd => Math.min(...cd.students.map(s => parseInt((s.period || '').replace(/\D/g, '')) || 999));
+    return minP(a) - minP(b);
+  });
+
+  container.innerHTML = printSortedData.map(cd => {
     const filtered = cd.students.filter(s => s.missing.length >= 3);
     if (filtered.length === 0) return '';
 
@@ -1780,6 +1791,18 @@ function closeTools() {
   document.getElementById('tools-panel').classList.remove('open');
   document.getElementById('tools-overlay').style.display = 'none';
   document.body.style.overflow = '';
+}
+
+function popOutTools() {
+  // Opens PVHS Tools in a standalone app-style window (no toolbar, no tabs)
+  const url = 'https://creativesilva.github.io/pvhs_tools/';
+  const w = 430, h = 820;
+  const left = Math.round((screen.width - w) / 2);
+  const top  = Math.round((screen.height - h) / 2);
+  window.open(url, 'pvhs_tools',
+    `width=${w},height=${h},left=${left},top=${top},` +
+    `resizable=yes,scrollbars=yes,toolbar=no,menubar=no,location=no,status=no`
+  );
 }
 
 // Close on Escape key

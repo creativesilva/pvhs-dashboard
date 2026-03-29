@@ -133,6 +133,22 @@
     color: var(--teal-light);
   }
 
+  .btn-tools {
+    background: rgba(0,116,116,0.15);
+    border: 1px solid rgba(0,116,116,0.4);
+    color: var(--teal-light);
+    display: flex;
+    align-items: center;
+  }
+
+  .btn-tools:hover {
+    background: rgba(0,116,116,0.28);
+    border-color: var(--teal-light);
+  }
+
+  #tools-panel { display: none; }
+  #tools-panel.open { display: flex !important; }
+
   .btn-install {
     background: rgba(0,180,180,0.14) !important;
     border: 1px solid var(--teal-light) !important;
@@ -696,7 +712,8 @@
     #pin-screen, #setup-screen, #loading-overlay,
     .top-bar, .tab-bar, .summary-row, .sort-bar,
     #tab-search, .error-banner, .refresh-btn,
-    .btn-outline, .period-print-btn, .print-btn,
+    .btn-outline, .btn-tools, .period-print-btn, .print-btn,
+    #tools-overlay, #tools-panel,
     .course-badge { display: none !important; }
 
     /* Force dashboard visible */
@@ -809,8 +826,26 @@
         </svg>
       </button>
       <button class="btn btn-small btn-outline" onclick="resetToken()">Change Token</button>
+      <button class="btn btn-small btn-tools" onclick="openTools()" title="PVHS Tools">
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" style="margin-right:5px"><rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/><rect x="3" y="14" width="7" height="7" rx="1"/><rect x="14" y="14" width="7" height="7" rx="1"/></svg>PVHS Tools
+      </button>
       <button class="btn btn-small btn-install" id="install-btn" onclick="installApp()" style="display:none;">Install App</button>
     </div>
+  </div>
+
+  <!-- PVHS Tools Panel -->
+  <div id="tools-overlay" onclick="closeTools()" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,0.55);z-index:1000;backdrop-filter:blur(4px);-webkit-backdrop-filter:blur(4px);"></div>
+  <div id="tools-panel" style="display:none;position:fixed;top:0;right:0;width:420px;max-width:95vw;height:100vh;z-index:1001;background:#021414;border-left:1px solid rgba(0,116,116,0.3);box-shadow:-8px 0 40px rgba(0,0,0,0.6);flex-direction:column;">
+    <div style="display:flex;align-items:center;justify-content:space-between;padding:1rem 1.2rem;border-bottom:1px solid rgba(0,116,116,0.25);background:rgba(2,20,20,0.95);">
+      <span style="font-size:0.8rem;font-weight:700;letter-spacing:0.12em;color:#40dede;text-transform:uppercase;">PVHS Tools</span>
+      <div style="display:flex;gap:0.5rem;">
+        <a href="https://creativesilva.github.io/pvhs_tools/" target="_blank" title="Open in new tab" style="background:transparent;border:1px solid rgba(0,116,116,0.4);color:#8ab;border-radius:6px;padding:0.3rem 0.6rem;font-size:0.75rem;cursor:pointer;text-decoration:none;display:flex;align-items:center;gap:4px;">
+          <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"/><polyline points="15 3 21 3 21 9"/><line x1="10" y1="14" x2="21" y2="3"/></svg>New Tab
+        </a>
+        <button onclick="closeTools()" style="background:transparent;border:1px solid rgba(0,116,116,0.4);color:#8ab;border-radius:6px;padding:0.3rem 0.7rem;font-size:0.85rem;cursor:pointer;">✕</button>
+      </div>
+    </div>
+    <iframe id="tools-iframe" src="" style="flex:1;border:none;width:100%;height:calc(100vh - 57px);" allow="fullscreen"></iframe>
   </div>
 
   <!-- Tabs -->
@@ -1681,6 +1716,28 @@ if (window.matchMedia('(display-mode: standalone)').matches || window.navigator.
   const ib = document.getElementById('install-btn');
   if (ib) ib.style.display = 'none';
 }
+
+// ── PVHS Tools Panel ──
+function openTools() {
+  const panel = document.getElementById('tools-panel');
+  const overlay = document.getElementById('tools-overlay');
+  const iframe = document.getElementById('tools-iframe');
+  if (!iframe.src || iframe.src === window.location.href) {
+    iframe.src = 'https://creativesilva.github.io/pvhs_tools/';
+  }
+  panel.classList.add('open');
+  overlay.style.display = 'block';
+  document.body.style.overflow = 'hidden';
+}
+
+function closeTools() {
+  document.getElementById('tools-panel').classList.remove('open');
+  document.getElementById('tools-overlay').style.display = 'none';
+  document.body.style.overflow = '';
+}
+
+// Close on Escape key
+document.addEventListener('keydown', e => { if (e.key === 'Escape') closeTools(); });
 
 // ── PWA Service Worker ──
 if ('serviceWorker' in navigator) {

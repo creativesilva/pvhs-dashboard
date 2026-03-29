@@ -505,6 +505,18 @@
     white-space: nowrap;
   }
 
+  .station-badge {
+    font-size: 0.75rem;
+    font-weight: 700;
+    background: rgba(255, 200, 60, 0.12);
+    color: #f0c040;
+    border: 1px solid rgba(255, 200, 60, 0.3);
+    padding: 0.12rem 0.45rem;
+    border-radius: 999px;
+    white-space: nowrap;
+    letter-spacing: 0.02em;
+  }
+
   /* ── Search Results ── */
   .search-results {
     margin-top: 1rem;
@@ -707,6 +719,7 @@
     .missing-count { font-size: 8pt !important; font-weight: 700 !important; padding: 0 !important; }
     .missing-pts { font-size: 8pt !important; font-weight: 700 !important; padding: 0 !important; background: none !important; color: #007474 !important; }
     .student-num { font-size: 8pt !important; color: #666 !important; min-width: 1rem !important; }
+    .station-badge { font-size: 8pt !important; font-weight: 700 !important; background: none !important; border: none !important; color: #7a5f00 !important; padding: 0 !important; }
     .asgn-pts { font-size: 7pt !important; color: #007474 !important; }
     .expand-icon { display: none !important; }
 
@@ -1069,6 +1082,182 @@ function formatDate(iso) {
   return d.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
 }
 
+// ── Seating Chart Data ──
+// Keyed by period number. Names are from seating charts; matching is fuzzy.
+const SEATING_DATA = {
+  1: [ // Period 1 — Room 322
+    { n: "Sophia Gonzales",         s: "14" },
+    { n: "Janessa Guzman",          s: "13" },
+    { n: "Bryan Escobar-Meza",      s: "05" },
+    { n: "Nancy Galvez Hernandez",  s: "25" },
+    { n: "Ray Rivera Vasquez",      s: "15" },
+    { n: "Axel Santos",             s: "12" },
+    { n: "Gage Villalobos",         s: "06" },
+    { n: "Miranda Lopez Diaz",      s: "21" },
+    { n: "Alondra Martinez",        s: "16" },
+    { n: "Jasmin Tena-Guzman",      s: "11" },
+    { n: "Cristian Nieto Barriga",  s: "07" },
+    { n: "Cristian Santos Ramirez", s: "02" },
+    { n: "Azulen Dorantes",         s: "27" },
+    { n: "Miguel Chavez Velasco",   s: "20" },
+    { n: "Isabella Castro Guzman",  s: "17" },
+    { n: "Yadirah Cipriano",        s: "10" },
+    { n: "Adad Santos Lopez",       s: "29" },
+    { n: "Julyssa Olea Vargas",     s: "28" },
+    { n: "Maxx Aguilar",            s: "19" },
+    { n: "Rosaelia Sanchez Quiroz", s: "18" },
+    { n: "Melanie Cardoso",         s: "09" }
+  ],
+  3: [ // Period 3 — Room 331 (first name + last initial only)
+    { n: "Paul P",      s: "05", fi: true },
+    { n: "Allison F",   s: "04", fi: true },
+    { n: "Anthony G",   s: "03", fi: true },
+    { n: "Elena G",     s: "02", fi: true },
+    { n: "Jesus A",     s: "01", fi: true },
+    { n: "Pryce P",     s: "06", fi: true },
+    { n: "Jocelyn S",   s: "07", fi: true },
+    { n: "Salud A",     s: "22", fi: true },
+    { n: "Justus M",    s: "23", fi: true },
+    { n: "Anthony L",   s: "08", fi: true },
+    { n: "Daniel G",    s: "21", fi: true },
+    { n: "Jayden R",    s: "24", fi: true },
+    { n: "Isbeth B",    s: "20", fi: true },
+    { n: "Junior T",    s: "25", fi: true },
+    { n: "Michael G",   s: "19", fi: true },
+    { n: "Aimar G",     s: "26", fi: true },
+    { n: "Araceli M",   s: "11", fi: true },
+    { n: "Andres G",    s: "18", fi: true },
+    { n: "Samara V",    s: "27", fi: true },
+    { n: "MacKenzie P", s: "12", fi: true },
+    { n: "Adrian A",    s: "17", fi: true },
+    { n: "Nicolas F",   s: "28", fi: true },
+    { n: "Andrik C",    s: "13", fi: true },
+    { n: "Alonso C",    s: "16", fi: true },
+    { n: "Yoselin E",   s: "29", fi: true },
+    { n: "Santino V",   s: "14", fi: true },
+    { n: "Roberto A",   s: "15", fi: true },
+    { n: "Yareth O",    s: "30", fi: true }
+  ],
+  5: [ // Period 5 — Room 322 — CTE Photo 1B
+    { n: "Matthew Delabra",           s: "23" },
+    { n: "Ayda Zeferino",             s: "14" },
+    { n: "Matthew Reyes",             s: "13" },
+    { n: "Jazmyn Bolusan",            s: "05" },
+    { n: "Joara Cisneros",            s: "04" },
+    { n: "Alex Mata Ramirez",         s: "25" },
+    { n: "Andrea Perez Guijosa",      s: "24" },
+    { n: "Hannah Aguilar Perez",      s: "22" },
+    { n: "Nathaniel Arredondo",       s: "15" },
+    { n: "Cesar Aguilar",             s: "12" },
+    { n: "Jocelyn Clerie",            s: "06" },
+    { n: "Sara Lopez Gonzalez",       s: "03" },
+    { n: "Isabel Gonzalez-Aquino",    s: "21" },
+    { n: "Ivan Delacruz-Valenzuela",  s: "16" },
+    { n: "Ricardo Molina Ramos",      s: "11" },
+    { n: "Rosalia Basurto Solano",    s: "07" },
+    { n: "Mya Bobadilla",             s: "02" },
+    { n: "Daniel Aguilar",            s: "27" },
+    { n: "Gael Garcia Mendez",        s: "26" },
+    { n: "Jaslene Gaytan",            s: "20" },
+    { n: "Michael Hernandez",         s: "17" },
+    { n: "Jazmin Gonzalez Vazquez",   s: "10" },
+    { n: "Ethan Resendez",            s: "08" },
+    { n: "Yovani Antonio",            s: "01" },
+    { n: "Sonia Garcia Emiliano",     s: "29" },
+    { n: "Ana Infante Abarca",        s: "28" },
+    { n: "Diego Robles",              s: "19" },
+    { n: "Ines Perea Vasquez",        s: "18" },
+    { n: "Dominik Garcia-Valencia",   s: "09" },
+    { n: "Keshawn Bolden",            s: "30" }
+  ],
+  6: [ // Period 6 — Room 322
+    { n: "Karina Dehorta",            s: "13" },
+    { n: "Veniece Archuleta",         s: "05" },
+    { n: "Katie Castro",              s: "04" },
+    { n: "Elizabeth Farfan Baron",    s: "25" },
+    { n: "Diego Banderas",            s: "24" },
+    { n: "Juan Maus",                 s: "22" },
+    { n: "Brianna Cisneros",          s: "15" },
+    { n: "Jessica Valadez",           s: "12" },
+    { n: "Daniel Ayala",              s: "03" },
+    { n: "Carlos Santiago Rojas",     s: "21" },
+    { n: "Anahi Melgar Galindo",      s: "16" },
+    { n: "Elizabeth Vazquez-Galvez",  s: "11" },
+    { n: "Julio Marquez",             s: "07" },
+    { n: "Arianna Ramirez",           s: "02" },
+    { n: "Grady Courtright",          s: "27" },
+    { n: "Gloria Ramirez-Santiago",   s: "26" },
+    { n: "Caleb Pineda",              s: "20" },
+    { n: "Tristan Nogales",           s: "17" },
+    { n: "Alondra Medrano",           s: "10" },
+    { n: "Davina Royall",             s: "08" },
+    { n: "Dennis Petersen",           s: "01" },
+    { n: "Marlen Lorenzo",            s: "29" },
+    { n: "Ella Naoe",                 s: "19" },
+    { n: "Jennifer Bonal Diaz",       s: "18" },
+    { n: "Allan Andrade Juarez",      s: "09" }
+  ],
+  7: [ // Period 7 — Room 322
+    { n: "Gregorio Calleja",          s: "14" },
+    { n: "Mariah Acosta",             s: "13" },
+    { n: "Ebelin Huerta",             s: "04" },
+    { n: "Azul Lopez",                s: "22" },
+    { n: "Jacob Beltran",             s: "15" },
+    { n: "Manuel Camacho",            s: "12" },
+    { n: "RayVaughn Rodriguez",       s: "06" },
+    { n: "Brian Rojas Camacho",       s: "21" },
+    { n: "Destiny Lopez",             s: "16" },
+    { n: "Diego Espinoza",            s: "11" },
+    { n: "Omar Espinosa",             s: "07" },
+    { n: "Emiliano Jimenez",          s: "02" },
+    { n: "Noah Garcia",               s: "26" },
+    { n: "Adrian Valenzuela",         s: "20" },
+    { n: "Natalie Garza",             s: "17" },
+    { n: "Isabella Weddle",           s: "10" },
+    { n: "Darey Mendez Bravo",        s: "01" },
+    { n: "Liliana Cruz Juarez",       s: "29" },
+    { n: "Yaritza Gonzalez",          s: "28" },
+    { n: "Yahir Alejandro",           s: "19" },
+    { n: "Gladys Aguirre Lopez",      s: "18" },
+    { n: "Rosio Leon-Lopez",          s: "09" }
+  ]
+};
+
+function norm(str) {
+  return str.toLowerCase().replace(/[^a-z\s]/g, ' ').replace(/\s+/g, ' ').trim();
+}
+
+function findStation(sortableName, periodStr) {
+  const periodNum = parseInt((periodStr || '').replace(/\D/g, ''));
+  const entries = SEATING_DATA[periodNum];
+  if (!entries) return null;
+
+  const ci = sortableName.indexOf(',');
+  if (ci === -1) return null;
+  const last  = norm(sortableName.slice(0, ci));
+  const first = norm(sortableName.slice(ci + 1));
+  const firstName = first.split(' ')[0];
+  const fullNorm = (first + ' ' + last);
+
+  for (const e of entries) {
+    if (e.fi) {
+      // First name + last initial only
+      const parts = norm(e.n).split(' ');
+      const eFN = parts[0];
+      const eLI = (parts[1] || '').charAt(0);
+      if (firstName === eFN && last.charAt(0) === eLI) return e.s;
+    } else {
+      const eNorm = norm(e.n);
+      const eWords = eNorm.split(' ').filter(w => w.length > 1);
+      // All seating-chart words appear somewhere in the canvas full name
+      if (eWords.every(w => fullNorm.includes(w))) return e.s;
+      // Fallback: last name match + first name match
+      if (fullNorm.includes(last) && eNorm.includes(firstName)) return e.s;
+    }
+  }
+  return null;
+}
+
 // ── Rendering ──
 function renderDashboard() {
   renderSummary();
@@ -1162,6 +1351,7 @@ function renderCourses() {
 function renderStudentRow(s, index) {
   const countClass = s.missing.length >= 5 ? '' : (s.missing.length >= 3 ? 'warning' : 'low');
   const totalPoints = s.missing.reduce((sum, a) => sum + (a.points || 0), 0);
+  const station = findStation(s.sortable_name, s.period);
   const assignmentItems = s.missing
     .sort((a, b) => (a.due_raw || '').localeCompare(b.due_raw || ''))
     .map(a => `<li><span class="asgn-name">${escHtml(a.name)}</span><span class="asgn-due">${escHtml(a.due)}</span>${a.points ? `<span class="asgn-pts">${a.points} pts</span>` : ''}</li>`)
@@ -1173,6 +1363,7 @@ function renderStudentRow(s, index) {
         <span class="expand-icon">&#9654;</span>
         ${index != null ? `<span class="student-num">${index}</span>` : ''}
         <span class="student-name">${escHtml(s.sortable_name)}</span>
+        ${station ? `<span class="station-badge" title="Workstation">WS&nbsp;${station}</span>` : ''}
         <span class="missing-count ${countClass}">${s.missing.length} missing</span>
         ${totalPoints > 0 ? `<span class="missing-pts">${totalPoints} pts</span>` : ''}
       </div>

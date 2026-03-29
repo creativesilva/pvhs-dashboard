@@ -828,6 +828,8 @@
         <button class="sort-btn active" data-sort="last" onclick="changeSort('last')">Last Name</button>
         <button class="sort-btn" data-sort="first" onclick="changeSort('first')">First Name</button>
         <button class="sort-btn" data-sort="most" onclick="changeSort('most')">Most Missing</button>
+        <button class="sort-btn" data-sort="pts" onclick="changeSort('pts')">Most Points</button>
+        <button class="sort-btn" data-sort="desk" onclick="changeSort('desk')">By Desk</button>
         <button class="print-btn" onclick="printReport()">&#128424; Print Report</button>
       </div>
       <div id="courses-container"></div>
@@ -1363,7 +1365,7 @@ function renderStudentRow(s, index) {
         <span class="expand-icon">&#9654;</span>
         ${index != null ? `<span class="student-num">${index}</span>` : ''}
         <span class="student-name">${escHtml(s.sortable_name)}</span>
-        ${station ? `<span class="station-badge" title="Workstation">WS&nbsp;${station}</span>` : ''}
+        ${station ? `<span class="station-badge" title="Desk number">Desk&nbsp;${station}</span>` : ''}
         <span class="missing-count ${countClass}">${s.missing.length} missing</span>
         ${totalPoints > 0 ? `<span class="missing-pts">${totalPoints} pts</span>` : ''}
       </div>
@@ -1456,13 +1458,22 @@ function changeSort(mode) {
 function sortStudents(students) {
   return [...students].sort((a, b) => {
     if (currentSort === 'most') return b.missing.length - a.missing.length;
+    if (currentSort === 'pts') {
+      const aPts = a.missing.reduce((sum, x) => sum + (x.points || 0), 0);
+      const bPts = b.missing.reduce((sum, x) => sum + (x.points || 0), 0);
+      return bPts - aPts;
+    }
+    if (currentSort === 'desk') {
+      const aDesk = parseInt(findStation(a.sortable_name, a.period) || '999');
+      const bDesk = parseInt(findStation(b.sortable_name, b.period) || '999');
+      return aDesk - bDesk;
+    }
     if (currentSort === 'first') {
-      // sortable_name is "Last, First" — extract first name
       const aFirst = (a.sortable_name.split(',')[1] || a.name).trim();
       const bFirst = (b.sortable_name.split(',')[1] || b.name).trim();
       return aFirst.localeCompare(bFirst);
     }
-    // default: last name (sortable_name already sorts by last)
+    // default: last name
     return a.sortable_name.localeCompare(b.sortable_name);
   });
 }

@@ -216,9 +216,10 @@
   }
 
   .refresh-btn:hover { border-color: var(--teal); background: var(--teal-dim); }
-  .refresh-btn.spinning svg { animation: spin 1s linear infinite; }
+  .refresh-btn.spinning svg { animation: spin-ccw 1s linear infinite; }
 
   @keyframes spin { from { transform: rotate(0deg); } to { transform: rotate(360deg); } }
+  @keyframes spin-ccw { from { transform: rotate(0deg); } to { transform: rotate(-360deg); } }
 
   /* ── Tabs ── */
   .tab-bar {

@@ -551,6 +551,59 @@
     letter-spacing: 0.02em;
   }
 
+  /* ── Hide IDs toggle ── */
+  body.hide-ids .student-id { display: none !important; }
+
+  /* ── On-Track Section ── */
+  .on-track-section {
+    margin-top: 0.4rem;
+    border: 1px solid rgba(80, 200, 100, 0.2);
+    border-radius: 8px;
+    overflow: hidden;
+  }
+
+  .on-track-header {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    padding: 0.45rem 0.85rem;
+    cursor: pointer;
+    user-select: none;
+    font-size: 0.82rem;
+    color: #50c864;
+    background: rgba(50, 205, 100, 0.06);
+  }
+
+  .on-track-header:hover { background: rgba(50, 205, 100, 0.12); }
+
+  .on-track-chevron { transition: transform 0.2s; font-size: 0.6rem; }
+  .on-track-section.open .on-track-chevron { transform: rotate(90deg); }
+
+  .on-track-list { display: none; }
+  .on-track-section.open .on-track-list { display: block; }
+
+  .on-track-row {
+    display: flex;
+    align-items: center;
+    gap: 0.6rem;
+    padding: 0.4rem 0.85rem;
+    font-size: 0.875rem;
+    border-top: 1px solid var(--border);
+  }
+
+  .on-track-badge {
+    font-size: 0.75rem;
+    font-weight: 600;
+    background: rgba(50, 205, 100, 0.1);
+    color: #50c864;
+    border: 1px solid rgba(50, 205, 100, 0.25);
+    padding: 0.1rem 0.5rem;
+    border-radius: 999px;
+    white-space: nowrap;
+    min-width: 7rem;
+    text-align: center;
+  }
+
   /* ── Search Results ── */
   .search-results {
     margin-top: 1rem;
@@ -578,24 +631,84 @@
     flex: 1;
   }
 
-  .search-student-list {
-    list-style: none;
-  }
-
-  .search-student-list li {
-    padding: 0.55rem 1rem;
-    font-size: 0.9rem;
-    color: var(--text);
+  /* ── Search period groups ── */
+  .search-period-group {
     border-bottom: 1px solid var(--border);
+    padding: 0.7rem 1rem;
+  }
+  .search-period-group:last-child { border-bottom: none; }
+
+  .search-period-header {
     display: flex;
-    justify-content: space-between;
+    align-items: center;
+    gap: 0.6rem;
+    margin-bottom: 0.4rem;
+    flex-wrap: wrap;
   }
 
-  .search-student-list li:last-child { border-bottom: none; }
-
-  .search-student-list li .period-tag {
-    font-size: 0.75rem;
+  .search-period-label {
+    font-size: 0.82rem;
+    font-weight: 700;
     color: var(--teal-light);
+    white-space: nowrap;
+  }
+
+  .turn-in-bar-wrap {
+    flex: 1;
+    min-width: 60px;
+    height: 5px;
+    background: rgba(255,255,255,0.08);
+    border-radius: 999px;
+    overflow: hidden;
+  }
+
+  .turn-in-bar-fill {
+    height: 100%;
+    background: var(--teal);
+    border-radius: 999px;
+    transition: width 0.3s;
+  }
+
+  .turn-in-rate {
+    font-size: 0.76rem;
+    color: var(--text-muted);
+    white-space: nowrap;
+  }
+
+  .show-submitted-btn {
+    font-size: 0.71rem;
+    padding: 0.12rem 0.45rem;
+    background: transparent;
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    color: var(--text-muted);
+    cursor: pointer;
+    white-space: nowrap;
+  }
+  .show-submitted-btn:hover { border-color: var(--teal); color: var(--teal-light); }
+
+  .search-missing-list { list-style: none; margin: 0; padding: 0; }
+  .search-missing-list li {
+    padding: 0.35rem 0;
+    font-size: 0.875rem;
+    color: var(--text);
+    border-bottom: 1px solid rgba(255,255,255,0.04);
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+  }
+  .search-missing-list li:last-child { border-bottom: none; }
+
+  .search-submitted-list { display: none; list-style: none; margin: 0.4rem 0 0; padding: 0.4rem 0 0; border-top: 1px solid var(--border); }
+  .search-submitted-list.open { display: block; }
+  .search-submitted-list li {
+    padding: 0.3rem 0;
+    font-size: 0.82rem;
+    color: var(--text-muted);
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    opacity: 0.75;
   }
 
   /* ── Loading / Error ── */
@@ -884,6 +997,7 @@
         <button class="sort-btn" data-sort="most" onclick="changeSort('most')">Most Missing</button>
         <button class="sort-btn" data-sort="pts" onclick="changeSort('pts')">Most Points</button>
         <button class="sort-btn" data-sort="desk" onclick="changeSort('desk')">By Desk</button>
+        <button class="sort-btn btn-toggle-ids" id="toggle-ids-btn" onclick="toggleStudentIds()">&#128065; Hide IDs</button>
         <button class="print-btn" onclick="printReport()">&#128424; Print Report</button>
       </div>
       <div id="courses-container"></div>
@@ -942,6 +1056,7 @@ async function checkPin() {
 
 function initAfterPin() {
   TOKEN = getToken();
+  initIdToggle();
   if (TOKEN) {
     document.getElementById('dashboard').style.display = 'block';
     loadDashboard();
@@ -1116,9 +1231,8 @@ async function loadCourse(course) {
     }));
   }
 
-  // Only keep students with missing assignments
+  // Keep ALL enrolled students (including those with 0 missing)
   const students = Object.values(studentMap)
-    .filter(s => s.missing.length > 0)
     .sort((a, b) => a.sortable_name.localeCompare(b.sortable_name));
 
   return { course, students };
@@ -1355,23 +1469,27 @@ function renderDashboard() {
 }
 
 function renderSummary() {
-  let totalStudents = 0;
+  let totalEnrolled = 0;
+  let totalWithMissing = 0;
   let totalMissing = 0;
   let maxMissing = 0;
 
   dashboardData.forEach(cd => {
-    totalStudents += cd.students.length;
+    totalEnrolled += cd.students.length;
     cd.students.forEach(s => {
-      totalMissing += s.missing.length;
-      if (s.missing.length > maxMissing) maxMissing = s.missing.length;
+      if (s.missing.length > 0) {
+        totalWithMissing++;
+        totalMissing += s.missing.length;
+        if (s.missing.length > maxMissing) maxMissing = s.missing.length;
+      }
     });
   });
 
   document.getElementById('summary-row').innerHTML = `
     <div class="summary-card">
       <div class="label">Students with Missing Work</div>
-      <div class="value">${totalStudents}</div>
-      <div class="sub">across ${COURSES.length} courses</div>
+      <div class="value">${totalWithMissing}</div>
+      <div class="sub">${totalEnrolled} total enrolled across ${COURSES.length} courses</div>
     </div>
     <div class="summary-card">
       <div class="label">Total Missing Assignments</div>
@@ -1386,7 +1504,7 @@ function renderSummary() {
 
 function renderCourses() {
   const container = document.getElementById('courses-container');
-  if (dashboardData.every(cd => cd.students.length === 0)) {
+  if (dashboardData.every(cd => cd.students.every(s => s.missing.length === 0))) {
     container.innerHTML = '<div class="empty-state">No missing assignments found. Nice!</div>';
     return;
   }
@@ -1415,18 +1533,52 @@ function renderCourses() {
       return na - nb;
     });
 
+    const totalEnrolled = cd.students.length;
+    const totalMissing = cd.students.filter(s => s.missing.length > 0).length;
+
     const periodHTML = sortedPeriods.map(p => {
-      const students = sortStudents(periods[p]);
+      const allInPeriod = periods[p];
+      const missingStudents = sortStudents(allInPeriod.filter(s => s.missing.length > 0));
+      const onTrackStudents = allInPeriod
+        .filter(s => s.missing.length === 0)
+        .sort((a, b) => a.sortable_name.localeCompare(b.sortable_name));
+
       const cname = cd.course.name.replace(/'/g, "\\'");
       const pname = p.replace(/'/g, "\\'");
+      const otId = `ot-${cd.course.id}-${p.replace(/\W/g, '')}`;
+
+      const onTrackHTML = onTrackStudents.length > 0 ? `
+        <div class="on-track-section" id="${otId}">
+          <div class="on-track-header" onclick="this.parentElement.classList.toggle('open')">
+            <span class="on-track-chevron">&#9654;</span>
+            <span>${onTrackStudents.length} student${onTrackStudents.length !== 1 ? 's' : ''} on track ✓</span>
+          </div>
+          <div class="on-track-list">
+            ${onTrackStudents.map(s => {
+              const desk = findStation(s.sortable_name, s.period);
+              return `
+                <div class="on-track-row">
+                  <span class="student-name">${escHtml(s.sortable_name)}</span>
+                  ${s.studentId ? `<span class="student-id">${escHtml(s.studentId)}</span>` : '<span class="student-id"></span>'}
+                  ${desk ? `<span class="station-badge">Desk&nbsp;${desk}</span>` : '<span class="station-badge" style="visibility:hidden">Desk&nbsp;00</span>'}
+                  <span class="on-track-badge">0 missing · 0 pts</span>
+                </div>`;
+            }).join('')}
+          </div>
+        </div>` : '';
+
+      const periodMissingCount = missingStudents.length;
+      const periodTotal = allInPeriod.length;
+
       return `
         <div class="period-group">
           <div class="period-label">
-            <span>${escHtml(p)} &middot; ${students.length} student${students.length !== 1 ? 's' : ''}</span>
+            <span>${escHtml(p)} &middot; ${periodMissingCount} of ${periodTotal} have missing work</span>
             <button class="period-print-btn" onclick="event.stopPropagation(); printPeriod('${cname}', '${pname}')" title="Print this period">&#128424;</button>
           </div>
           <div class="student-list">
-            ${students.map((s, i) => renderStudentRow(s, i + 1)).join('')}
+            ${missingStudents.map((s, i) => renderStudentRow(s, i + 1)).join('')}
+            ${onTrackHTML}
           </div>
         </div>
       `;
@@ -1436,7 +1588,7 @@ function renderCourses() {
       <div class="course-section">
         <div class="course-header">
           <h2>${escHtml(cd.course.name)}</h2>
-          <span class="course-badge">${cd.students.length} student${cd.students.length !== 1 ? 's' : ''}</span>
+          <span class="course-badge">${totalMissing} of ${totalEnrolled} have missing work</span>
         </div>
         ${periodHTML}
       </div>
@@ -1488,34 +1640,46 @@ function doAssignmentSearch() {
     return;
   }
 
-  // Search across all courses
-  const results = []; // { courseName, assignmentName, students: [{ name, period }] }
+  // Collect all matching assignment names across all courses
+  const results = [];
 
   dashboardData.forEach(cd => {
-    // Gather all unique assignment names that match
-    const matchedAssignments = {};
-
+    // Find all unique assignment names that match the query (from any student's missing list)
+    const matchedNames = new Set();
     cd.students.forEach(s => {
       s.missing.forEach(a => {
-        if (a.name.toLowerCase().includes(query)) {
-          if (!matchedAssignments[a.name]) {
-            matchedAssignments[a.name] = [];
-          }
-          matchedAssignments[a.name].push({
-            name: s.sortable_name,
-            period: s.period
-          });
-        }
+        if (a.name.toLowerCase().includes(query)) matchedNames.add(a.name);
       });
     });
 
-    Object.entries(matchedAssignments).forEach(([asgnName, students]) => {
-      students.sort((a, b) => a.name.localeCompare(b.name));
-      results.push({
-        courseName: cd.course.name,
-        assignmentName: asgnName,
-        students
+    matchedNames.forEach(asgnName => {
+      // Group all enrolled students by period, split into missing vs submitted
+      const periodMap = {};
+      cd.students.forEach(s => {
+        const p = s.period || 'Unknown';
+        if (!periodMap[p]) periodMap[p] = { missing: [], submitted: [] };
+        const hasMissing = s.missing.some(a => a.name === asgnName);
+        if (hasMissing) periodMap[p].missing.push(s);
+        else periodMap[p].submitted.push(s);
       });
+
+      // Sort periods numerically
+      const periods = Object.entries(periodMap)
+        .sort(([a], [b]) => {
+          const na = parseInt(a.replace(/\D/g, '')) || 999;
+          const nb = parseInt(b.replace(/\D/g, '')) || 999;
+          return na - nb;
+        })
+        .map(([period, data]) => ({
+          period,
+          total: data.missing.length + data.submitted.length,
+          missing: data.missing.sort((a, b) => a.sortable_name.localeCompare(b.sortable_name)),
+          submitted: data.submitted.sort((a, b) => a.sortable_name.localeCompare(b.sortable_name))
+        }));
+
+      const totalMissing = periods.reduce((sum, p) => sum + p.missing.length, 0);
+      const totalStudents = periods.reduce((sum, p) => sum + p.total, 0);
+      results.push({ courseName: cd.course.name, assignmentName: asgnName, periods, totalMissing, totalStudents });
     });
   });
 
@@ -1524,23 +1688,73 @@ function doAssignmentSearch() {
     return;
   }
 
-  container.innerHTML = results.map(r => `
+  container.innerHTML = results.map((r, ri) => `
     <div class="search-result-card">
       <div class="search-result-header">
         <h3>${escHtml(r.assignmentName)}</h3>
         <span class="course-badge">${escHtml(r.courseName)}</span>
-        <span class="missing-count">${r.students.length} not submitted</span>
+        <span class="missing-count">${r.totalMissing} of ${r.totalStudents} not submitted</span>
       </div>
-      <ul class="search-student-list">
-        ${r.students.map(s => `
-          <li>
-            <span>${escHtml(s.name)}</span>
-            <span class="period-tag">${escHtml(s.period)}</span>
-          </li>
-        `).join('')}
-      </ul>
+      ${r.periods.map((pg, pi) => {
+        const submitted = pg.total - pg.missing.length;
+        const rate = pg.total > 0 ? Math.round((submitted / pg.total) * 100) : 100;
+        const uid = `sr-${ri}-${pi}`;
+        return `
+          <div class="search-period-group">
+            <div class="search-period-header">
+              <span class="search-period-label">${escHtml(pg.period)}</span>
+              <div class="turn-in-bar-wrap" title="${rate}% submitted">
+                <div class="turn-in-bar-fill" style="width:${rate}%"></div>
+              </div>
+              <span class="turn-in-rate">${submitted}/${pg.total} submitted (${rate}%)</span>
+              ${pg.submitted.length > 0 ? `<button class="show-submitted-btn" id="btn-${uid}" onclick="toggleSubmitted('${uid}')">+${pg.submitted.length} submitted</button>` : ''}
+            </div>
+            ${pg.missing.length > 0 ? `
+              <ul class="search-missing-list">
+                ${pg.missing.map(s => {
+                  const desk = findStation(s.sortable_name, s.period);
+                  return `<li>
+                    <span class="student-name">${escHtml(s.sortable_name)}</span>
+                    ${desk ? `<span class="station-badge" style="font-size:0.72rem;min-width:auto">Desk&nbsp;${desk}</span>` : ''}
+                  </li>`;
+                }).join('')}
+              </ul>
+            ` : `<div style="padding:0.2rem 0;font-size:0.82rem;color:#50c864;">All submitted ✓</div>`}
+            ${pg.submitted.length > 0 ? `
+              <ul class="search-submitted-list" id="${uid}">
+                ${pg.submitted.map(s => `<li>
+                  <span style="color:#50c864;font-size:0.72rem;">✓</span>
+                  <span>${escHtml(s.sortable_name)}</span>
+                </li>`).join('')}
+              </ul>` : ''}
+          </div>`;
+      }).join('')}
     </div>
   `).join('');
+}
+
+function toggleSubmitted(uid) {
+  const el = document.getElementById(uid);
+  const btn = document.getElementById('btn-' + uid);
+  if (!el || !btn) return;
+  el.classList.toggle('open');
+  const count = el.querySelectorAll('li').length;
+  btn.textContent = el.classList.contains('open') ? `− ${count} submitted` : `+${count} submitted`;
+}
+
+// ── Student ID Toggle ──
+function toggleStudentIds() {
+  const hidden = document.body.classList.toggle('hide-ids');
+  localStorage.setItem('hideStudentIds', hidden ? '1' : '0');
+  document.getElementById('toggle-ids-btn').textContent = hidden ? '👁 Show IDs' : '👁 Hide IDs';
+}
+
+function initIdToggle() {
+  if (localStorage.getItem('hideStudentIds') === '1') {
+    document.body.classList.add('hide-ids');
+    const btn = document.getElementById('toggle-ids-btn');
+    if (btn) btn.textContent = '👁 Show IDs';
+  }
 }
 
 // ── Sorting ──

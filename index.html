@@ -1059,12 +1059,13 @@
     .print-header h1 { font-size: 14pt !important; margin-bottom: 1pt !important; }
     .print-header p { font-size: 8pt !important; color: #666 !important; }
 
-    /* Allow content to flow — NO forced page breaks */
-    .course-section, .period-group, .student-row { page-break-inside: auto !important; }
-    /* Only break before a new course if needed */
+    /* Never split a student row across pages */
+    .student-row { break-inside: avoid !important; page-break-inside: avoid !important; }
+    /* Period groups and course sections can break between rows, not within */
+    .course-section, .period-group { break-inside: auto !important; page-break-inside: auto !important; }
     .course-section { page-break-before: auto !important; }
-    /* Try to keep student + their assignments together */
-    .student-row { break-inside: avoid !important; }
+    /* Keep student-list from clipping overflow */
+    .student-list { overflow: visible !important; }
   }
 
   .print-header { display: none; }
@@ -2229,7 +2230,7 @@ function sortStudents(students) {
 function printPeriod(courseName, periodName) {
   const now = new Date();
   document.getElementById('print-date').textContent =
-    `${courseName} — ${periodName} | Printed ${now.toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric' })} | Students with 3+ missing`;
+    `${courseName} — ${periodName} | Printed ${now.toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric' })} | All students with missing assignments`;
 
   const container = document.getElementById('courses-container');
   const originalHTML = container.innerHTML;
@@ -2238,8 +2239,8 @@ function printPeriod(courseName, periodName) {
   const cd = dashboardData.find(c => c.course.name === courseName);
   if (!cd) return;
 
-  const filtered = cd.students.filter(s => s.period === periodName && s.missing.length >= 3);
-  if (filtered.length === 0) { alert('No students with 3+ missing in this period.'); return; }
+  const filtered = cd.students.filter(s => s.period === periodName && s.missing.length >= 1);
+  if (filtered.length === 0) { alert('No students with missing assignments in this period.'); return; }
 
   const students = sortStudents(filtered);
   container.innerHTML = `
@@ -2264,7 +2265,7 @@ function printReport() {
   // Set print date
   const now = new Date();
   document.getElementById('print-date').textContent =
-    `Printed ${now.toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric', year: 'numeric' })} at ${now.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' })} — Students with 3+ missing assignments`;
+    `Printed ${now.toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric', year: 'numeric' })} at ${now.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' })} — All students with missing assignments`;
 
   // Temporarily re-render with only 3+ missing, all expanded
   const container = document.getElementById('courses-container');
@@ -2277,7 +2278,7 @@ function printReport() {
   });
 
   container.innerHTML = printSortedData.map(cd => {
-    const filtered = cd.students.filter(s => s.missing.length >= 3);
+    const filtered = cd.students.filter(s => s.missing.length >= 1);
     if (filtered.length === 0) return '';
 
     const periods = {};

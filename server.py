@@ -332,10 +332,16 @@ Return only the comment text, no JSON."""
                 if not is_json:
                     return text
 
-                # Strip markdown code fences if Gemini added them
-                if text.startswith('```'):
-                    text = text.split('\n', 1)[1] if '\n' in text else text[3:]
-                    text = text.rsplit('```', 1)[0]
+                # Extract JSON robustly -- find first { to last }
+                import re
+                # Strip markdown fences
+                text = re.sub(r'^```[a-z]*\n?', '', text, flags=re.MULTILINE)
+                text = re.sub(r'\n?```$', '', text, flags=re.MULTILINE)
+                # Find the outermost JSON object
+                start = text.find('{')
+                end   = text.rfind('}')
+                if start != -1 and end != -1:
+                    text = text[start:end+1]
                 text = text.strip()
 
                 parsed = json.loads(text)

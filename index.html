@@ -997,8 +997,8 @@
         <button class="sort-btn" data-sort="most" onclick="changeSort('most')">Most Missing</button>
         <button class="sort-btn" data-sort="pts" onclick="changeSort('pts')">Most Points</button>
         <button class="sort-btn" data-sort="desk" onclick="changeSort('desk')">By Desk</button>
-        <button class="sort-btn btn-toggle-ids" id="toggle-ids-btn" onclick="toggleStudentIds()">&#128065; Hide IDs</button>
-        <button class="print-btn" onclick="printReport()">&#128424; Print Report</button>
+        <button class="sort-btn btn-toggle-ids" id="toggle-ids-btn" onclick="toggleStudentIds()">Hide IDs</button>
+        <button class="print-btn" onclick="printReport()"><svg xmlns="http://www.w3.org/2000/svg" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:-1px;margin-right:4px"><polyline points="6 9 6 2 18 2 18 9"/><path d="M6 18H4a2 2 0 0 1-2-2v-5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2h-2"/><rect x="6" y="14" width="12" height="8"/></svg>Print Report</button>
       </div>
       <div id="courses-container"></div>
     </div>
@@ -1574,7 +1574,7 @@ function renderCourses() {
         <div class="period-group">
           <div class="period-label">
             <span>${escHtml(p)} &middot; ${periodMissingCount} of ${periodTotal} have missing work</span>
-            <button class="period-print-btn" onclick="event.stopPropagation(); printPeriod('${cname}', '${pname}')" title="Print this period">&#128424;</button>
+            <button class="period-print-btn" onclick="event.stopPropagation(); printPeriod('${cname}', '${pname}')" title="Print this period"><svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:-1px"><polyline points="6 9 6 2 18 2 18 9"/><path d="M6 18H4a2 2 0 0 1-2-2v-5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2h-2"/><rect x="6" y="14" width="12" height="8"/></svg></button>
           </div>
           <div class="student-list">
             ${missingStudents.map((s, i) => renderStudentRow(s, i + 1)).join('')}
@@ -1746,14 +1746,14 @@ function toggleSubmitted(uid) {
 function toggleStudentIds() {
   const hidden = document.body.classList.toggle('hide-ids');
   localStorage.setItem('hideStudentIds', hidden ? '1' : '0');
-  document.getElementById('toggle-ids-btn').textContent = hidden ? '👁 Show IDs' : '👁 Hide IDs';
+  document.getElementById('toggle-ids-btn').textContent = hidden ? 'Show IDs' : 'Hide IDs';
 }
 
 function initIdToggle() {
   if (localStorage.getItem('hideStudentIds') === '1') {
     document.body.classList.add('hide-ids');
     const btn = document.getElementById('toggle-ids-btn');
-    if (btn) btn.textContent = '👁 Show IDs';
+    if (btn) btn.textContent = 'Show IDs';
   }
 }
 

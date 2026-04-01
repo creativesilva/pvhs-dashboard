@@ -23,7 +23,7 @@ GEMINI_KEY  = os.environ.get('GEMINI_API_KEY', '')
 COURSE_ID   = '111811'
 SERVE_DIR   = os.path.dirname(os.path.abspath(__file__))
 
-GEMINI_MODEL = 'gemini-2.0-flash-lite'
+GEMINI_MODEL = 'gemini-2.0-flash'
 
 def gemini_url():
     return (

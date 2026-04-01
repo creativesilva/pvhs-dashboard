@@ -22,10 +22,12 @@ GEMINI_KEY  = os.environ.get('GEMINI_API_KEY', '')
 COURSE_ID   = '111811'
 SERVE_DIR   = os.path.dirname(os.path.abspath(__file__))
 
-GEMINI_MODEL = 'gemini-1.5-flash'
-GEMINI_URL   = (
-    'https://generativelanguage.googleapis.com/v1beta/models/'
-    + GEMINI_MODEL + ':generateContent?key=' + GEMINI_KEY
+GEMINI_MODEL = 'gemini-1.5-flash-latest'
+
+def gemini_url():
+    return (
+        'https://generativelanguage.googleapis.com/v1/models/'
+        + GEMINI_MODEL + ':generateContent?key=' + GEMINI_KEY
 )
 
 # Teacher voice -- English
@@ -297,7 +299,7 @@ Return only the comment text, no JSON."""
         try:
             req_body = json.dumps(payload).encode('utf-8')
             req = urllib.request.Request(
-                GEMINI_URL,
+                gemini_url(),
                 data=req_body,
                 headers={'Content-Type': 'application/json'},
                 method='POST'

@@ -22,9 +22,10 @@ GEMINI_KEY  = os.environ.get('GEMINI_API_KEY', '')
 COURSE_ID   = '111811'
 SERVE_DIR   = os.path.dirname(os.path.abspath(__file__))
 
-GEMINI_URL  = (
+GEMINI_MODEL = 'gemini-1.5-flash'
+GEMINI_URL   = (
     'https://generativelanguage.googleapis.com/v1beta/models/'
-    'gemini-2.0-flash:generateContent?key=' + GEMINI_KEY
+    + GEMINI_MODEL + ':generateContent?key=' + GEMINI_KEY
 )
 
 # Teacher voice -- English
@@ -98,6 +99,7 @@ class Handler(BaseHTTPRequestHandler):
     # ── Grade Endpoint ────────────────────────────────────────────────────────
 
     def handle_grade(self):
+        self._last_gemini_error = None
         try:
             length = int(self.headers.get('Content-Length', 0))
             body   = self.rfile.read(length)
@@ -156,7 +158,8 @@ class Handler(BaseHTTPRequestHandler):
                 )
 
             if result is None:
-                self.json_error(500, 'Gemini grading failed -- check server logs')
+                err = getattr(self, '_last_gemini_error', 'Gemini grading failed')
+                self.json_error(500, err)
                 return
 
             # 3. Post back to Canvas
@@ -324,10 +327,12 @@ Return only the comment text, no JSON."""
         except urllib.error.HTTPError as e:
             body = e.read().decode('utf-8', errors='replace')
             print(f'[gemini] HTTP {e.code}: {body}')
+            self._last_gemini_error = f'Gemini HTTP {e.code}: {body[:200]}'
             return None
         except Exception as e:
             print(f'[gemini] Error: {e}')
             import traceback; traceback.print_exc()
+            self._last_gemini_error = str(e)
             return None
 
     # ── Canvas: Post Grade + Rubric + Comment ─────────────────────────────────

@@ -1,7 +1,8 @@
 #!/usr/bin/env python3
 """
-PVHS Canvas Missing Assignments Dashboard — proxy server.
+PVHS Canvas Missing Assignments Dashboard -- proxy server.
 Serves the dashboard HTML and proxies Canvas API requests to avoid CORS.
+Includes POST /grade endpoint for AI-assisted rubric grading via Gemini.
 """
 
 from http.server import HTTPServer, BaseHTTPRequestHandler
@@ -11,13 +12,65 @@ import ssl
 import json
 import os
 import mimetypes
+import base64
+import urllib.request
+import urllib.error
 
-PORT = int(os.environ.get('PORT', 8080))
+PORT        = int(os.environ.get('PORT', 8080))
 CANVAS_HOST = 'smjuhsd.instructure.com'
-SERVE_DIR = os.path.dirname(os.path.abspath(__file__))
+GEMINI_KEY  = os.environ.get('GEMINI_API_KEY', '')
+COURSE_ID   = '111811'
+SERVE_DIR   = os.path.dirname(os.path.abspath(__file__))
+
+GEMINI_URL  = (
+    'https://generativelanguage.googleapis.com/v1beta/models/'
+    'gemini-2.0-flash:generateContent?key=' + GEMINI_KEY
+)
+
+# Teacher voice -- English
+VOICE_EN = (
+    "You are writing grading feedback on behalf of Mr. Silva, "
+    "an experienced professional photographer and educator at Pioneer Valley High School. "
+    "Write in his voice: firm, motivational, and friendly. He is passionate about the art of photography. "
+    "Use direct, clear language at a 5th grade reading level. "
+    "Be specific about what you see in the student's submitted images. "
+    "Praise what works. Explain what needs improvement and why it matters as a photographer. "
+    "Sound like a real teacher wrote this, not a form letter. Vary your sentence structure. "
+    "Never use em dashes under any circumstances."
+)
+
+# Teacher voice -- Spanish (full Spanish for flagged students)
+VOICE_ES = (
+    "Eres el asistente de calificacion del senor Silva, "
+    "un fotografo y educador profesional con mucha experiencia en Pioneer Valley High School. "
+    "Escribe todo el comentario en espanol usando el tuteo. "
+    "Su tono es firme, motivador y amigable. Es apasionado por el arte de la fotografia. "
+    "Usa lenguaje directo y claro, facil de entender para un estudiante de preparatoria. "
+    "Se especifico sobre lo que ves en las imagenes enviadas por el estudiante. "
+    "Felicita lo que funciona bien. Explica lo que necesita mejorar y por que importa como fotografo. "
+    "Escribe como un maestro real, no como una carta generica. Varia la estructura de las oraciones. "
+    "Nunca uses guiones largos bajo ninguna circunstancia."
+)
+
+
+def build_criteria_block(criteria):
+    """Convert rubric criteria list to a readable text block for the prompt."""
+    lines = []
+    for c in criteria:
+        lines.append(f'Criterion ID: {c["id"]}')
+        lines.append(f'  Name: {c["description"]}')
+        lines.append(f'  Max Points: {c["points"]}')
+        lines.append('  Ratings:')
+        for r in c.get('ratings', []):
+            desc = r.get('long_description') or r.get('description', '')
+            lines.append(f'    {r["description"]} ({r["points"]} pts): {desc}')
+        lines.append('')
+    return '\n'.join(lines)
 
 
 class Handler(BaseHTTPRequestHandler):
+
+    # ── Routing ──────────────────────────────────────────────────────────────
 
     def do_GET(self):
         if self.path.startswith('/api/'):
@@ -28,13 +81,341 @@ class Handler(BaseHTTPRequestHandler):
         else:
             self.serve_file()
 
+    def do_POST(self):
+        if self.path == '/grade':
+            self.handle_grade()
+        else:
+            self.send_error(404)
+
     def do_OPTIONS(self):
         self.send_response(204)
         self.send_header('Access-Control-Allow-Origin', '*')
-        self.send_header('Access-Control-Allow-Methods', 'GET, OPTIONS')
+        self.send_header('Access-Control-Allow-Methods', 'GET, POST, OPTIONS')
         self.send_header('Access-Control-Allow-Headers', 'Authorization, Content-Type')
         self.send_header('Access-Control-Max-Age', '86400')
         self.end_headers()
+
+    # ── Grade Endpoint ────────────────────────────────────────────────────────
+
+    def handle_grade(self):
+        try:
+            length = int(self.headers.get('Content-Length', 0))
+            body   = self.rfile.read(length)
+            data   = json.loads(body)
+
+            assignment_id = str(data.get('assignment_id', ''))
+            student_id    = str(data.get('student_id', ''))
+            student_name  = data.get('student_name', 'Student')
+            rubric_id     = str(data.get('rubric_id', ''))
+            spanish       = bool(data.get('spanish', False))
+            auth          = self.headers.get('Authorization', '')
+
+            if not all([assignment_id, student_id, rubric_id, auth]):
+                self.json_error(400, 'Missing required fields')
+                return
+
+            if not GEMINI_KEY:
+                self.json_error(503, 'Gemini API key not configured')
+                return
+
+            # 1. Fetch rubric
+            rubric = self.canvas_get(
+                f'/courses/{COURSE_ID}/rubrics/{rubric_id}', auth
+            )
+            if not isinstance(rubric, dict) or 'criteria' not in rubric:
+                self.json_error(500, 'Could not fetch rubric criteria')
+                return
+            criteria = rubric['criteria']
+
+            # 2. Fetch submission
+            submission = self.canvas_get(
+                f'/courses/{COURSE_ID}/assignments/{assignment_id}'
+                f'/submissions/{student_id}?include[]=submission_comments',
+                auth
+            )
+
+            attachments    = submission.get('attachments', []) or []
+            workflow_state = submission.get('workflow_state', 'unsubmitted')
+            is_missing     = (workflow_state == 'unsubmitted') or not attachments
+
+            if is_missing:
+                result = self.generate_missing_comment(
+                    student_name, student_id, submission, spanish
+                )
+            else:
+                images = self.fetch_images(attachments, auth)
+                if not images:
+                    self.json_error(500, 'Could not download submission images')
+                    return
+                result = self.grade_submission(
+                    student_name, images, criteria, spanish
+                )
+
+            if result is None:
+                self.json_error(500, 'Gemini grading failed -- check server logs')
+                return
+
+            # 3. Post back to Canvas
+            self.post_to_canvas(assignment_id, student_id, result, criteria, auth)
+
+            self.json_response(200, {
+                'success': True,
+                'missing': is_missing,
+                'overall_comment': result.get('overall_comment', ''),
+                'total_score': result.get('total_score', 0)
+            })
+
+        except Exception as e:
+            print(f'[grade] Unhandled error: {e}')
+            import traceback; traceback.print_exc()
+            self.json_error(500, str(e))
+
+    # ── Gemini: Grade Submitted Work ─────────────────────────────────────────
+
+    def grade_submission(self, student_name, images, criteria, spanish):
+        voice         = VOICE_ES if spanish else VOICE_EN
+        criteria_text = build_criteria_block(criteria)
+        lang_note     = (
+            'Respond ENTIRELY in Spanish using tú. No English at all.'
+            if spanish else
+            'Respond in English.'
+        )
+
+        # Build criterion ID list so Gemini uses exact IDs
+        crit_ids = [c['id'] for c in criteria]
+        crit_ids_json = json.dumps(crit_ids)
+
+        prompt = f"""{voice}
+
+STUDENT NAME: {student_name}
+ASSIGNMENT: 18 - Editing & Final Contact Sheet
+
+WHAT THE STUDENT SUBMITTED:
+Two 6-up contact sheet JPG pages exported from Lightroom at 300 ppi.
+Photos 1 through 6 = Composition focus.
+Photos 7 through 12 = Camera Control focus.
+Each photo should have camera settings (ISO, shutter, aperture) labeled underneath.
+
+RUBRIC CRITERIA (use these EXACT criterion IDs in your response):
+{criteria_text}
+
+CRITERION IDs TO USE: {crit_ids_json}
+
+{lang_note}
+
+Look carefully at both contact sheet pages. Score each criterion based on what you actually see.
+Write 2 to 3 sentences of specific feedback per criterion referencing what is visible in the work.
+Write a 3 to 5 sentence overall comment to the student.
+
+Return ONLY valid JSON in this exact structure, nothing else:
+{{
+  "scores": {{
+    "{crit_ids[0] if crit_ids else 'c1'}": {{"points": 0, "comment": "..."}},
+    "{crit_ids[1] if len(crit_ids) > 1 else 'c2'}": {{"points": 0, "comment": "..."}},
+    "{crit_ids[2] if len(crit_ids) > 2 else 'c3'}": {{"points": 0, "comment": "..."}},
+    "{crit_ids[3] if len(crit_ids) > 3 else 'c4'}": {{"points": 0, "comment": "..."}}
+  }},
+  "overall_comment": "..."
+}}"""
+
+        parts = [{"text": prompt}]
+        for img in images:
+            parts.append({
+                "inline_data": {
+                    "mime_type": img['mime'],
+                    "data": img['b64']
+                }
+            })
+
+        return self.call_gemini(parts, temperature=0.7, is_json=True)
+
+    # ── Gemini: Missing / No Submission ──────────────────────────────────────
+
+    def generate_missing_comment(self, student_name, student_id, submission, spanish):
+        voice     = VOICE_ES if spanish else VOICE_EN
+        lang_note = (
+            'Write ENTIRELY in Spanish using tú. No English at all.'
+            if spanish else
+            'Write in English.'
+        )
+
+        prompt = f"""{voice}
+
+STUDENT NAME: {student_name}
+ASSIGNMENT: 18 - Editing & Final Contact Sheet
+STATUS: This student has not submitted this assignment.
+DUE DATE: February 25 at 10 PM. This assignment is now past due.
+
+LATE POINT POLICY for Timeliness of Submission criterion (out of 8 pts):
+On Time: 8 pts
+One Day Late: 6 pts
+A Few Days Late (2 to 3 days): 4 pts
+Several Days Late (4 to 7 days): 2 pts
+Several Weeks Late or Not Submitted: 1 pt
+
+{lang_note}
+
+Write a comment directly to the student. The comment should:
+1. Acknowledge the assignment is missing
+2. Tell them they can still earn partial credit if they submit now
+3. Mention specifically what they can still earn on the timeliness score if they turn it in soon
+4. Encourage them to complete and submit the work because their photography matters
+5. Be firm but supportive, not scolding
+
+Keep it to 4 sentences. Make it feel personal and specific to this assignment, not a copied template.
+Return only the comment text, no JSON."""
+
+        parts = [{"text": prompt}]
+        result_text = self.call_gemini(parts, temperature=0.9, is_json=False)
+        if result_text is None:
+            return None
+        return {
+            'missing': True,
+            'overall_comment': result_text,
+            'scores': {},
+            'total_score': 0
+        }
+
+    # ── Gemini HTTP Call ─────────────────────────────────────────────────────
+
+    def call_gemini(self, parts, temperature=0.7, is_json=False):
+        payload = {
+            "contents": [{"parts": parts}],
+            "generationConfig": {
+                "temperature": temperature,
+                "maxOutputTokens": 2048
+            }
+        }
+
+        try:
+            req_body = json.dumps(payload).encode('utf-8')
+            req = urllib.request.Request(
+                GEMINI_URL,
+                data=req_body,
+                headers={'Content-Type': 'application/json'},
+                method='POST'
+            )
+            with urllib.request.urlopen(req, timeout=90) as r:
+                response = json.loads(r.read())
+
+            text = response['candidates'][0]['content']['parts'][0]['text'].strip()
+
+            if not is_json:
+                return text
+
+            # Strip markdown code fences if Gemini added them
+            if text.startswith('```'):
+                text = text.split('\n', 1)[1] if '\n' in text else text[3:]
+                text = text.rsplit('```', 1)[0]
+
+            parsed = json.loads(text)
+            # Calculate total score
+            total = sum(
+                v.get('points', 0)
+                for v in parsed.get('scores', {}).values()
+            )
+            parsed['total_score'] = total
+            return parsed
+
+        except urllib.error.HTTPError as e:
+            body = e.read().decode('utf-8', errors='replace')
+            print(f'[gemini] HTTP {e.code}: {body}')
+            return None
+        except Exception as e:
+            print(f'[gemini] Error: {e}')
+            import traceback; traceback.print_exc()
+            return None
+
+    # ── Canvas: Post Grade + Rubric + Comment ─────────────────────────────────
+
+    def post_to_canvas(self, assignment_id, student_id, result, criteria, auth):
+        if result.get('missing'):
+            payload = {
+                'comment': {'text_comment': result['overall_comment']}
+            }
+        else:
+            rubric_assessment = {}
+            for c in criteria:
+                cid        = c['id']
+                score_data = result.get('scores', {}).get(cid, {})
+                points     = score_data.get('points', 0)
+                comment    = score_data.get('comment', '')
+                rubric_assessment[cid] = {'points': points, 'comments': comment}
+
+            payload = {
+                'submission': {
+                    'posted_grade': str(result.get('total_score', 0))
+                },
+                'rubric_assessment': rubric_assessment,
+                'comment': {'text_comment': result.get('overall_comment', '')}
+            }
+
+        ctx     = ssl.create_default_context()
+        conn    = http.client.HTTPSConnection(CANVAS_HOST, context=ctx)
+        headers = {
+            'Authorization':  auth,
+            'Content-Type':   'application/json',
+            'User-Agent':     'PVHS-Dashboard/1.0'
+        }
+        path    = (
+            f'/api/v1/courses/{COURSE_ID}/assignments/{assignment_id}'
+            f'/submissions/{student_id}'
+        )
+        body    = json.dumps(payload).encode('utf-8')
+        try:
+            conn.request('PUT', path, body=body, headers=headers)
+            resp = conn.getresponse()
+            raw  = resp.read()
+            print(f'[canvas] PUT submission {student_id} -> {resp.status}')
+            return json.loads(raw)
+        except Exception as e:
+            print(f'[canvas] POST error: {e}')
+            return None
+        finally:
+            conn.close()
+
+    # ── Canvas: Authenticated Image Fetch ────────────────────────────────────
+
+    def fetch_images(self, attachments, auth):
+        images = []
+        for att in attachments:
+            url = att.get('url', '')
+            if not url:
+                continue
+            mime = att.get('content-type') or att.get('mime_class') or 'image/jpeg'
+            if not mime.startswith('image/'):
+                mime = 'image/jpeg'
+            try:
+                req = urllib.request.Request(
+                    url, headers={'Authorization': auth, 'User-Agent': 'PVHS-Dashboard/1.0'}
+                )
+                with urllib.request.urlopen(req, timeout=30) as r:
+                    raw = r.read()
+                b64 = base64.b64encode(raw).decode('utf-8')
+                images.append({'b64': b64, 'mime': mime})
+                print(f'[grade] Fetched image {att.get("display_name", "?")} ({len(raw)} bytes)')
+            except Exception as e:
+                print(f'[grade] Image fetch failed for {url}: {e}')
+        return images
+
+    # ── Canvas: Generic GET ───────────────────────────────────────────────────
+
+    def canvas_get(self, path, auth):
+        ctx  = ssl.create_default_context()
+        conn = http.client.HTTPSConnection(CANVAS_HOST, context=ctx)
+        headers = {'Authorization': auth, 'User-Agent': 'PVHS-Dashboard/1.0'}
+        if '?' not in path:
+            path += '?per_page=100'
+        else:
+            path += '&per_page=100'
+        try:
+            conn.request('GET', f'/api/v1{path}', headers=headers)
+            resp = conn.getresponse()
+            return json.loads(resp.read())
+        finally:
+            conn.close()
+
+    # ── File Server ───────────────────────────────────────────────────────────
 
     def serve_file(self):
         path = urlparse(self.path).path.lstrip('/')
@@ -56,9 +437,11 @@ class Handler(BaseHTTPRequestHandler):
         self.end_headers()
         self.wfile.write(body)
 
+    # ── Canvas Proxy (GET /api/*) ─────────────────────────────────────────────
+
     def proxy_to_canvas(self):
         auth = self.headers.get('Authorization', '')
-        ctx = ssl.create_default_context()
+        ctx  = ssl.create_default_context()
         conn = http.client.HTTPSConnection(CANVAS_HOST, context=ctx)
         headers = {'User-Agent': 'PVHS-Dashboard/1.0'}
         if auth:
@@ -93,13 +476,29 @@ class Handler(BaseHTTPRequestHandler):
         finally:
             conn.close()
 
+    # ── Helpers ───────────────────────────────────────────────────────────────
+
+    def json_response(self, status, data):
+        body = json.dumps(data).encode('utf-8')
+        self.send_response(status)
+        self.send_header('Content-Type', 'application/json')
+        self.send_header('Access-Control-Allow-Origin', '*')
+        self.send_header('Content-Length', len(body))
+        self.end_headers()
+        self.wfile.write(body)
+
+    def json_error(self, status, message):
+        self.json_response(status, {'error': message})
+
     def log_message(self, format, *args):
         msg = format % args
-        if '/api/' in msg:
-            print(f"  [proxy] {msg}")
+        if any(x in msg for x in ('/api/', '/grade', 'gemini', 'canvas')):
+            print(f'  [server] {msg}')
 
 
 if __name__ == '__main__':
-    print(f"PVHS Dashboard Server running on port {PORT}")
+    print(f'PVHS Dashboard Server running on port {PORT}')
+    if not GEMINI_KEY:
+        print('  WARNING: GEMINI_API_KEY not set -- grading will not work')
     server = HTTPServer(('0.0.0.0', PORT), Handler)
     server.serve_forever()

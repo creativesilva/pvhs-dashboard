@@ -551,6 +551,174 @@
     letter-spacing: 0.02em;
   }
 
+  /* ── Grading Tab ── */
+  .grading-header {
+    margin-bottom: 1.5rem;
+  }
+
+  .grading-controls {
+    display: flex;
+    align-items: center;
+    gap: 1rem;
+    flex-wrap: wrap;
+  }
+
+  .grading-select-row {
+    display: flex;
+    align-items: center;
+    gap: 0.6rem;
+  }
+
+  .grading-label {
+    font-size: 0.82rem;
+    color: var(--text-muted);
+    white-space: nowrap;
+  }
+
+  #grade-assignment-select {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    color: var(--text);
+    font-size: 0.85rem;
+    padding: 0.4rem 0.75rem;
+    cursor: pointer;
+    min-width: 280px;
+  }
+
+  #grade-assignment-select:focus { outline: none; border-color: var(--teal); }
+
+  .grade-all-btn {
+    padding: 0.4rem 1rem;
+    border-radius: 20px;
+    border: 1px solid var(--teal);
+    background: rgba(64, 222, 222, 0.08);
+    color: var(--teal-light);
+    font-size: 0.82rem;
+    font-weight: 600;
+    cursor: pointer;
+    transition: all 0.2s;
+    white-space: nowrap;
+  }
+
+  .grade-all-btn:hover { background: rgba(64, 222, 222, 0.18); }
+  .grade-all-btn:disabled { opacity: 0.4; cursor: not-allowed; }
+
+  .grading-queue {
+    margin-bottom: 2rem;
+  }
+
+  .grade-queue-card {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    margin-bottom: 0.6rem;
+    padding: 0.75rem 1rem;
+    display: flex;
+    align-items: center;
+    gap: 0.75rem;
+    flex-wrap: wrap;
+  }
+
+  .grade-queue-card.is-missing {
+    border-color: rgba(255, 100, 100, 0.25);
+    background: rgba(255, 100, 100, 0.04);
+  }
+
+  .grade-queue-card.is-graded {
+    border-color: rgba(50, 205, 100, 0.2);
+    background: rgba(50, 205, 100, 0.04);
+    opacity: 0.7;
+  }
+
+  .grade-queue-name {
+    font-size: 0.9rem;
+    font-weight: 600;
+    color: var(--text-bright);
+    flex: 1;
+    min-width: 160px;
+  }
+
+  .grade-queue-period {
+    font-size: 0.75rem;
+    color: var(--teal-light);
+    white-space: nowrap;
+  }
+
+  .grade-queue-status {
+    font-size: 0.75rem;
+    padding: 0.12rem 0.5rem;
+    border-radius: 999px;
+    white-space: nowrap;
+    font-weight: 600;
+  }
+
+  .grade-queue-status.submitted { background: rgba(64,222,222,0.1); color: var(--teal-light); }
+  .grade-queue-status.missing   { background: rgba(255,100,100,0.1); color: #ff7070; }
+  .grade-queue-status.graded    { background: rgba(50,205,100,0.1);  color: #50c864; }
+  .grade-queue-status.spanish   { background: rgba(255,200,60,0.1);  color: #f0c040; font-size: 0.68rem; }
+
+  .grade-btn {
+    padding: 0.3rem 0.85rem;
+    border-radius: 20px;
+    border: 1px solid var(--border);
+    background: none;
+    color: var(--text-muted);
+    font-size: 0.78rem;
+    font-weight: 600;
+    cursor: pointer;
+    transition: all 0.2s;
+    white-space: nowrap;
+  }
+
+  .grade-btn:hover  { border-color: var(--teal); color: var(--teal-light); }
+  .grade-btn.grading { border-color: var(--teal); color: var(--teal-light); opacity: 0.6; cursor: not-allowed; }
+  .grade-btn.done    { border-color: #50c864; color: #50c864; }
+
+  .grade-result-preview {
+    width: 100%;
+    font-size: 0.8rem;
+    color: var(--text-muted);
+    margin-top: 0.4rem;
+    padding: 0.5rem 0.75rem;
+    background: rgba(255,255,255,0.03);
+    border-radius: 6px;
+    border-left: 2px solid var(--teal);
+    line-height: 1.5;
+    display: none;
+  }
+
+  .grade-result-preview.visible { display: block; }
+
+  .recently-graded-header {
+    font-size: 0.85rem;
+    font-weight: 700;
+    color: var(--text-muted);
+    text-transform: uppercase;
+    letter-spacing: 0.06em;
+    margin-bottom: 0.75rem;
+    padding-bottom: 0.5rem;
+    border-bottom: 1px solid var(--border);
+  }
+
+  .recently-graded-row {
+    display: flex;
+    align-items: center;
+    gap: 0.75rem;
+    padding: 0.55rem 0;
+    border-bottom: 1px solid rgba(255,255,255,0.04);
+    font-size: 0.85rem;
+    flex-wrap: wrap;
+  }
+
+  .recently-graded-row:last-child { border-bottom: none; }
+
+  .rg-name  { flex: 1; font-weight: 600; color: var(--text-bright); min-width: 140px; }
+  .rg-score { font-weight: 700; color: var(--teal-light); white-space: nowrap; }
+  .rg-time  { font-size: 0.72rem; color: var(--text-muted); white-space: nowrap; }
+  .rg-link  { font-size: 0.72rem; color: var(--teal-light); text-decoration: none; white-space: nowrap; }
+  .rg-link:hover { text-decoration: underline; }
+
   /* ── Hide IDs toggle ── */
   body.hide-ids .student-id { display: none !important; }
 
@@ -977,6 +1145,7 @@
   <div class="tab-bar">
     <button class="tab-btn active" data-tab="overview" onclick="switchTab('overview')">Overview</button>
     <button class="tab-btn" data-tab="search" onclick="switchTab('search')">Search Assignment</button>
+    <button class="tab-btn" data-tab="grading" onclick="switchTab('grading')">Grading</button>
   </div>
 
   <!-- Main Content -->
@@ -1001,6 +1170,29 @@
         <button class="print-btn" onclick="printReport()"><svg xmlns="http://www.w3.org/2000/svg" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:-1px;margin-right:4px"><polyline points="6 9 6 2 18 2 18 9"/><path d="M6 18H4a2 2 0 0 1-2-2v-5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2h-2"/><rect x="6" y="14" width="12" height="8"/></svg>Print Report</button>
       </div>
       <div id="courses-container"></div>
+    </div>
+
+    <!-- Grading Tab -->
+    <div id="tab-grading" class="tab-content">
+      <div class="grading-header">
+        <div class="grading-controls">
+          <div class="grading-select-row">
+            <label class="grading-label">Assignment</label>
+            <select id="grade-assignment-select" onchange="loadGradingQueue()">
+              <option value="">-- Select an assignment --</option>
+              <option value="948145|19347">18 - Editing &amp; Final Contact Sheet</option>
+            </select>
+          </div>
+          <button class="grade-all-btn" onclick="gradeAllUngraded()">Grade All Ungraded</button>
+        </div>
+      </div>
+      <div id="grading-queue" class="grading-queue">
+        <div class="empty-state">Select an assignment above to load the grading queue.</div>
+      </div>
+      <div id="recently-graded-section" style="display:none">
+        <div class="recently-graded-header">Recently Graded</div>
+        <div id="recently-graded-list"></div>
+      </div>
     </div>
 
     <!-- Search Tab -->
@@ -1621,6 +1813,255 @@ function renderStudentRow(s, index) {
       </div>
     </div>
   `;
+}
+
+// ── Grading ──
+
+// Spanish speaker flags -- stored in localStorage
+// Format: { "student_canvas_id": true }
+const SPANISH_SPEAKERS = {
+  '39523': true,  // Yovani Antonio-Antonio (Period 5) -- for testing
+  '44030': true,  // Anahi Melgar Galindo (Period 6)
+  '35791': true   // Gregorio Calleja (Period 7)
+};
+
+// Known rubric IDs per assignment
+const RUBRIC_MAP = {
+  '948145': '19347'  // 18 - Editing & Final Contact Sheet
+};
+
+let gradingQueue = []; // current queue loaded
+let recentlyGraded = []; // graded this session
+
+async function loadGradingQueue() {
+  const select = document.getElementById('grade-assignment-select');
+  const val = select.value;
+  const container = document.getElementById('grading-queue');
+  const recentSection = document.getElementById('recently-graded-section');
+
+  if (!val) {
+    container.innerHTML = '<div class="empty-state">Select an assignment above to load the grading queue.</div>';
+    recentSection.style.display = 'none';
+    return;
+  }
+
+  const [assignmentId] = val.split('|');
+  container.innerHTML = '<div class="empty-state">Loading submissions...</div>';
+
+  try {
+    const submissions = await canvasFetch(
+      `/courses/111811/assignments/${assignmentId}/submissions?include[]=user&include[]=submission_comments`
+    );
+
+    // Match with enrolled students to get period info
+    const studentLookup = {};
+    dashboardData.forEach(cd => {
+      cd.students.forEach(s => {
+        studentLookup[s.id] = s;
+      });
+    });
+
+    gradingQueue = submissions
+      .filter(sub => sub.user && sub.workflow_state !== 'deleted')
+      .map(sub => {
+        const student = studentLookup[sub.user_id] || {};
+        return {
+          submissionId: sub.id,
+          studentId:    String(sub.user_id),
+          studentName:  sub.user ? sub.user.sortable_name : String(sub.user_id),
+          period:       student.period || '',
+          state:        sub.workflow_state,
+          hasFiles:     (sub.attachments || []).length > 0,
+          graded:       sub.workflow_state === 'graded',
+          gradedAt:     sub.graded_at || '',
+          score:        sub.score,
+          spanish:      !!SPANISH_SPEAKERS[String(sub.user_id)]
+        };
+      })
+      .sort((a, b) => {
+        const pa = parseInt((a.period || '').replace(/\D/g, '')) || 999;
+        const pb = parseInt((b.period || '').replace(/\D/g, '')) || 999;
+        return pa !== pb ? pa - pb : a.studentName.localeCompare(b.studentName);
+      });
+
+    renderGradingQueue(assignmentId);
+
+  } catch (e) {
+    container.innerHTML = `<div class="empty-state">Failed to load submissions: ${escHtml(e.message)}</div>`;
+  }
+}
+
+function renderGradingQueue(assignmentId) {
+  const container = document.getElementById('grading-queue');
+
+  if (gradingQueue.length === 0) {
+    container.innerHTML = '<div class="empty-state">No submissions found.</div>';
+    return;
+  }
+
+  const ungraded = gradingQueue.filter(s => !s.graded);
+  const graded   = gradingQueue.filter(s =>  s.graded);
+
+  container.innerHTML = `
+    <div style="font-size:0.8rem;color:var(--text-muted);margin-bottom:1rem;">
+      ${ungraded.length} ungraded &nbsp;·&nbsp; ${graded.length} graded &nbsp;·&nbsp; ${gradingQueue.length} total
+    </div>
+    ${gradingQueue.map(s => renderQueueCard(s, assignmentId)).join('')}
+  `;
+}
+
+function renderQueueCard(s, assignmentId) {
+  const statusClass = s.graded ? 'graded' : (s.hasFiles ? 'submitted' : 'missing');
+  const statusLabel = s.graded ? 'Graded' : (s.hasFiles ? 'Submitted' : 'Not Submitted');
+  const cardClass   = s.graded ? 'is-graded' : (!s.hasFiles ? 'is-missing' : '');
+  const btnId       = `grade-btn-${s.studentId}`;
+  const previewId   = `grade-preview-${s.studentId}`;
+  const scoreText   = s.graded && s.score != null ? `${s.score} / 20 pts` : '';
+
+  return `
+    <div class="grade-queue-card ${cardClass}" id="card-${s.studentId}">
+      <span class="grade-queue-name">${escHtml(s.studentName)}</span>
+      ${s.period ? `<span class="grade-queue-period">${escHtml(s.period)}</span>` : ''}
+      ${s.spanish ? `<span class="grade-queue-status spanish">ES</span>` : ''}
+      <span class="grade-queue-status ${statusClass}">${statusLabel}</span>
+      ${scoreText ? `<span class="rg-score">${scoreText}</span>` : ''}
+      <button class="grade-btn ${s.graded ? 'done' : ''}"
+        id="${btnId}"
+        onclick="gradeOne('${assignmentId}', '${s.studentId}', '${btnId}', '${previewId}')"
+        ${s.graded ? '' : ''}>
+        ${s.graded ? 'Re-Grade' : 'Grade'}
+      </button>
+      <div class="grade-result-preview" id="${previewId}"></div>
+    </div>
+  `;
+}
+
+async function gradeOne(assignmentId, studentId, btnId, previewId) {
+  const btn     = document.getElementById(btnId);
+  const preview = document.getElementById(previewId);
+  const select  = document.getElementById('grade-assignment-select');
+  const rubricId = RUBRIC_MAP[assignmentId] || '';
+
+  if (!rubricId) { alert('No rubric mapped for this assignment.'); return; }
+
+  const student = gradingQueue.find(s => s.studentId === studentId);
+  if (!student) return;
+
+  btn.textContent = 'Grading...';
+  btn.classList.add('grading');
+  btn.disabled = true;
+
+  try {
+    const resp = await fetch('/grade', {
+      method: 'POST',
+      headers: {
+        'Content-Type':  'application/json',
+        'Authorization': `Bearer ${TOKEN}`
+      },
+      body: JSON.stringify({
+        assignment_id: assignmentId,
+        student_id:    studentId,
+        student_name:  student.studentName,
+        rubric_id:     rubricId,
+        spanish:       student.spanish
+      })
+    });
+
+    const result = await resp.json();
+
+    if (!resp.ok || result.error) {
+      throw new Error(result.error || `Server error ${resp.status}`);
+    }
+
+    btn.textContent = 'Done';
+    btn.classList.remove('grading');
+    btn.classList.add('done');
+
+    preview.textContent = result.overall_comment || '';
+    preview.classList.add('visible');
+
+    // Mark graded in queue
+    student.graded = true;
+    student.score  = result.total_score;
+
+    const card = document.getElementById(`card-${studentId}`);
+    if (card) {
+      card.classList.remove('is-missing');
+      card.classList.add('is-graded');
+    }
+
+    // Add to recently graded
+    recentlyGraded.unshift({
+      name:    student.studentName,
+      period:  student.period,
+      score:   result.total_score,
+      missing: result.missing,
+      time:    new Date(),
+      assignmentId
+    });
+    renderRecentlyGraded(assignmentId);
+
+  } catch (e) {
+    btn.textContent = 'Error -- Retry';
+    btn.classList.remove('grading');
+    btn.disabled = false;
+    preview.textContent = 'Grading failed: ' + e.message;
+    preview.classList.add('visible');
+    console.error('[grade]', e);
+  }
+}
+
+async function gradeAllUngraded() {
+  const select = document.getElementById('grade-assignment-select');
+  const val = select.value;
+  if (!val) { alert('Select an assignment first.'); return; }
+
+  const [assignmentId] = val.split('|');
+  const ungraded = gradingQueue.filter(s => !s.graded);
+
+  if (ungraded.length === 0) { alert('All submissions are already graded.'); return; }
+
+  const btn = document.querySelector('.grade-all-btn');
+  btn.disabled = true;
+  btn.textContent = `Grading 0 of ${ungraded.length}...`;
+
+  for (let i = 0; i < ungraded.length; i++) {
+    const s = ungraded[i];
+    btn.textContent = `Grading ${i + 1} of ${ungraded.length}...`;
+    const btnId     = `grade-btn-${s.studentId}`;
+    const previewId = `grade-preview-${s.studentId}`;
+    await gradeOne(assignmentId, s.studentId, btnId, previewId);
+    // Small pause to avoid hitting Gemini rate limits
+    if (i < ungraded.length - 1) await new Promise(r => setTimeout(r, 1500));
+  }
+
+  btn.disabled = false;
+  btn.textContent = 'Grade All Ungraded';
+}
+
+function renderRecentlyGraded(assignmentId) {
+  const section = document.getElementById('recently-graded-section');
+  const list    = document.getElementById('recently-graded-list');
+
+  if (recentlyGraded.length === 0) {
+    section.style.display = 'none';
+    return;
+  }
+
+  section.style.display = 'block';
+  list.innerHTML = recentlyGraded.map(r => {
+    const timeStr = r.time.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' });
+    const sgUrl = `https://smjuhsd.instructure.com/courses/111811/gradebook/speed_grader?assignment_id=${r.assignmentId}&student_id=placeholder`;
+    return `
+      <div class="recently-graded-row">
+        <span class="rg-name">${escHtml(r.name)}</span>
+        ${r.period ? `<span class="grade-queue-period">${escHtml(r.period)}</span>` : ''}
+        <span class="rg-score">${r.missing ? 'Comment sent' : `${r.score} / 20 pts`}</span>
+        <span class="rg-time">${timeStr}</span>
+        <a class="rg-link" href="https://smjuhsd.instructure.com/courses/111811/gradebook/speed_grader?assignment_id=${r.assignmentId}" target="_blank">View in SpeedGrader</a>
+      </div>
+    `;
+  }).join('');
 }
 
 // ── Assignment Search ──

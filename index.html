@@ -1817,12 +1817,9 @@ function renderStudentRow(s, index) {
 
 // ── Grading ──
 
-// Spanish speaker flags -- stored in localStorage
+// English Learner flags -- add student Canvas IDs here when identified
 // Format: { "student_canvas_id": true }
 const SPANISH_SPEAKERS = {
-  '39523': true,  // Yovani Antonio-Antonio (Period 5) -- for testing
-  '44030': true,  // Anahi Melgar Galindo (Period 6)
-  '35791': true   // Gregorio Calleja (Period 7)
 };
 
 // Known rubric IDs per assignment
@@ -1922,7 +1919,7 @@ function renderQueueCard(s, assignmentId) {
     <div class="grade-queue-card ${cardClass}" id="card-${s.studentId}">
       <span class="grade-queue-name">${escHtml(s.studentName)}</span>
       ${s.period ? `<span class="grade-queue-period">${escHtml(s.period)}</span>` : ''}
-      ${s.spanish ? `<span class="grade-queue-status spanish">ES</span>` : ''}
+      ${s.spanish ? `<span class="grade-queue-status spanish">EL</span>` : ''}
       <span class="grade-queue-status ${statusClass}">${statusLabel}</span>
       ${scoreText ? `<span class="rg-score">${scoreText}</span>` : ''}
       <button class="grade-btn ${s.graded ? 'done' : ''}"

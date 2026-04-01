@@ -122,10 +122,14 @@ class Handler(BaseHTTPRequestHandler):
             rubric = self.canvas_get(
                 f'/courses/{COURSE_ID}/rubrics/{rubric_id}', auth
             )
-            if not isinstance(rubric, dict) or 'criteria' not in rubric:
+            # Canvas returns criteria under 'data' key on rubric objects
+            criteria = None
+            if isinstance(rubric, dict):
+                criteria = rubric.get('data') or rubric.get('criteria')
+            if not criteria:
+                print(f'[grade] Rubric response keys: {list(rubric.keys()) if isinstance(rubric, dict) else type(rubric)}')
                 self.json_error(500, 'Could not fetch rubric criteria')
                 return
-            criteria = rubric['criteria']
 
             # 2. Fetch submission
             submission = self.canvas_get(

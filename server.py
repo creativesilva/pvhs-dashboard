@@ -15,6 +15,7 @@ import mimetypes
 import base64
 import urllib.request
 import urllib.error
+import time
 
 PORT        = int(os.environ.get('PORT', 8080))
 CANVAS_HOST = 'smjuhsd.instructure.com'
@@ -312,47 +313,57 @@ Return only the comment text, no JSON."""
                 "maxOutputTokens": 2048
             }
         }
+        req_body = json.dumps(payload).encode('utf-8')
 
-        try:
-            req_body = json.dumps(payload).encode('utf-8')
-            req = urllib.request.Request(
-                gemini_url(),
-                data=req_body,
-                headers={'Content-Type': 'application/json'},
-                method='POST'
-            )
-            with urllib.request.urlopen(req, timeout=90) as r:
-                response = json.loads(r.read())
+        # Retry up to 3 times with backoff for 429 rate limit errors
+        for attempt in range(3):
+            try:
+                req = urllib.request.Request(
+                    gemini_url(),
+                    data=req_body,
+                    headers={'Content-Type': 'application/json'},
+                    method='POST'
+                )
+                with urllib.request.urlopen(req, timeout=90) as r:
+                    response = json.loads(r.read())
 
-            text = response['candidates'][0]['content']['parts'][0]['text'].strip()
+                text = response['candidates'][0]['content']['parts'][0]['text'].strip()
 
-            if not is_json:
-                return text
+                if not is_json:
+                    return text
 
-            # Strip markdown code fences if Gemini added them
-            if text.startswith('```'):
-                text = text.split('\n', 1)[1] if '\n' in text else text[3:]
-                text = text.rsplit('```', 1)[0]
+                # Strip markdown code fences if Gemini added them
+                if text.startswith('```'):
+                    text = text.split('\n', 1)[1] if '\n' in text else text[3:]
+                    text = text.rsplit('```', 1)[0]
+                text = text.strip()
 
-            parsed = json.loads(text)
-            # Calculate total score
-            total = sum(
-                v.get('points', 0)
-                for v in parsed.get('scores', {}).values()
-            )
-            parsed['total_score'] = total
-            return parsed
+                parsed = json.loads(text)
+                total = sum(
+                    v.get('points', 0)
+                    for v in parsed.get('scores', {}).values()
+                )
+                parsed['total_score'] = total
+                return parsed
 
-        except urllib.error.HTTPError as e:
-            body = e.read().decode('utf-8', errors='replace')
-            print(f'[gemini] HTTP {e.code}: {body}')
-            self._last_gemini_error = f'Gemini HTTP {e.code}: {body[:200]}'
-            return None
-        except Exception as e:
-            print(f'[gemini] Error: {e}')
-            import traceback; traceback.print_exc()
-            self._last_gemini_error = str(e)
-            return None
+            except urllib.error.HTTPError as e:
+                body = e.read().decode('utf-8', errors='replace')
+                print(f'[gemini] HTTP {e.code} (attempt {attempt+1}): {body[:300]}')
+                if e.code == 429 and attempt < 2:
+                    wait = (attempt + 1) * 20  # 20s, then 40s
+                    print(f'[gemini] Rate limited -- waiting {wait}s before retry')
+                    time.sleep(wait)
+                    continue
+                self._last_gemini_error = f'Gemini HTTP {e.code}: {body[:200]}'
+                return None
+            except Exception as e:
+                print(f'[gemini] Error: {e}')
+                import traceback; traceback.print_exc()
+                self._last_gemini_error = str(e)
+                return None
+
+        self._last_gemini_error = 'Gemini rate limit -- quota exceeded, try again later'
+        return None
 
     # ── Canvas: Post Grade + Rubric + Comment ─────────────────────────────────
 
@@ -410,20 +421,38 @@ Return only the comment text, no JSON."""
             url = att.get('url', '')
             if not url:
                 continue
-            mime = att.get('content-type') or att.get('mime_class') or 'image/jpeg'
+            # Canvas uses content_type (underscore), not content-type (hyphen)
+            mime = (att.get('content_type') or att.get('content-type') or
+                    att.get('mime_class') or 'image/jpeg')
             if not mime.startswith('image/'):
                 mime = 'image/jpeg'
             try:
-                req = urllib.request.Request(
-                    url, headers={'Authorization': auth, 'User-Agent': 'PVHS-Dashboard/1.0'}
-                )
-                with urllib.request.urlopen(req, timeout=30) as r:
-                    raw = r.read()
-                b64 = base64.b64encode(raw).decode('utf-8')
-                images.append({'b64': b64, 'mime': mime})
-                print(f'[grade] Fetched image {att.get("display_name", "?")} ({len(raw)} bytes)')
+                # Canvas attachment URLs are pre-signed S3 URLs.
+                # Sending Authorization header to S3 causes a 400 error.
+                # First try without auth (works for pre-signed URLs).
+                # Fall back with auth if that fails (for non-S3 URLs).
+                fetched = False
+                for headers in [
+                    {'User-Agent': 'PVHS-Dashboard/1.0'},
+                    {'Authorization': auth, 'User-Agent': 'PVHS-Dashboard/1.0'}
+                ]:
+                    try:
+                        req = urllib.request.Request(url, headers=headers)
+                        with urllib.request.urlopen(req, timeout=30) as r:
+                            raw = r.read()
+                        b64 = base64.b64encode(raw).decode('utf-8')
+                        images.append({'b64': b64, 'mime': mime})
+                        print(f'[grade] Fetched {att.get("display_name","?")} ({len(raw)} bytes, {mime})')
+                        fetched = True
+                        break
+                    except urllib.error.HTTPError as e:
+                        if e.code in (400, 403) and headers.get('Authorization'):
+                            continue
+                        raise
+                if not fetched:
+                    print(f'[grade] Could not fetch {att.get("display_name","?")}')
             except Exception as e:
-                print(f'[grade] Image fetch failed for {url}: {e}')
+                print(f'[grade] Image fetch failed: {e}')
         return images
 
     # ── Canvas: Generic GET ───────────────────────────────────────────────────

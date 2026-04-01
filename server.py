@@ -22,13 +22,16 @@ GEMINI_KEY  = os.environ.get('GEMINI_API_KEY', '')
 COURSE_ID   = '111811'
 SERVE_DIR   = os.path.dirname(os.path.abspath(__file__))
 
-GEMINI_MODEL = 'gemini-1.5-flash-latest'
+GEMINI_MODEL = 'gemini-1.5-flash'
 
 def gemini_url():
     return (
-        'https://generativelanguage.googleapis.com/v1/models/'
+        'https://generativelanguage.googleapis.com/v1beta/models/'
         + GEMINI_MODEL + ':generateContent?key=' + GEMINI_KEY
 )
+
+def gemini_list_url():
+    return 'https://generativelanguage.googleapis.com/v1beta/models?key=' + GEMINI_KEY
 
 # Teacher voice -- English
 VOICE_EN = (
@@ -75,8 +78,16 @@ class Handler(BaseHTTPRequestHandler):
 
     # ── Routing ──────────────────────────────────────────────────────────────
 
+    def do_POST(self):
+        if self.path == '/grade':
+            self.handle_grade()
+        else:
+            self.send_error(404)
+
     def do_GET(self):
-        if self.path.startswith('/api/'):
+        if self.path == '/list-models':
+            self.handle_list_models()
+        elif self.path.startswith('/api/'):
             self.proxy_to_canvas()
         elif self.path in ('/', ''):
             self.path = '/index.html'
@@ -84,11 +95,17 @@ class Handler(BaseHTTPRequestHandler):
         else:
             self.serve_file()
 
-    def do_POST(self):
-        if self.path == '/grade':
-            self.handle_grade()
-        else:
-            self.send_error(404)
+    def handle_list_models(self):
+        try:
+            req = urllib.request.Request(gemini_list_url(), headers={'User-Agent': 'PVHS/1.0'})
+            with urllib.request.urlopen(req, timeout=10) as r:
+                data = json.loads(r.read())
+            names = [m.get('name','') for m in data.get('models', [])]
+            self.json_response(200, {'models': names, 'key_prefix': GEMINI_KEY[:8] + '...'})
+        except urllib.error.HTTPError as e:
+            self.json_response(e.code, {'error': e.read().decode('utf-8', errors='replace')})
+        except Exception as e:
+            self.json_error(500, str(e))
 
     def do_OPTIONS(self):
         self.send_response(204)

@@ -35,6 +35,71 @@ def gemini_url():
 def gemini_list_url():
     return 'https://generativelanguage.googleapis.com/v1beta/models?key=' + GEMINI_KEY
 
+
+import re
+
+def parse_gemini_json(text):
+    """Parse JSON from Gemini, handling common formatting issues."""
+    # Strip markdown fences
+    text = re.sub(r'```[a-z]*\n?', '', text)
+    text = re.sub(r'\n?```', '', text)
+    # Find outermost JSON object
+    start = text.find('{')
+    end   = text.rfind('}')
+    if start != -1 and end != -1:
+        text = text[start:end+1]
+    text = text.strip()
+
+    # Attempt 1: try strict=False directly
+    try:
+        return json.loads(text, strict=False)
+    except json.JSONDecodeError:
+        pass
+
+    # Attempt 2: escape control chars inside JSON strings
+    fixed = []
+    in_str = False
+    esc = False
+    for ch in text:
+        if esc:
+            fixed.append(ch)
+            esc = False
+        elif ch == '\\':
+            fixed.append(ch)
+            esc = True
+        elif ch == '"':
+            in_str = not in_str
+            fixed.append(ch)
+        elif in_str and ch in '\n\r\t':
+            fixed.append({'\\n': '\\n', '\r': '\\r', '\t': '\\t'}[ch] if ch in '\r\t' else '\\n')
+        else:
+            fixed.append(ch)
+    try:
+        return json.loads(''.join(fixed), strict=False)
+    except json.JSONDecodeError:
+        pass
+
+    # Attempt 3: use regex to extract fields individually
+    scores = {}
+    # Find all criterion score blocks: "id": {"points": N, "comment": "..."}
+    crit_pattern = r'"([^"]+)"\s*:\s*\{\s*"points"\s*:\s*([0-9.]+)\s*,\s*"comment"\s*:\s*"((?:[^"\\]|\\.)*)"\s*\}'
+    for m in re.finditer(crit_pattern, text, re.DOTALL):
+        cid = m.group(1)
+        pts = float(m.group(2))
+        comment = m.group(3).replace('\\n', '\n').replace('\\"', '"')
+        if cid not in ('scores', 'overall_comment'):
+            scores[cid] = {'points': pts, 'comment': comment}
+
+    # Extract overall_comment
+    oc_match = re.search(r'"overall_comment"\s*:\s*"((?:[^"\\]|\\.)*)"', text, re.DOTALL)
+    overall = oc_match.group(1).replace('\\n', '\n').replace('\\"', '"') if oc_match else ''
+
+    if scores:
+        print(f'[gemini] Used regex fallback to parse JSON ({len(scores)} criteria)')
+        return {'scores': scores, 'overall_comment': overall}
+
+    raise ValueError(f'Could not parse Gemini JSON response: {text[:200]}')
+
 # Teacher voice -- English
 VOICE_EN = (
     "You are writing grading feedback on behalf of Mr. Silva, "
@@ -338,45 +403,8 @@ Return only the comment text, no JSON."""
                 if not is_json:
                     return text
 
-                # Extract JSON robustly
-                import re
-                # Strip markdown fences
-                text = re.sub(r'```[a-z]*\n?', '', text)
-                text = re.sub(r'\n?```', '', text)
-                # Find the outermost JSON object
-                start = text.find('{')
-                end   = text.rfind('}')
-                if start != -1 and end != -1:
-                    text = text[start:end+1]
-                text = text.strip()
-                # Fix literal newlines/tabs inside JSON string values
-                # which cause "Unterminated string" errors
-                def fix_json_strings(s):
-                    result = []
-                    in_string = False
-                    escape = False
-                    for ch in s:
-                        if escape:
-                            result.append(ch)
-                            escape = False
-                        elif ch == '\\':
-                            result.append(ch)
-                            escape = True
-                        elif ch == '"':
-                            in_string = not in_string
-                            result.append(ch)
-                        elif in_string and ch == '\n':
-                            result.append('\\n')
-                        elif in_string and ch == '\r':
-                            result.append('\\r')
-                        elif in_string and ch == '\t':
-                            result.append('\\t')
-                        else:
-                            result.append(ch)
-                    return ''.join(result)
-                text = fix_json_strings(text)
-
-                parsed = json.loads(text, strict=False)
+                # Extract and parse JSON robustly
+                parsed = parse_gemini_json(text)
                 total = sum(
                     v.get('points', 0)
                     for v in parsed.get('scores', {}).values()

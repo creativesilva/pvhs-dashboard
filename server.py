@@ -374,7 +374,7 @@ Return only the comment text, no JSON."""
                     return ''.join(result)
                 text = fix_json_strings(text)
 
-                parsed = json.loads(text)
+                parsed = json.loads(text, strict=False)
                 total = sum(
                     v.get('points', 0)
                     for v in parsed.get('scores', {}).values()

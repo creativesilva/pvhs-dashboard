@@ -298,9 +298,10 @@ class Handler(BaseHTTPRequestHandler):
             'Respond in English.'
         )
 
-        # Build criterion ID list so Gemini uses exact IDs
-        crit_ids = [c['id'] for c in criteria]
-        crit_ids_json = json.dumps(crit_ids)
+        # Build criterion info for the prompt
+        crit_lines = []
+        for c in criteria:
+            crit_lines.append(f'  id="{c["id"]}" max_points={c.get("points", 4)}')
 
         prompt = f"""{voice}
 
@@ -316,7 +317,8 @@ Each photo should have camera settings (ISO, shutter, aperture) labeled undernea
 RUBRIC CRITERIA (use these EXACT criterion IDs in your response):
 {criteria_text}
 
-CRITERION IDs TO USE: {crit_ids_json}
+Criterion IDs to use:
+{chr(10).join(crit_lines)}
 
 {lang_note}
 
@@ -324,16 +326,29 @@ Look carefully at both contact sheet pages. Score each criterion based on what y
 Write 2 to 3 sentences of specific feedback per criterion referencing what is visible in the work.
 Write a 3 to 5 sentence overall comment to the student.
 
-Return ONLY valid JSON in this exact structure, nothing else:
-{{
-  "scores": {{
-    "{crit_ids[0] if crit_ids else 'c1'}": {{"points": 0, "comment": "..."}},
-    "{crit_ids[1] if len(crit_ids) > 1 else 'c2'}": {{"points": 0, "comment": "..."}},
-    "{crit_ids[2] if len(crit_ids) > 2 else 'c3'}": {{"points": 0, "comment": "..."}},
-    "{crit_ids[3] if len(crit_ids) > 3 else 'c4'}": {{"points": 0, "comment": "..."}}
-  }},
-  "overall_comment": "..."
-}}"""
+Return a JSON object with a "scores" array and an "overall_comment" string.
+Each item in "scores" must have "id" (the criterion ID string), "points" (number), and "comment" (string)."""
+
+        # Build responseSchema so Gemini produces guaranteed valid JSON
+        response_schema = {
+            "type": "OBJECT",
+            "properties": {
+                "scores": {
+                    "type": "ARRAY",
+                    "items": {
+                        "type": "OBJECT",
+                        "properties": {
+                            "id":      {"type": "STRING"},
+                            "points":  {"type": "NUMBER"},
+                            "comment": {"type": "STRING"}
+                        },
+                        "required": ["id", "points", "comment"]
+                    }
+                },
+                "overall_comment": {"type": "STRING"}
+            },
+            "required": ["scores", "overall_comment"]
+        }
 
         parts = [{"text": prompt}]
         for img in images:
@@ -344,7 +359,20 @@ Return ONLY valid JSON in this exact structure, nothing else:
                 }
             })
 
-        return self.call_gemini(parts, temperature=0.7, is_json=True)
+        result = self.call_gemini(parts, temperature=0.7, is_json=True,
+                                  response_schema=response_schema)
+        if result is None:
+            return None
+
+        # Convert array-based scores to dict keyed by criterion ID
+        scores_dict = {}
+        for item in result.get('scores', []):
+            scores_dict[item['id']] = {
+                'points': item.get('points', 0),
+                'comment': item.get('comment', '')
+            }
+        result['scores'] = scores_dict
+        return result
 
     # ── Gemini: Missing / No Submission ──────────────────────────────────────
 
@@ -395,13 +423,15 @@ Return only the comment text, no JSON."""
 
     # ── Gemini HTTP Call ─────────────────────────────────────────────────────
 
-    def call_gemini(self, parts, temperature=0.7, is_json=False):
+    def call_gemini(self, parts, temperature=0.7, is_json=False, response_schema=None):
         gen_config = {
             "temperature": temperature,
             "maxOutputTokens": 2048
         }
         if is_json:
             gen_config["responseMimeType"] = "application/json"
+        if response_schema:
+            gen_config["responseSchema"] = response_schema
         payload = {
             "contents": [{"parts": parts}],
             "generationConfig": gen_config
@@ -427,10 +457,13 @@ Return only the comment text, no JSON."""
 
                 # Extract and parse JSON robustly
                 parsed = parse_gemini_json(text)
-                total = sum(
-                    v.get('points', 0)
-                    for v in parsed.get('scores', {}).values()
-                )
+
+                # Calculate total score -- scores may be list or dict
+                scores = parsed.get('scores', [])
+                if isinstance(scores, list):
+                    total = sum(item.get('points', 0) for item in scores)
+                else:
+                    total = sum(v.get('points', 0) for v in scores.values())
                 parsed['total_score'] = total
                 return parsed
 

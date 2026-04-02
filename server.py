@@ -294,29 +294,27 @@ class Handler(BaseHTTPRequestHandler):
 
     def grade_submission(self, student_name, images, criteria, spanish, days_late=0):
         voice         = VOICE_ES if spanish else VOICE_EN
-        criteria_text = build_criteria_block(criteria)
         lang_note     = (
             'Respond ENTIRELY in Spanish using tú. No English at all.'
             if spanish else
             'Respond in English.'
         )
 
-        # Build criterion info for the prompt
-        crit_lines = []
+        # Separate timeliness criterion from visual criteria
+        timeliness_crit = None
+        visual_criteria = []
         for c in criteria:
-            crit_lines.append(f'  id="{c["id"]}" max_points={c.get("points", 4)}')
+            name_lower = c.get('description', '').lower()
+            if 'timeli' in name_lower or 'submission' in name_lower:
+                timeliness_crit = c
+            else:
+                visual_criteria.append(c)
 
-        # Determine timeliness score based on days late
-        if days_late == 0:
-            timeliness_note = "This was submitted ON TIME. Timeliness score: 8 pts."
-        elif days_late == 1:
-            timeliness_note = "This was submitted 1 DAY LATE. Timeliness score: 6 pts."
-        elif days_late <= 3:
-            timeliness_note = f"This was submitted {days_late} DAYS LATE. Timeliness score: 4 pts."
-        elif days_late <= 7:
-            timeliness_note = f"This was submitted {days_late} DAYS LATE. Timeliness score: 2 pts."
-        else:
-            timeliness_note = f"This was submitted {days_late} DAYS LATE (several weeks). Timeliness score: 1 pt."
+        # Build prompt with ONLY the visual criteria (not timeliness)
+        criteria_text = build_criteria_block(visual_criteria)
+        crit_lines = []
+        for c in visual_criteria:
+            crit_lines.append(f'  id="{c["id"]}" max_points={c.get("points", 4)}')
 
         prompt = f"""{voice}
 
@@ -329,9 +327,6 @@ Photos 1 through 6 = Composition focus.
 Photos 7 through 12 = Camera Control focus.
 Each photo should have camera settings (ISO, shutter, aperture) labeled underneath.
 
-LATE STATUS: {timeliness_note}
-You MUST use the exact timeliness score above for the Timeliness of Submission criterion. Do NOT give full marks if the student was late.
-
 RUBRIC CRITERIA (use these EXACT criterion IDs in your response):
 {criteria_text}
 
@@ -340,16 +335,16 @@ Criterion IDs to use:
 
 {lang_note}
 
-IMPORTANT FEEDBACK STYLE RULES:
-- For individual criterion comments: Write 1 to 2 sentences of specific feedback. Do NOT use the student's name. Just describe what you see and what could improve.
-- For the overall_comment only: Address the student by first name. Write 3 to 5 sentences.
+FEEDBACK STYLE RULES:
+- For each criterion comment: Write 1 to 2 concise sentences. Do NOT use the student name. Just describe what you observe and what could improve.
+- For overall_comment: Address the student by first name only. Write 3 to 5 sentences.
 
 Look carefully at both contact sheet pages. Score each criterion based on what you actually see.
 
 Return a JSON object with a "scores" array and an "overall_comment" string.
-Each item in "scores" must have "id" (the criterion ID string), "points" (number), and "comment" (string)."""
+Each item in "scores" must have "id" (criterion ID string), "points" (number), and "comment" (string)."""
 
-        # Build responseSchema so Gemini produces guaranteed valid JSON
+        # Build responseSchema
         response_schema = {
             "type": "OBJECT",
             "properties": {
@@ -391,6 +386,22 @@ Each item in "scores" must have "id" (the criterion ID string), "points" (number
                 'points': item.get('points', 0),
                 'comment': item.get('comment', '')
             }
+
+        # Add timeliness score programmatically (never let AI decide this)
+        if timeliness_crit:
+            tid = timeliness_crit['id']
+            if days_late == 0:
+                t_pts, t_comment = 8, "Submitted on time."
+            elif days_late == 1:
+                t_pts, t_comment = 6, "Submitted 1 day late."
+            elif days_late <= 3:
+                t_pts, t_comment = 4, f"Submitted {days_late} days late."
+            elif days_late <= 7:
+                t_pts, t_comment = 2, f"Submitted {days_late} days late."
+            else:
+                t_pts, t_comment = 1, f"Submitted {days_late} days late."
+            scores_dict[tid] = {'points': t_pts, 'comment': t_comment}
+
         result['scores'] = scores_dict
         return result
 

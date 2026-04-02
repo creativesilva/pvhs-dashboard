@@ -184,13 +184,15 @@ class Handler(BaseHTTPRequestHandler):
                 return
 
             # 3. Post back to Canvas
-            self.post_to_canvas(assignment_id, student_id, result, criteria, auth)
+            canvas_resp = self.post_to_canvas(assignment_id, student_id, result, criteria, auth)
 
             self.json_response(200, {
                 'success': True,
                 'missing': is_missing,
                 'overall_comment': result.get('overall_comment', ''),
-                'total_score': result.get('total_score', 0)
+                'total_score': result.get('total_score', 0),
+                'canvas_posted': canvas_resp is not None,
+                'canvas_grade': canvas_resp.get('grade') if isinstance(canvas_resp, dict) else None
             })
 
         except Exception as e:
@@ -438,13 +440,18 @@ Return only the comment text, no JSON."""
         )
         body    = json.dumps(payload).encode('utf-8')
         try:
+            print(f'[canvas] PUT {path}')
+            print(f'[canvas] Payload: {json.dumps(payload)[:500]}')
             conn.request('PUT', path, body=body, headers=headers)
             resp = conn.getresponse()
             raw  = resp.read()
             print(f'[canvas] PUT submission {student_id} -> {resp.status}')
+            if resp.status >= 400:
+                print(f'[canvas] Error response: {raw.decode("utf-8", errors="replace")[:500]}')
             return json.loads(raw)
         except Exception as e:
             print(f'[canvas] POST error: {e}')
+            import traceback; traceback.print_exc()
             return None
         finally:
             conn.close()

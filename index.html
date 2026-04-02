@@ -723,6 +723,48 @@
   .rg-link  { font-size: 0.75rem; color: var(--teal-light); text-decoration: none; white-space: nowrap; }
   .rg-link:hover { text-decoration: underline; }
 
+  .grade-card-files {
+    display: flex;
+    gap: 0.4rem;
+    flex-wrap: wrap;
+    margin-top: 0.35rem;
+  }
+
+  .file-download-btn {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.3rem;
+    padding: 0.25rem 0.6rem;
+    border-radius: 6px;
+    border: 1px solid rgba(64,222,222,0.2);
+    background: rgba(64,222,222,0.06);
+    color: var(--teal-light);
+    font-size: 0.72rem;
+    font-weight: 500;
+    text-decoration: none;
+    cursor: pointer;
+    transition: all 0.2s;
+    max-width: 240px;
+    overflow: hidden;
+  }
+
+  .file-download-btn:hover {
+    background: rgba(64,222,222,0.14);
+    border-color: var(--teal);
+  }
+
+  .file-download-btn .file-icon { font-size: 0.8rem; flex-shrink: 0; }
+  .file-download-btn .file-name {
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+  .file-download-btn .file-size {
+    color: var(--text-muted);
+    font-size: 0.65rem;
+    flex-shrink: 0;
+  }
+
   /* ── Hide IDs toggle ── */
   body.hide-ids .student-id { display: none !important; }
 
@@ -1889,17 +1931,26 @@ async function loadGradingQueue() {
           }
         }
 
+        // Build attachments list
+        const attachments = (sub.attachments || []).map(a => ({
+          filename:    a.filename || a.display_name || 'file',
+          url:         a.url,
+          size:        a.size || 0,
+          contentType: a.content_type || ''
+        }));
+
         return {
           submissionId: sub.id,
           studentId:    String(sub.user_id),
           studentName:  sub.user ? sub.user.sortable_name : String(sub.user_id),
           period:       student.period || '',
           state:        sub.workflow_state,
-          hasFiles:     (sub.attachments || []).length > 0,
+          hasFiles:     attachments.length > 0,
           graded:       sub.workflow_state === 'graded',
           gradedAt:     sub.graded_at || '',
           score:        sub.score,
           lastComment:  overallComment,
+          attachments:  attachments,
           spanish:      !!SPANISH_SPEAKERS[String(sub.user_id)]
         };
       })
@@ -1994,6 +2045,23 @@ function renderQueueCard(s, assignmentId) {
     commentHtml = `<div class="grade-card-comment" id="${previewId}" style="display:none"></div>`;
   }
 
+  // File downloads row
+  let filesHtml = '';
+  if (s.attachments && s.attachments.length > 0) {
+    const fileButtons = s.attachments.map(a => {
+      const icon = fileIcon(a.contentType);
+      const size = formatFileSize(a.size);
+      const safeUrl = escHtml(a.url);
+      const safeName = escHtml(a.filename);
+      return `<a class="file-download-btn" href="${safeUrl}" target="_blank" title="${safeName}">
+        <span class="file-icon">${icon}</span>
+        <span class="file-name">${safeName}</span>
+        <span class="file-size">${size}</span>
+      </a>`;
+    }).join('');
+    filesHtml = `<div class="grade-card-files">${fileButtons}</div>`;
+  }
+
   return `
     <div class="grade-queue-card ${cardClass}" id="card-${s.studentId}">
       <div class="grade-card-row1">
@@ -2007,6 +2075,7 @@ function renderQueueCard(s, assignmentId) {
           ${btnLabel}
         </button>
       </div>
+      ${filesHtml}
       ${row2}
       ${commentHtml}
     </div>
@@ -2481,6 +2550,22 @@ function escHtml(str) {
   const div = document.createElement('div');
   div.textContent = str;
   return div.innerHTML;
+}
+
+function formatFileSize(bytes) {
+  if (!bytes || bytes === 0) return '';
+  if (bytes < 1024) return bytes + ' B';
+  if (bytes < 1048576) return (bytes / 1024).toFixed(0) + ' KB';
+  return (bytes / 1048576).toFixed(1) + ' MB';
+}
+
+function fileIcon(contentType) {
+  if (!contentType) return '\u{1F4CE}';
+  if (contentType.startsWith('image/')) return '\u{1F5BC}';
+  if (contentType === 'application/pdf') return '\u{1F4C4}';
+  if (contentType.includes('video')) return '\u{1F3AC}';
+  if (contentType.includes('zip') || contentType.includes('compressed')) return '\u{1F4E6}';
+  return '\u{1F4CE}';
 }
 
 // ── Init ──

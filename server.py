@@ -261,8 +261,11 @@ class Handler(BaseHTTPRequestHandler):
                 if not images:
                     self.json_error(500, 'Could not download submission images')
                     return
+                # Calculate days late from Canvas submission data
+                seconds_late = submission.get('seconds_late', 0) or 0
+                days_late = int(seconds_late / 86400)
                 result = self.grade_submission(
-                    student_name, images, criteria, spanish
+                    student_name, images, criteria, spanish, days_late
                 )
 
             if result is None:
@@ -289,7 +292,7 @@ class Handler(BaseHTTPRequestHandler):
 
     # ── Gemini: Grade Submitted Work ─────────────────────────────────────────
 
-    def grade_submission(self, student_name, images, criteria, spanish):
+    def grade_submission(self, student_name, images, criteria, spanish, days_late=0):
         voice         = VOICE_ES if spanish else VOICE_EN
         criteria_text = build_criteria_block(criteria)
         lang_note     = (
@@ -303,6 +306,18 @@ class Handler(BaseHTTPRequestHandler):
         for c in criteria:
             crit_lines.append(f'  id="{c["id"]}" max_points={c.get("points", 4)}')
 
+        # Determine timeliness score based on days late
+        if days_late == 0:
+            timeliness_note = "This was submitted ON TIME. Timeliness score: 8 pts."
+        elif days_late == 1:
+            timeliness_note = "This was submitted 1 DAY LATE. Timeliness score: 6 pts."
+        elif days_late <= 3:
+            timeliness_note = f"This was submitted {days_late} DAYS LATE. Timeliness score: 4 pts."
+        elif days_late <= 7:
+            timeliness_note = f"This was submitted {days_late} DAYS LATE. Timeliness score: 2 pts."
+        else:
+            timeliness_note = f"This was submitted {days_late} DAYS LATE (several weeks). Timeliness score: 1 pt."
+
         prompt = f"""{voice}
 
 STUDENT NAME: {student_name}
@@ -314,6 +329,9 @@ Photos 1 through 6 = Composition focus.
 Photos 7 through 12 = Camera Control focus.
 Each photo should have camera settings (ISO, shutter, aperture) labeled underneath.
 
+LATE STATUS: {timeliness_note}
+You MUST use the exact timeliness score above for the Timeliness of Submission criterion. Do NOT give full marks if the student was late.
+
 RUBRIC CRITERIA (use these EXACT criterion IDs in your response):
 {criteria_text}
 
@@ -322,9 +340,11 @@ Criterion IDs to use:
 
 {lang_note}
 
+IMPORTANT FEEDBACK STYLE RULES:
+- For individual criterion comments: Write 1 to 2 sentences of specific feedback. Do NOT use the student's name. Just describe what you see and what could improve.
+- For the overall_comment only: Address the student by first name. Write 3 to 5 sentences.
+
 Look carefully at both contact sheet pages. Score each criterion based on what you actually see.
-Write 2 to 3 sentences of specific feedback per criterion referencing what is visible in the work.
-Write a 3 to 5 sentence overall comment to the student.
 
 Return a JSON object with a "scores" array and an "overall_comment" string.
 Each item in "scores" must have "id" (the criterion ID string), "points" (number), and "comment" (string)."""

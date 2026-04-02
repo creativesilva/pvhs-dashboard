@@ -688,32 +688,16 @@
     display: none;
   }
 
-  .grade-result-preview.visible { display: block; }
-
-  .recently-graded-header {
-    font-size: 0.85rem;
-    font-weight: 700;
-    color: var(--text-muted);
-    text-transform: uppercase;
-    letter-spacing: 0.06em;
-    margin-bottom: 0.75rem;
-    padding-bottom: 0.5rem;
-    border-bottom: 1px solid var(--border);
-  }
-
-  .recently-graded-row {
+  .grade-card-top {
     display: flex;
     align-items: center;
-    gap: 0.75rem;
-    padding: 0.55rem 0;
-    border-bottom: 1px solid rgba(255,255,255,0.04);
-    font-size: 0.85rem;
+    gap: 0.5rem;
     flex-wrap: wrap;
+    width: 100%;
   }
 
-  .recently-graded-row:last-child { border-bottom: none; }
+  .grade-result-preview.visible { display: block; }
 
-  .rg-name  { flex: 1; font-weight: 600; color: var(--text-bright); min-width: 140px; }
   .rg-score { font-weight: 700; color: var(--teal-light); white-space: nowrap; }
   .rg-time  { font-size: 0.72rem; color: var(--text-muted); white-space: nowrap; }
   .rg-link  { font-size: 0.72rem; color: var(--teal-light); text-decoration: none; white-space: nowrap; }
@@ -1190,10 +1174,6 @@
       <div id="grading-queue" class="grading-queue">
         <div class="empty-state">Select an assignment above to load the grading queue.</div>
       </div>
-      <div id="recently-graded-section" style="display:none">
-        <div class="recently-graded-header">Recently Graded</div>
-        <div id="recently-graded-list"></div>
-      </div>
     </div>
 
     <!-- Search Tab -->
@@ -1329,7 +1309,8 @@ async function canvasFetch(path) {
 
   while (url) {
     const resp = await fetch(url, {
-      headers: { 'Authorization': `Bearer ${TOKEN}` }
+      headers: { 'Authorization': `Bearer ${TOKEN}` },
+      cache: 'no-store'
     });
     if (!resp.ok) {
       throw new Error(`Canvas API error ${resp.status}: ${resp.statusText} for ${path}`);
@@ -1837,17 +1818,14 @@ const RUBRIC_MAP = {
 };
 
 let gradingQueue = []; // current queue loaded
-let recentlyGraded = []; // graded this session
 
 async function loadGradingQueue() {
   const select = document.getElementById('grade-assignment-select');
   const val = select.value;
   const container = document.getElementById('grading-queue');
-  const recentSection = document.getElementById('recently-graded-section');
 
   if (!val) {
     container.innerHTML = '<div class="empty-state">Select an assignment above to load the grading queue.</div>';
-    recentSection.style.display = 'none';
     return;
   }
 
@@ -1871,6 +1849,8 @@ async function loadGradingQueue() {
       .filter(sub => sub.user && sub.workflow_state !== 'deleted')
       .map(sub => {
         const student = studentLookup[sub.user_id] || {};
+        const comments = sub.submission_comments || [];
+        const lastComment = comments.length > 0 ? comments[comments.length - 1].comment : '';
         return {
           submissionId: sub.id,
           studentId:    String(sub.user_id),
@@ -1881,6 +1861,7 @@ async function loadGradingQueue() {
           graded:       sub.workflow_state === 'graded',
           gradedAt:     sub.graded_at || '',
           score:        sub.score,
+          lastComment:  lastComment,
           spanish:      !!SPANISH_SPEAKERS[String(sub.user_id)]
         };
       })
@@ -1923,21 +1904,26 @@ function renderQueueCard(s, assignmentId) {
   const btnId       = `grade-btn-${s.studentId}`;
   const previewId   = `grade-preview-${s.studentId}`;
   const scoreText   = s.graded && s.score != null ? `${s.score} / 20 pts` : '';
+  const sgUrl       = `https://smjuhsd.instructure.com/courses/111811/gradebook/speed_grader?assignment_id=${assignmentId}&student_id=${s.studentId}`;
+  const gradedTime  = s.gradedAt ? new Date(s.gradedAt).toLocaleString('en-US', { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' }) : '';
 
   return `
     <div class="grade-queue-card ${cardClass}" id="card-${s.studentId}">
-      <span class="grade-queue-name">${escHtml(s.studentName)}</span>
-      ${s.period ? `<span class="grade-queue-period">${escHtml(s.period)}</span>` : ''}
-      ${s.spanish ? `<span class="grade-queue-status spanish">EL</span>` : ''}
-      <span class="grade-queue-status ${statusClass}">${statusLabel}</span>
-      ${scoreText ? `<span class="rg-score">${scoreText}</span>` : ''}
-      <button class="grade-btn ${s.graded ? 'done' : ''}"
-        id="${btnId}"
-        onclick="gradeOne('${assignmentId}', '${s.studentId}', '${btnId}', '${previewId}')"
-        ${s.graded ? '' : ''}>
-        ${s.graded ? 'Re-Grade' : 'Grade'}
-      </button>
-      <div class="grade-result-preview" id="${previewId}"></div>
+      <div class="grade-card-top">
+        <span class="grade-queue-name">${escHtml(s.studentName)}</span>
+        ${s.period ? `<span class="grade-queue-period">${escHtml(s.period)}</span>` : ''}
+        ${s.spanish ? `<span class="grade-queue-status spanish">EL</span>` : ''}
+        <span class="grade-queue-status ${statusClass}" id="status-${s.studentId}">${statusLabel}</span>
+        ${scoreText ? `<span class="rg-score" id="score-${s.studentId}">${scoreText}</span>` : `<span class="rg-score" id="score-${s.studentId}"></span>`}
+        ${s.graded ? `<a class="rg-link" href="${sgUrl}" target="_blank">View in SpeedGrader</a>` : ''}
+        ${gradedTime ? `<span class="rg-time" id="time-${s.studentId}">${gradedTime}</span>` : `<span class="rg-time" id="time-${s.studentId}"></span>`}
+        <button class="grade-btn ${s.graded ? 'done' : ''}"
+          id="${btnId}"
+          onclick="gradeOne('${assignmentId}', '${s.studentId}', '${btnId}', '${previewId}')">
+          ${s.graded ? 'Re-Grade' : 'Grade'}
+        </button>
+      </div>
+      ${s.graded && s.lastComment ? `<div class="grade-result-preview visible" id="${previewId}">${escHtml(s.lastComment)}</div>` : `<div class="grade-result-preview" id="${previewId}"></div>`}
     </div>
   `;
 }
@@ -1979,9 +1965,10 @@ async function gradeOne(assignmentId, studentId, btnId, previewId) {
       throw new Error(result.error || `Server error ${resp.status}`);
     }
 
-    btn.textContent = 'Done';
+    btn.textContent = 'Re-Grade';
     btn.classList.remove('grading');
     btn.classList.add('done');
+    btn.disabled = false;
 
     preview.textContent = result.overall_comment || '';
     preview.classList.add('visible');
@@ -1989,6 +1976,7 @@ async function gradeOne(assignmentId, studentId, btnId, previewId) {
     // Mark graded in queue
     student.graded = true;
     student.score  = result.total_score;
+    student.lastComment = result.overall_comment || '';
 
     const card = document.getElementById(`card-${studentId}`);
     if (card) {
@@ -1996,16 +1984,35 @@ async function gradeOne(assignmentId, studentId, btnId, previewId) {
       card.classList.add('is-graded');
     }
 
-    // Add to recently graded
-    recentlyGraded.unshift({
-      name:    student.studentName,
-      period:  student.period,
-      score:   result.total_score,
-      missing: result.missing,
-      time:    new Date(),
-      assignmentId
-    });
-    renderRecentlyGraded(assignmentId);
+    // Update status label
+    const statusEl = document.getElementById(`status-${studentId}`);
+    if (statusEl) {
+      statusEl.className = 'grade-queue-status graded';
+      statusEl.textContent = 'Graded';
+    }
+
+    // Update score
+    const scoreEl = document.getElementById(`score-${studentId}`);
+    if (scoreEl) {
+      scoreEl.textContent = result.missing ? 'Comment sent' : `${result.total_score} / 20 pts`;
+    }
+
+    // Update time
+    const timeEl = document.getElementById(`time-${studentId}`);
+    if (timeEl) {
+      timeEl.textContent = new Date().toLocaleString('en-US', { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' });
+    }
+
+    // Add SpeedGrader link if not already there
+    const topRow = card ? card.querySelector('.grade-card-top') : null;
+    if (topRow && !topRow.querySelector('.rg-link')) {
+      const sgLink = document.createElement('a');
+      sgLink.className = 'rg-link';
+      sgLink.href = `https://smjuhsd.instructure.com/courses/111811/gradebook/speed_grader?assignment_id=${assignmentId}&student_id=${studentId}`;
+      sgLink.target = '_blank';
+      sgLink.textContent = 'View in SpeedGrader';
+      topRow.insertBefore(sgLink, btn);
+    }
 
   } catch (e) {
     btn.textContent = 'Error -- Retry';
@@ -2045,30 +2052,6 @@ async function gradeAllUngraded() {
   btn.textContent = 'Grade All Ungraded';
 }
 
-function renderRecentlyGraded(assignmentId) {
-  const section = document.getElementById('recently-graded-section');
-  const list    = document.getElementById('recently-graded-list');
-
-  if (recentlyGraded.length === 0) {
-    section.style.display = 'none';
-    return;
-  }
-
-  section.style.display = 'block';
-  list.innerHTML = recentlyGraded.map(r => {
-    const timeStr = r.time.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' });
-    const sgUrl = `https://smjuhsd.instructure.com/courses/111811/gradebook/speed_grader?assignment_id=${r.assignmentId}&student_id=placeholder`;
-    return `
-      <div class="recently-graded-row">
-        <span class="rg-name">${escHtml(r.name)}</span>
-        ${r.period ? `<span class="grade-queue-period">${escHtml(r.period)}</span>` : ''}
-        <span class="rg-score">${r.missing ? 'Comment sent' : `${r.score} / 20 pts`}</span>
-        <span class="rg-time">${timeStr}</span>
-        <a class="rg-link" href="https://smjuhsd.instructure.com/courses/111811/gradebook/speed_grader?assignment_id=${r.assignmentId}" target="_blank">View in SpeedGrader</a>
-      </div>
-    `;
-  }).join('');
-}
 
 // ── Assignment Search ──
 let searchTimeout = null;

@@ -683,6 +683,7 @@ Return only the comment text, no JSON."""
                 self.send_header('Link', link)
 
             self.send_header('Access-Control-Allow-Origin', '*')
+            self.send_header('Cache-Control', 'no-store, no-cache, must-revalidate')
             self.send_header('Content-Length', len(body))
             self.end_headers()
             self.wfile.write(body)

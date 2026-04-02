@@ -56,51 +56,71 @@ def parse_gemini_json(text):
     except json.JSONDecodeError:
         pass
 
-    # Attempt 2: escape control chars inside JSON strings
-    fixed = []
-    in_str = False
-    esc = False
-    for ch in text:
-        if esc:
-            fixed.append(ch)
-            esc = False
-        elif ch == '\\':
-            fixed.append(ch)
-            esc = True
-        elif ch == '"':
-            in_str = not in_str
-            fixed.append(ch)
-        elif in_str and ch in '\n\r\t':
-            fixed.append({'\\n': '\\n', '\r': '\\r', '\t': '\\t'}[ch] if ch in '\r\t' else '\\n')
-        else:
-            fixed.append(ch)
+    # Attempt 2: rebuild string with proper escaping
+    # Handles: unescaped quotes inside strings, control chars, etc.
+    text = _repair_json_strings(text)
     try:
-        return json.loads(''.join(fixed), strict=False)
-    except json.JSONDecodeError:
-        pass
+        return json.loads(text, strict=False)
+    except json.JSONDecodeError as e:
+        print(f'[gemini] JSON repair attempt failed: {e}')
+        raise ValueError(f'Gemini returned unparseable JSON: {e}')
 
-    # Attempt 3: use regex to extract fields individually
-    scores = {}
-    # Find all criterion score blocks: "id": {"points": N, "comment": "..."}
-    crit_pattern = r'"([^"]+)"\s*:\s*\{\s*"points"\s*:\s*([0-9.]+)\s*,\s*"comment"\s*:\s*"((?:[^"\\]|\\.)*)"\s*\}'
-    for m in re.finditer(crit_pattern, text, re.DOTALL):
-        cid = m.group(1)
-        pts = float(m.group(2))
-        comment = m.group(3).replace('\\n', '\n').replace('\\"', '"')
-        if cid not in ('scores', 'overall_comment'):
-            scores[cid] = {'points': pts, 'comment': comment}
 
-    # Extract overall_comment
-    oc_match = re.search(r'"overall_comment"\s*:\s*"((?:[^"\\]|\\.)*)"', text, re.DOTALL)
-    overall = oc_match.group(1).replace('\\n', '\n').replace('\\"', '"') if oc_match else ''
+def _repair_json_strings(text):
+    """Walk through JSON text character by character, properly escaping
+    content inside string values. Handles unescaped quotes, newlines,
+    tabs, and other control characters."""
+    result = []
+    i = 0
+    n = len(text)
+    in_string = False
 
-    if scores:
-        print(f'[gemini] Used regex fallback to parse JSON ({len(scores)} criteria)')
-        return {'scores': scores, 'overall_comment': overall}
+    while i < n:
+        ch = text[i]
 
-    # Log full text for debugging
-    print(f'[gemini] FAILED TO PARSE JSON. Full text:\n{text}')
-    raise ValueError(f'JSON_DEBUG:{text[:1000]}')
+        if not in_string:
+            result.append(ch)
+            if ch == '"':
+                in_string = True
+            i += 1
+        else:
+            # Inside a JSON string value
+            if ch == '\\' and i + 1 < n:
+                # Valid escape sequence -- keep as-is
+                result.append(ch)
+                result.append(text[i + 1])
+                i += 2
+            elif ch == '"':
+                # Is this the real end of the string, or an unescaped interior quote?
+                # Look ahead: if followed by structural JSON chars, it ends the string
+                rest = text[i + 1:].lstrip()
+                if not rest or rest[0] in ':,}]':
+                    # Structural close quote
+                    result.append('"')
+                    in_string = False
+                    i += 1
+                else:
+                    # Interior quote -- escape it
+                    result.append('\\"')
+                    i += 1
+            elif ch == '\n':
+                result.append('\\n')
+                i += 1
+            elif ch == '\r':
+                result.append('\\r')
+                i += 1
+            elif ch == '\t':
+                result.append('\\t')
+                i += 1
+            elif ord(ch) < 32:
+                # Other control character -- escape as unicode
+                result.append(f'\\u{ord(ch):04x}')
+                i += 1
+            else:
+                result.append(ch)
+                i += 1
+
+    return ''.join(result)
 
 # Teacher voice -- English
 VOICE_EN = (

@@ -336,14 +336,14 @@ Criterion IDs to use:
 {lang_note}
 
 SCORING PHILOSOPHY:
-Be generous and encouraging. These are high school students learning photography.
-If a student made a genuine effort and the work is reasonably complete, give them the benefit of the doubt and score toward the top of the rubric.
-Only score "Approaching" or "Beginning" if there are clear, obvious problems like missing photos, wrong format, or no visible editing.
-Most students who submitted complete work with decent effort should score "Meets Expectations" on most criteria.
+Be generous with points. These are high school students learning photography.
+If a student made a genuine effort and the work is reasonably complete, score toward the top of the rubric. Give "Meets Expectations" (full marks) on most criteria for students who submitted complete work.
+Only score "Approaching" or "Beginning" if there are clear, obvious problems like missing photos, completely wrong format, or zero visible editing.
+When in doubt, round UP to the higher score.
 
 FEEDBACK STYLE RULES:
-- For each criterion comment: Write 1 to 2 concise sentences. Do NOT use the student name. Just describe what you observe and one thing to improve.
-- For overall_comment: Address the student by first name only. Write 3 to 5 sentences. Be encouraging and specific about strengths.
+- For each criterion comment: Write 1 to 2 concise sentences. Do NOT use the student name. Be specific about what you observe, then coach them on one concrete thing to improve next time. The feedback should push them to grow even when the score is high.
+- For overall_comment: Address the student by first name only. Write 3 to 5 sentences. Be encouraging and specific about strengths, then give one clear goal for next time.
 
 Look carefully at both contact sheet pages. Score each criterion based on what you actually see.
 
@@ -394,12 +394,13 @@ Each item in "scores" must have "id" (criterion ID string), "points" (number), a
             }
 
         # Add timeliness score programmatically (never let AI decide this)
+        # Days are rounded DOWN (truncated) to be forgiving at boundaries
         if timeliness_crit:
             tid = timeliness_crit['id']
-            if days_late == 0:
+            if days_late <= 0:
                 t_pts, t_comment = 8, "Submitted on time."
-            elif days_late == 1:
-                t_pts, t_comment = 6, "Submitted 1 day late."
+            elif days_late <= 1:
+                t_pts, t_comment = 6, f"Submitted {days_late} day late."
             elif days_late <= 3:
                 t_pts, t_comment = 4, f"Submitted {days_late} days late."
             elif days_late <= 7:

@@ -306,12 +306,15 @@ Return only the comment text, no JSON."""
     # ── Gemini HTTP Call ─────────────────────────────────────────────────────
 
     def call_gemini(self, parts, temperature=0.7, is_json=False):
+        gen_config = {
+            "temperature": temperature,
+            "maxOutputTokens": 2048
+        }
+        if is_json:
+            gen_config["responseMimeType"] = "application/json"
         payload = {
             "contents": [{"parts": parts}],
-            "generationConfig": {
-                "temperature": temperature,
-                "maxOutputTokens": 2048
-            }
+            "generationConfig": gen_config
         }
         req_body = json.dumps(payload).encode('utf-8')
 

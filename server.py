@@ -332,17 +332,43 @@ Return only the comment text, no JSON."""
                 if not is_json:
                     return text
 
-                # Extract JSON robustly -- find first { to last }
+                # Extract JSON robustly
                 import re
                 # Strip markdown fences
-                text = re.sub(r'^```[a-z]*\n?', '', text, flags=re.MULTILINE)
-                text = re.sub(r'\n?```$', '', text, flags=re.MULTILINE)
+                text = re.sub(r'```[a-z]*\n?', '', text)
+                text = re.sub(r'\n?```', '', text)
                 # Find the outermost JSON object
                 start = text.find('{')
                 end   = text.rfind('}')
                 if start != -1 and end != -1:
                     text = text[start:end+1]
                 text = text.strip()
+                # Fix literal newlines/tabs inside JSON string values
+                # which cause "Unterminated string" errors
+                def fix_json_strings(s):
+                    result = []
+                    in_string = False
+                    escape = False
+                    for ch in s:
+                        if escape:
+                            result.append(ch)
+                            escape = False
+                        elif ch == '\\':
+                            result.append(ch)
+                            escape = True
+                        elif ch == '"':
+                            in_string = not in_string
+                            result.append(ch)
+                        elif in_string and ch == '\n':
+                            result.append('\\n')
+                        elif in_string and ch == '\r':
+                            result.append('\\r')
+                        elif in_string and ch == '\t':
+                            result.append('\\t')
+                        else:
+                            result.append(ch)
+                    return ''.join(result)
+                text = fix_json_strings(text)
 
                 parsed = json.loads(text)
                 total = sum(

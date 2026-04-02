@@ -654,6 +654,7 @@ Return only the comment text, no JSON."""
             body = f.read()
         self.send_response(200)
         self.send_header('Content-Type', mime)
+        self.send_header('Cache-Control', 'no-store, no-cache, must-revalidate')
         self.send_header('Content-Length', len(body))
         self.end_headers()
         self.wfile.write(body)

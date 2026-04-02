@@ -1356,8 +1356,15 @@ async function loadDashboard() {
   showLoading(true, 'Loading missing assignments...');
   hideError();
   try {
-    const results = await Promise.all(COURSES.map(c => loadCourse(c)));
-    dashboardData = results;
+    const settled = await Promise.allSettled(COURSES.map(c => loadCourse(c)));
+    dashboardData = settled
+      .filter(r => r.status === 'fulfilled')
+      .map(r => r.value);
+    const failed = settled.filter(r => r.status === 'rejected');
+    if (failed.length > 0) {
+      console.warn('Some courses failed to load:', failed.map(r => r.reason.message));
+      if (dashboardData.length === 0) throw failed[0].reason;
+    }
     renderDashboard();
     updateTimestamp();
     scheduleAutoRefresh();

@@ -6,6 +6,7 @@ Includes POST /grade endpoint for AI-assisted rubric grading via Gemini.
 """
 
 from http.server import HTTPServer, BaseHTTPRequestHandler
+from socketserver import ThreadingMixIn
 from urllib.parse import urlparse
 import http.client
 import ssl
@@ -588,9 +589,12 @@ Return only the comment text, no JSON."""
             print(f'  [server] {msg}')
 
 
+class ThreadedHTTPServer(ThreadingMixIn, HTTPServer):
+    daemon_threads = True
+
 if __name__ == '__main__':
     print(f'PVHS Dashboard Server running on port {PORT}')
     if not GEMINI_KEY:
         print('  WARNING: GEMINI_API_KEY not set -- grading will not work')
-    server = HTTPServer(('0.0.0.0', PORT), Handler)
+    server = ThreadedHTTPServer(('0.0.0.0', PORT), Handler)
     server.serve_forever()

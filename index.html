@@ -1409,7 +1409,8 @@ async function loadCourse(course) {
       try {
         const submissions = await canvasFetch(`/courses/${course.id}/assignments/${asgn.id}/submissions`);
         submissions.forEach(sub => {
-          if (sub.missing && studentMap[sub.user_id]) {
+          const isMissing = sub.missing === true || sub.late_policy_status === 'missing';
+          if (isMissing && studentMap[sub.user_id]) {
             studentMap[sub.user_id].missing.push({
               name: asgn.name,
               due: asgn.due_at ? formatDate(asgn.due_at) : 'No due date',

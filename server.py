@@ -426,7 +426,7 @@ Return only the comment text, no JSON."""
     def call_gemini(self, parts, temperature=0.7, is_json=False, response_schema=None):
         gen_config = {
             "temperature": temperature,
-            "maxOutputTokens": 2048
+            "maxOutputTokens": 8192
         }
         if is_json:
             gen_config["responseMimeType"] = "application/json"

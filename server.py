@@ -335,9 +335,15 @@ Criterion IDs to use:
 
 {lang_note}
 
+SCORING PHILOSOPHY:
+Be generous and encouraging. These are high school students learning photography.
+If a student made a genuine effort and the work is reasonably complete, give them the benefit of the doubt and score toward the top of the rubric.
+Only score "Approaching" or "Beginning" if there are clear, obvious problems like missing photos, wrong format, or no visible editing.
+Most students who submitted complete work with decent effort should score "Meets Expectations" on most criteria.
+
 FEEDBACK STYLE RULES:
-- For each criterion comment: Write 1 to 2 concise sentences. Do NOT use the student name. Just describe what you observe and what could improve.
-- For overall_comment: Address the student by first name only. Write 3 to 5 sentences.
+- For each criterion comment: Write 1 to 2 concise sentences. Do NOT use the student name. Just describe what you observe and one thing to improve.
+- For overall_comment: Address the student by first name only. Write 3 to 5 sentences. Be encouraging and specific about strengths.
 
 Look carefully at both contact sheet pages. Score each criterion based on what you actually see.
 

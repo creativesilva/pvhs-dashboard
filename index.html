@@ -628,7 +628,11 @@
   .grade-queue-card.is-graded {
     border-color: rgba(50, 205, 100, 0.2);
     background: rgba(50, 205, 100, 0.04);
-    opacity: 0.7;
+  }
+
+  .grade-queue-card.is-messaged {
+    border-color: rgba(255, 180, 60, 0.2);
+    background: rgba(255, 180, 60, 0.04);
   }
 
   .grade-queue-name {
@@ -656,6 +660,7 @@
   .grade-queue-status.submitted { background: rgba(64,222,222,0.1); color: var(--teal-light); }
   .grade-queue-status.missing   { background: rgba(255,100,100,0.1); color: #ff7070; }
   .grade-queue-status.graded    { background: rgba(50,205,100,0.1);  color: #50c864; }
+  .grade-queue-status.messaged  { background: rgba(255,180,60,0.1);  color: #f0b030; }
   .grade-queue-status.spanish   { background: rgba(255,200,60,0.1);  color: #f0c040; font-size: 0.68rem; }
 
   .grade-btn {
@@ -675,7 +680,22 @@
   .grade-btn.grading { border-color: var(--teal); color: var(--teal-light); opacity: 0.6; cursor: not-allowed; }
   .grade-btn.done    { border-color: #50c864; color: #50c864; }
 
-  .grade-result-preview {
+  .grade-card-row1 {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    width: 100%;
+  }
+
+  .grade-card-row2 {
+    display: flex;
+    align-items: center;
+    gap: 0.75rem;
+    margin-top: 0.35rem;
+    flex-wrap: wrap;
+  }
+
+  .grade-card-comment {
     width: 100%;
     font-size: 0.8rem;
     color: var(--text-muted);
@@ -685,22 +705,15 @@
     border-radius: 6px;
     border-left: 2px solid var(--teal);
     line-height: 1.5;
-    display: none;
   }
 
-  .grade-card-top {
-    display: flex;
-    align-items: center;
-    gap: 0.5rem;
-    flex-wrap: wrap;
-    width: 100%;
+  .grade-card-comment.missing-comment {
+    border-left-color: #f0b030;
   }
 
-  .grade-result-preview.visible { display: block; }
-
-  .rg-score { font-weight: 700; color: var(--teal-light); white-space: nowrap; }
+  .rg-score { font-weight: 700; color: var(--teal-light); white-space: nowrap; font-size: 0.85rem; }
   .rg-time  { font-size: 0.72rem; color: var(--text-muted); white-space: nowrap; }
-  .rg-link  { font-size: 0.72rem; color: var(--teal-light); text-decoration: none; white-space: nowrap; }
+  .rg-link  { font-size: 0.75rem; color: var(--teal-light); text-decoration: none; white-space: nowrap; }
   .rg-link:hover { text-decoration: underline; }
 
   /* ── Hide IDs toggle ── */
@@ -1886,44 +1899,89 @@ function renderGradingQueue(assignmentId) {
     return;
   }
 
-  const ungraded = gradingQueue.filter(s => !s.graded);
-  const graded   = gradingQueue.filter(s =>  s.graded);
+  const graded   = gradingQueue.filter(s => s.graded);
+  const messaged = gradingQueue.filter(s => !s.hasFiles && !s.graded && s.lastComment);
+  const ungraded = gradingQueue.filter(s => !s.graded && !(messaged.includes(s)));
 
   container.innerHTML = `
     <div style="font-size:0.8rem;color:var(--text-muted);margin-bottom:1rem;">
-      ${ungraded.length} ungraded &nbsp;·&nbsp; ${graded.length} graded &nbsp;·&nbsp; ${gradingQueue.length} total
+      ${ungraded.length} ungraded &nbsp;·&nbsp; ${graded.length} graded &nbsp;·&nbsp; ${messaged.length} messaged &nbsp;·&nbsp; ${gradingQueue.length} total
     </div>
     ${gradingQueue.map(s => renderQueueCard(s, assignmentId)).join('')}
   `;
 }
 
 function renderQueueCard(s, assignmentId) {
-  const statusClass = s.graded ? 'graded' : (s.hasFiles ? 'submitted' : 'missing');
-  const statusLabel = s.graded ? 'Graded' : (s.hasFiles ? 'Submitted' : 'Not Submitted');
-  const cardClass   = s.graded ? 'is-graded' : (!s.hasFiles ? 'is-missing' : '');
   const btnId       = `grade-btn-${s.studentId}`;
   const previewId   = `grade-preview-${s.studentId}`;
-  const scoreText   = s.graded && s.score != null ? `${s.score} / 20 pts` : '';
   const sgUrl       = `https://smjuhsd.instructure.com/courses/111811/gradebook/speed_grader?assignment_id=${assignmentId}&student_id=${s.studentId}`;
   const gradedTime  = s.gradedAt ? new Date(s.gradedAt).toLocaleString('en-US', { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' }) : '';
+  const hasMissingMsg = !s.hasFiles && !s.graded && s.lastComment;
+
+  let statusClass, statusLabel, cardClass, btnLabel;
+
+  if (s.graded) {
+    statusClass = 'graded';
+    statusLabel = 'Graded';
+    cardClass   = 'is-graded';
+    btnLabel    = 'Re-Grade';
+  } else if (hasMissingMsg) {
+    statusClass = 'messaged';
+    statusLabel = 'Message Sent';
+    cardClass   = 'is-messaged';
+    btnLabel    = 'Re-Send';
+  } else if (s.hasFiles) {
+    statusClass = 'submitted';
+    statusLabel = 'Submitted';
+    cardClass   = '';
+    btnLabel    = 'Grade';
+  } else {
+    statusClass = 'missing';
+    statusLabel = 'Not Submitted';
+    cardClass   = 'is-missing';
+    btnLabel    = 'Send Message';
+  }
+
+  // Row 2: score, time, SpeedGrader link (for graded or messaged)
+  let row2 = '';
+  if (s.graded) {
+    row2 = `<div class="grade-card-row2" id="row2-${s.studentId}">
+      <span class="rg-score" id="score-${s.studentId}">${s.score != null ? s.score + ' / 20 pts' : ''}</span>
+      ${gradedTime ? `<span class="rg-time" id="time-${s.studentId}">${gradedTime}</span>` : ''}
+      <a class="rg-link" href="${sgUrl}" target="_blank">View in SpeedGrader</a>
+    </div>`;
+  } else if (hasMissingMsg) {
+    row2 = `<div class="grade-card-row2" id="row2-${s.studentId}">
+      <span class="rg-time" id="time-${s.studentId}">${gradedTime || ''}</span>
+      <a class="rg-link" href="${sgUrl}" target="_blank">View in SpeedGrader</a>
+    </div>`;
+  }
+
+  // Comment section
+  let commentHtml = '';
+  if (s.graded && s.lastComment) {
+    commentHtml = `<div class="grade-card-comment" id="${previewId}">${escHtml(s.lastComment)}</div>`;
+  } else if (hasMissingMsg) {
+    commentHtml = `<div class="grade-card-comment missing-comment" id="${previewId}">${escHtml(s.lastComment)}</div>`;
+  } else {
+    commentHtml = `<div class="grade-card-comment" id="${previewId}" style="display:none"></div>`;
+  }
 
   return `
     <div class="grade-queue-card ${cardClass}" id="card-${s.studentId}">
-      <div class="grade-card-top">
+      <div class="grade-card-row1">
         <span class="grade-queue-name">${escHtml(s.studentName)}</span>
         ${s.period ? `<span class="grade-queue-period">${escHtml(s.period)}</span>` : ''}
         ${s.spanish ? `<span class="grade-queue-status spanish">EL</span>` : ''}
         <span class="grade-queue-status ${statusClass}" id="status-${s.studentId}">${statusLabel}</span>
-        ${scoreText ? `<span class="rg-score" id="score-${s.studentId}">${scoreText}</span>` : `<span class="rg-score" id="score-${s.studentId}"></span>`}
-        ${s.graded ? `<a class="rg-link" href="${sgUrl}" target="_blank">View in SpeedGrader</a>` : ''}
-        ${gradedTime ? `<span class="rg-time" id="time-${s.studentId}">${gradedTime}</span>` : `<span class="rg-time" id="time-${s.studentId}"></span>`}
-        <button class="grade-btn ${s.graded ? 'done' : ''}"
+        <button class="grade-btn ${s.graded || hasMissingMsg ? 'done' : ''}"
           id="${btnId}"
           onclick="gradeOne('${assignmentId}', '${s.studentId}', '${btnId}', '${previewId}')">
-          ${s.graded ? 'Re-Grade' : 'Grade'}
+          ${btnLabel}
         </button>
       </div>
-      ${s.graded && s.lastComment ? `<div class="grade-result-preview visible" id="${previewId}">${escHtml(s.lastComment)}</div>` : `<div class="grade-result-preview" id="${previewId}"></div>`}
+      ${row2}
+      ${commentHtml}
     </div>
   `;
 }
@@ -1965,54 +2023,84 @@ async function gradeOne(assignmentId, studentId, btnId, previewId) {
       throw new Error(result.error || `Server error ${resp.status}`);
     }
 
-    btn.textContent = 'Re-Grade';
     btn.classList.remove('grading');
     btn.classList.add('done');
     btn.disabled = false;
 
-    preview.textContent = result.overall_comment || '';
-    preview.classList.add('visible');
+    const isMissing = result.missing;
+    const card = document.getElementById(`card-${studentId}`);
+    const sgUrl = `https://smjuhsd.instructure.com/courses/111811/gradebook/speed_grader?assignment_id=${assignmentId}&student_id=${studentId}`;
+    const timeStr = new Date().toLocaleString('en-US', { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' });
 
-    // Mark graded in queue
-    student.graded = true;
-    student.score  = result.total_score;
+    // Update student data
     student.lastComment = result.overall_comment || '';
 
-    const card = document.getElementById(`card-${studentId}`);
-    if (card) {
-      card.classList.remove('is-missing');
-      card.classList.add('is-graded');
+    if (isMissing) {
+      // Missing student - message was sent
+      btn.textContent = 'Re-Send';
+      student.graded = false;
+
+      if (card) {
+        card.classList.remove('is-missing');
+        card.classList.add('is-messaged');
+      }
+
+      const statusEl = document.getElementById(`status-${studentId}`);
+      if (statusEl) {
+        statusEl.className = 'grade-queue-status messaged';
+        statusEl.textContent = 'Message Sent';
+      }
+
+      // Add row2 with time + SpeedGrader
+      let row2 = document.getElementById(`row2-${studentId}`);
+      if (!row2) {
+        row2 = document.createElement('div');
+        row2.className = 'grade-card-row2';
+        row2.id = `row2-${studentId}`;
+        const row1 = card.querySelector('.grade-card-row1');
+        row1.after(row2);
+      }
+      row2.innerHTML = `
+        <span class="rg-time">${timeStr}</span>
+        <a class="rg-link" href="${sgUrl}" target="_blank">View in SpeedGrader</a>
+      `;
+    } else {
+      // Graded student
+      btn.textContent = 'Re-Grade';
+      student.graded = true;
+      student.score  = result.total_score;
+
+      if (card) {
+        card.classList.remove('is-missing');
+        card.classList.add('is-graded');
+      }
+
+      const statusEl = document.getElementById(`status-${studentId}`);
+      if (statusEl) {
+        statusEl.className = 'grade-queue-status graded';
+        statusEl.textContent = 'Graded';
+      }
+
+      // Add row2 with score + time + SpeedGrader
+      let row2 = document.getElementById(`row2-${studentId}`);
+      if (!row2) {
+        row2 = document.createElement('div');
+        row2.className = 'grade-card-row2';
+        row2.id = `row2-${studentId}`;
+        const row1 = card.querySelector('.grade-card-row1');
+        row1.after(row2);
+      }
+      row2.innerHTML = `
+        <span class="rg-score">${result.total_score} / 20 pts</span>
+        <span class="rg-time">${timeStr}</span>
+        <a class="rg-link" href="${sgUrl}" target="_blank">View in SpeedGrader</a>
+      `;
     }
 
-    // Update status label
-    const statusEl = document.getElementById(`status-${studentId}`);
-    if (statusEl) {
-      statusEl.className = 'grade-queue-status graded';
-      statusEl.textContent = 'Graded';
-    }
-
-    // Update score
-    const scoreEl = document.getElementById(`score-${studentId}`);
-    if (scoreEl) {
-      scoreEl.textContent = result.missing ? 'Comment sent' : `${result.total_score} / 20 pts`;
-    }
-
-    // Update time
-    const timeEl = document.getElementById(`time-${studentId}`);
-    if (timeEl) {
-      timeEl.textContent = new Date().toLocaleString('en-US', { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' });
-    }
-
-    // Add SpeedGrader link if not already there
-    const topRow = card ? card.querySelector('.grade-card-top') : null;
-    if (topRow && !topRow.querySelector('.rg-link')) {
-      const sgLink = document.createElement('a');
-      sgLink.className = 'rg-link';
-      sgLink.href = `https://smjuhsd.instructure.com/courses/111811/gradebook/speed_grader?assignment_id=${assignmentId}&student_id=${studentId}`;
-      sgLink.target = '_blank';
-      sgLink.textContent = 'View in SpeedGrader';
-      topRow.insertBefore(sgLink, btn);
-    }
+    // Show the comment
+    preview.textContent = result.overall_comment || '';
+    preview.style.display = 'block';
+    preview.className = isMissing ? 'grade-card-comment missing-comment' : 'grade-card-comment';
 
   } catch (e) {
     btn.textContent = 'Error -- Retry';

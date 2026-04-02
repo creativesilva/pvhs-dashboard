@@ -98,7 +98,9 @@ def parse_gemini_json(text):
         print(f'[gemini] Used regex fallback to parse JSON ({len(scores)} criteria)')
         return {'scores': scores, 'overall_comment': overall}
 
-    raise ValueError(f'Could not parse Gemini JSON response: {text[:200]}')
+    # Log full text for debugging
+    print(f'[gemini] FAILED TO PARSE JSON. Full text:\n{text}')
+    raise ValueError(f'JSON_DEBUG:{text[:1000]}')
 
 # Teacher voice -- English
 VOICE_EN = (

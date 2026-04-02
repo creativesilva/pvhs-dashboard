@@ -426,26 +426,18 @@ Each item in "scores" must have "id" (criterion ID string), "points" (number), a
 
 STUDENT NAME: {student_name}
 ASSIGNMENT: 18 - Editing & Final Contact Sheet
-STATUS: This student has not submitted this assignment.
-DUE DATE: February 25 at 10 PM. This assignment is now past due.
-
-LATE POINT POLICY for Timeliness of Submission criterion (out of 8 pts):
-On Time: 8 pts
-One Day Late: 6 pts
-A Few Days Late (2 to 3 days): 4 pts
-Several Days Late (4 to 7 days): 2 pts
-Several Weeks Late or Not Submitted: 1 pt
+STATUS: This student has not submitted this assignment. It is past due.
 
 {lang_note}
 
-Write a comment directly to the student. The comment should:
-1. Acknowledge the assignment is missing
-2. Tell them they can still earn partial credit if they submit now
-3. Mention specifically what they can still earn on the timeliness score if they turn it in soon
-4. Encourage them to complete and submit the work because their photography matters
-5. Be firm but supportive, not scolding
+Write a short, direct comment to the student (2-3 sentences max). Keep it simple:
+- Use their first name
+- Let them know you noticed the assignment is missing
+- Encourage them to get it turned in because you want to see their photography work
+- Firm but caring, like a coach checking in on a player
 
-Keep it to 4 sentences. Make it feel personal and specific to this assignment, not a copied template.
+Do NOT mention points, rubrics, or late policies. Keep it warm and brief.
+Each message should feel unique and personal, not a template.
 Return only the comment text, no JSON."""
 
         parts = [{"text": prompt}]

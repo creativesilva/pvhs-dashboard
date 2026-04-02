@@ -711,6 +711,13 @@
     border-left-color: #f0b030;
   }
 
+  .grade-card-comment.no-feedback {
+    border-left-color: rgba(255,255,255,0.1);
+    color: var(--text-muted);
+    opacity: 0.5;
+    font-style: italic;
+  }
+
   .rg-score { font-weight: 700; color: var(--teal-light); white-space: nowrap; font-size: 0.85rem; }
   .rg-time  { font-size: 0.72rem; color: var(--text-muted); white-space: nowrap; }
   .rg-link  { font-size: 0.75rem; color: var(--teal-light); text-decoration: none; white-space: nowrap; }
@@ -1847,7 +1854,7 @@ async function loadGradingQueue() {
 
   try {
     const submissions = await canvasFetch(
-      `/courses/111811/assignments/${assignmentId}/submissions?include[]=user&include[]=submission_comments`
+      `/courses/111811/assignments/${assignmentId}/submissions?include[]=user&include[]=submission_comments&include[]=rubric_assessment`
     );
 
     // Match with enrolled students to get period info
@@ -1862,8 +1869,26 @@ async function loadGradingQueue() {
       .filter(sub => sub.user && sub.workflow_state !== 'deleted')
       .map(sub => {
         const student = studentLookup[sub.user_id] || {};
+
+        // Get overall comment: prefer submission_comments, fall back to rubric assessment
         const comments = sub.submission_comments || [];
-        const lastComment = comments.length > 0 ? comments[comments.length - 1].comment : '';
+        let overallComment = '';
+
+        // 1. Check submission comments (left by RIVA or teacher)
+        if (comments.length > 0) {
+          overallComment = comments[comments.length - 1].comment || '';
+        }
+
+        // 2. If no submission comment but has rubric assessment, build summary from rubric
+        if (!overallComment && sub.rubric_assessment) {
+          const rubricComments = Object.values(sub.rubric_assessment)
+            .map(r => r.comments)
+            .filter(c => c && c.trim());
+          if (rubricComments.length > 0) {
+            overallComment = rubricComments.join(' | ');
+          }
+        }
+
         return {
           submissionId: sub.id,
           studentId:    String(sub.user_id),
@@ -1874,7 +1899,7 @@ async function loadGradingQueue() {
           graded:       sub.workflow_state === 'graded',
           gradedAt:     sub.graded_at || '',
           score:        sub.score,
-          lastComment:  lastComment,
+          lastComment:  overallComment,
           spanish:      !!SPANISH_SPEAKERS[String(sub.user_id)]
         };
       })
@@ -1961,6 +1986,8 @@ function renderQueueCard(s, assignmentId) {
   let commentHtml = '';
   if (s.graded && s.lastComment) {
     commentHtml = `<div class="grade-card-comment" id="${previewId}">${escHtml(s.lastComment)}</div>`;
+  } else if (s.graded && !s.lastComment) {
+    commentHtml = `<div class="grade-card-comment no-feedback" id="${previewId}">No feedback on file. Use Re-Grade to generate AI feedback.</div>`;
   } else if (hasMissingMsg) {
     commentHtml = `<div class="grade-card-comment missing-comment" id="${previewId}">${escHtml(s.lastComment)}</div>`;
   } else {

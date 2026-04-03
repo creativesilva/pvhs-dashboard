@@ -336,14 +336,20 @@ Criterion IDs to use:
 {lang_note}
 
 SCORING PHILOSOPHY:
-Be generous with points. These are high school students learning photography.
-If a student made a genuine effort and the work is reasonably complete, score toward the top of the rubric. Give "Meets Expectations" (full marks) on most criteria for students who submitted complete work.
-Only score "Approaching" or "Beginning" if there are clear, obvious problems like missing photos, completely wrong format, or zero visible editing.
-When in doubt, round UP to the higher score.
+Be VERY generous with points. This is a high school art class and photography is subjective.
+Give students the benefit of the doubt. If they made a genuine effort, they deserve top marks.
+Default to "Meets Expectations" (full marks) for each visual criterion unless there is a glaring, obvious problem.
+Only score below full marks if work is clearly incomplete, wrong format, or shows zero effort.
+When in doubt, ALWAYS round UP. Art is subjective. Be kind with points, be helpful with feedback.
 
 FEEDBACK STYLE RULES:
-- For each criterion comment: Write 1 to 2 concise sentences. Do NOT use the student name. Be specific about what you observe, then coach them on one concrete thing to improve next time. The feedback should push them to grow even when the score is high.
+- For each criterion comment: Write 1 to 2 concise sentences. Do NOT use the student name. Be specific about what you observe, then coach them on one concrete thing to improve next time. Feedback should push them to grow even when the score is high.
 - For overall_comment: Address the student by first name only. Write 3 to 5 sentences. Be encouraging and specific about strengths, then give one clear goal for next time.
+
+CRITICAL RULES:
+- You are scoring ONLY these {len(visual_criteria)} visual criteria. Do NOT mention lateness, due dates, submission timing, or timeliness in ANY comment.
+- Use ONLY the exact criterion IDs provided above. Do NOT invent or guess IDs.
+- Return EXACTLY {len(visual_criteria)} scores, one per visual criterion.
 
 Look carefully at both contact sheet pages. Score each criterion based on what you actually see.
 
@@ -393,6 +399,15 @@ Each item in "scores" must have "id" (criterion ID string), "points" (number), a
                 'comment': item.get('comment', '')
             }
 
+        # Strip any Gemini hallucinated entries that don't match our visual criteria IDs
+        valid_ids = {c['id'] for c in visual_criteria}
+        scores_dict = {k: v for k, v in scores_dict.items() if k in valid_ids}
+
+        # Ensure every visual criterion has a score (default to max if Gemini missed it)
+        for c in visual_criteria:
+            if c['id'] not in scores_dict:
+                scores_dict[c['id']] = {'points': c.get('points', 4), 'comment': ''}
+
         # Add timeliness score programmatically (never let AI decide this)
         # Days are rounded DOWN (truncated) to be forgiving at boundaries
         if timeliness_crit:
@@ -408,8 +423,14 @@ Each item in "scores" must have "id" (criterion ID string), "points" (number), a
             else:
                 t_pts, t_comment = 1, f"Submitted {days_late} days late."
             scores_dict[tid] = {'points': t_pts, 'comment': t_comment}
+            print(f'[grade] Timeliness: {days_late} days late -> {t_pts} pts (criterion {tid})')
+
+        # Calculate total score from all criterion scores
+        total_score = sum(s.get('points', 0) for s in scores_dict.values())
+        print(f'[grade] Scores: {[(k, v.get("points")) for k, v in scores_dict.items()]} = {total_score}')
 
         result['scores'] = scores_dict
+        result['total_score'] = total_score
         return result
 
     # ── Gemini: Missing / No Submission ──────────────────────────────────────

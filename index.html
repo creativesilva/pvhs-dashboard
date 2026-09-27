@@ -350,6 +350,7 @@ footer { text-align: center; color: var(--text-faint); font-size: 0.72rem; paddi
       <button class="tab-btn" data-tab="canvas" onclick="switchTab('canvas')">Missing Work</button>
       <button class="tab-btn" data-tab="grading" onclick="switchTab('grading')">Grading</button>
       <button class="tab-btn" data-tab="bulk" onclick="switchTab('bulk')">Bulk Comment</button>
+      <button class="tab-btn" data-tab="cameras" onclick="switchTab('cameras')">Cameras</button>
     </div>
 
     <!-- Roster Tab -->
@@ -522,6 +523,49 @@ footer { text-align: center; color: var(--text-faint); font-size: 0.72rem; paddi
       </div>
     </div>
 
+    <div id="tab-cameras" class="tab-content">
+      <style>
+        .camlbl{display:block;font-size:0.6rem;letter-spacing:0.1em;text-transform:uppercase;color:var(--text-faint);margin-bottom:4px;}
+        tr.camrow.ret td{opacity:0.5;}
+        #cam-list .tbl td{vertical-align:top;}
+      </style>
+      <div class="panel">
+        <div class="stripe"></div>
+        <div class="section-head">
+          <div class="head-row"><span class="eyebrow">Equipment</span><h2>Camera Checkouts</h2><span class="pill info" id="cam-summary">&middot;</span></div>
+          <span class="rule"></span>
+        </div>
+        <div class="controls" style="margin-bottom:14px;gap:10px;">
+          <button class="btn" onclick="openCamEdit(null)">+ New checkout</button>
+          <button class="btn ghost" onclick="loadCameras()">Refresh</button>
+          <span class="sub" style="margin-left:auto;align-self:center;">Double-click a row to edit. Contact numbers are private to you.</span>
+        </div>
+        <div id="cam-list"><div class="sub">Loading&#8230;</div></div>
+      </div>
+    </div>
+
+    <div class="modal-backdrop" id="camModal">
+      <div class="modal">
+        <div class="stripe"></div>
+        <div class="modal-head"><div><h3 id="camModalTitle">Edit checkout</h3></div><button class="modal-close" onclick="closeCamEdit()" aria-label="Close">&times;</button></div>
+        <div style="padding:18px 20px 22px;display:flex;flex-direction:column;gap:12px;">
+          <div><label class="camlbl">Student ID</label><input class="field" id="cam-f-sid" style="width:100%;" placeholder="ID number" /></div>
+          <div><label class="camlbl">Camera / kit</label><select class="field" id="cam-f-camera" style="width:100%;"></select></div>
+          <div style="display:flex;gap:12px;flex-wrap:wrap;">
+            <div style="flex:1 1 140px;"><label class="camlbl">Checked out</label><input class="field" type="date" id="cam-f-out" style="width:100%;" /></div>
+            <div style="flex:1 1 140px;"><label class="camlbl">Due back</label><input class="field" type="date" id="cam-f-due" style="width:100%;" /></div>
+          </div>
+          <label style="display:flex;align-items:center;gap:9px;font-size:0.9rem;color:var(--text-dim);cursor:pointer;"><input type="checkbox" id="cam-f-returned" /> Returned (grays it out on the student calendar)</label>
+          <div id="cam-f-contact" class="sub" style="font-size:0.8rem;"></div>
+          <div style="display:flex;gap:10px;flex-wrap:wrap;margin-top:6px;">
+            <button class="btn" onclick="saveCamEdit()">Save</button>
+            <button class="btn ghost" onclick="closeCamEdit()">Cancel</button>
+            <button class="btn ghost" id="cam-f-delete" onclick="deleteCamFromModal()" style="margin-left:auto;color:#ff9a9a;border-color:rgba(255,120,120,0.4);">Delete</button>
+          </div>
+        </div>
+      </div>
+    </div>
+
     <footer>PVHS Teacher Command Center. Roster data is confidential.</footer>
   </div>
 </div>
@@ -613,6 +657,7 @@ function hideLoading(){ document.getElementById('loading-overlay').classList.rem
 function switchTab(tab){
   document.querySelectorAll('.tab-btn').forEach(b=>b.classList.toggle('active',b.dataset.tab===tab));
   document.querySelectorAll('.tab-content').forEach(el=>el.classList.toggle('active',el.id==='tab-'+tab));
+  if(tab==='cameras' && typeof loadCameras==='function') loadCameras();
 }
 
 // ---- Roster support ----
@@ -992,6 +1037,86 @@ async function sendBulkComments(){
   document.getElementById('bulk-results').innerHTML=`<div class="pill ${failed?'flag':'present'}" style="font-size:0.8rem;padding:6px 12px;">Sent ${sent} comment${sent!==1?'s':''}${failed?`, ${failed} failed`:''}.</div>`;
   btn.textContent='Send to All Missing Students'; btn.disabled=false;
 }
+
+// ---- Camera checkouts ----
+let CAM_STATE={cameras:[],checkouts:[]}, camEditId=null;
+function camToday(){ return new Date().toISOString().slice(0,10); }
+function camFmt(iso){ if(!iso)return''; const p=iso.split('-'); const m=['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec']; return m[+p[1]-1]+' '+(+p[2]); }
+async function loadCameras(){
+  const list=document.getElementById('cam-list'); if(!list) return;
+  try{
+    const r=await api('/api/camera/checkouts'); const d=await r.json();
+    CAM_STATE={cameras:d.cameras||[], checkouts:d.checkouts||[]};
+    renderCameras();
+  }catch(e){ list.innerHTML='<div class="sub">Could not load checkouts.</div>'; }
+}
+function renderCameras(){
+  const list=document.getElementById('cam-list'); if(!list) return;
+  const items=(CAM_STATE.checkouts||[]).slice().sort((a,b)=>{
+    if(!!a.returned!==!!b.returned) return a.returned?1:-1;   // active first
+    return (a.due||'').localeCompare(b.due||'');
+  });
+  const outN=items.filter(c=>!c.returned).length;
+  document.getElementById('cam-summary').textContent=outN+' of '+(CAM_STATE.cameras.length||0)+' out';
+  if(!items.length){ list.innerHTML='<div class="sub">No checkouts yet. Students check out at creativesilva.com/camera-checkout.html, or use New checkout.</div>'; return; }
+  const rows=items.map(c=>{
+    const overdue=!c.returned && c.due && c.due<camToday();
+    const status = c.returned ? '<span class="pill present">Returned</span>'
+      : (overdue ? '<span class="pill absent">Overdue</span>' : '<span class="pill info">Out</span>');
+    const contact=[
+      c.student_cell?('Student '+esc(c.student_cell)):'',
+      c.parent_guardian?(esc(c.parent_guardian)+(c.parent_cell?' '+esc(c.parent_cell):'')):''
+    ].filter(Boolean).join(' &middot; ') || NONE;
+    const name=esc(c.student_name||'')||('<span class="pill flag">'+esc(c.flag||'unknown ID')+'</span>');
+    const retBtn=c.returned
+      ? `<button class="btn small ghost" onclick="camReturn('${c.id}',false)">Reopen</button>`
+      : `<button class="btn small" onclick="camReturn('${c.id}',true)">Returned</button>`;
+    return `<tr class="camrow${c.returned?' ret':''}" ondblclick="openCamEdit('${c.id}')">
+      <td>${esc(c.camera)}</td>
+      <td class="name">${name}${c.student_id?`<div class="muted num" style="font-size:11px">${esc(c.student_id)}</div>`:''}</td>
+      <td>${esc(c.period||'')}</td>
+      <td>${camFmt(c.out)}</td>
+      <td>${camFmt(c.due)}</td>
+      <td>${status}</td>
+      <td style="font-size:0.76rem;color:var(--text-dim);max-width:220px;">${contact}</td>
+      <td style="white-space:nowrap;">${retBtn} <button class="btn small ghost" onclick="openCamEdit('${c.id}')">Edit</button></td>
+    </tr>`;
+  }).join('');
+  list.innerHTML=`<table class="tbl"><thead><tr><th>Camera</th><th>Student</th><th>Per</th><th>Out</th><th>Due</th><th>Status</th><th>Contact (private)</th><th></th></tr></thead><tbody>${rows}</tbody></table>`;
+}
+function _camPop(sel,val){ sel.innerHTML=(CAM_STATE.cameras||[]).map(c=>`<option value="${esc(c)}"${c===val?' selected':''}>${esc(c)}</option>`).join(''); }
+function openCamEdit(id){
+  camEditId=id;
+  const c = id ? (CAM_STATE.checkouts||[]).find(x=>x.id===id) : null;
+  document.getElementById('camModalTitle').textContent = id?'Edit checkout':'New checkout';
+  document.getElementById('cam-f-sid').value = c?(c.student_id||''):'';
+  _camPop(document.getElementById('cam-f-camera'), c?c.camera:(CAM_STATE.cameras[0]||''));
+  document.getElementById('cam-f-out').value = c?(c.out||camToday()):camToday();
+  const dfl=new Date(); dfl.setDate(dfl.getDate()+7);
+  document.getElementById('cam-f-due').value = c?(c.due||''):dfl.toISOString().slice(0,10);
+  document.getElementById('cam-f-returned').checked = c?!!c.returned:false;
+  document.getElementById('cam-f-delete').style.display = id?'':'none';
+  document.getElementById('cam-f-contact').innerHTML = (c && (c.student_cell||c.parent_cell||c.parent_guardian))
+    ? ('Emergency contact: '+esc([c.student_cell,c.parent_guardian,c.parent_cell].filter(Boolean).join(' / '))) : '';
+  document.getElementById('camModal').classList.add('open');
+}
+function closeCamEdit(){ document.getElementById('camModal').classList.remove('open'); camEditId=null; }
+async function saveCamEdit(){
+  const body={
+    student_id:document.getElementById('cam-f-sid').value.trim(),
+    camera:document.getElementById('cam-f-camera').value,
+    out:document.getElementById('cam-f-out').value,
+    due:document.getElementById('cam-f-due').value,
+    returned:document.getElementById('cam-f-returned').checked
+  };
+  if(!body.student_id||!body.camera||!body.due){ alert('Student ID, camera, and due date are required.'); return; }
+  if(camEditId){ body.id=camEditId; await api('/api/camera/update',{method:'POST',body:JSON.stringify(body)}); }
+  else { await api('/api/camera/checkout',{method:'POST',body:JSON.stringify(body)}); }
+  closeCamEdit(); loadCameras();
+}
+async function camReturn(id,returned){ await api('/api/camera/return',{method:'POST',body:JSON.stringify({id,returned})}); loadCameras(); }
+async function deleteCamFromModal(){ if(camEditId && confirm('Delete this checkout?')){ const id=camEditId; closeCamEdit(); await api('/api/camera/delete',{method:'POST',body:JSON.stringify({id})}); loadCameras(); } }
+document.addEventListener('click',e=>{ const m=document.getElementById('camModal'); if(m&&e.target===m) m.classList.remove('open'); });
 </script>
 </body>
 </html>

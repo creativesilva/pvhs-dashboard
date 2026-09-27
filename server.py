@@ -121,6 +121,8 @@ class Handler(BaseHTTPRequestHandler):
             self.proxy_canvas('GET')
         elif path == '/api/status':
             self.handle_status()
+        elif path == '/api/canvas-test':
+            self.handle_canvas_test()
         elif path in ('/', ''):
             self.path = '/index.html'
             self.serve_file()
@@ -190,6 +192,28 @@ class Handler(BaseHTTPRequestHandler):
             'canvas_host': CANVAS_HOST,
             'canvas_connected': bool(CANVAS_TOKEN),
         })
+
+    def handle_canvas_test(self):
+        if not CANVAS_TOKEN:
+            self.json_response(503, {'error': 'No token configured'})
+            return
+        ctx = ssl.create_default_context()
+        conn = http.client.HTTPSConnection(CANVAS_HOST, context=ctx)
+        try:
+            conn.request('GET', '/api/v1/users/self', headers={
+                'Authorization': f'Bearer {CANVAS_TOKEN}',
+            })
+            resp = conn.getresponse()
+            body = resp.read()
+            self.json_response(200, {
+                'canvas_status': resp.status,
+                'token_length': len(CANVAS_TOKEN),
+                'token_prefix': CANVAS_TOKEN[:6],
+            })
+        except Exception as e:
+            self.json_response(500, {'error': str(e)})
+        finally:
+            conn.close()
 
     # -- Canvas proxy -------------------------------------------------------
 

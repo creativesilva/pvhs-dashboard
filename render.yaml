@@ -3,7 +3,7 @@ services:
     name: pvhs-dashboard
     runtime: python
     buildCommand: pip install -r requirements.txt
-    startCommand: python server.py
+    startCommand: python -u server.py
     plan: free
     envVars:
       - key: PYTHON_VERSION

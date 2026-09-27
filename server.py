@@ -14,8 +14,11 @@ import http.client
 import ssl
 import json
 import os
+import sys
 import mimetypes
 import time
+
+sys.stdout.reconfigure(line_buffering=True)
 
 PORT         = int(os.environ.get('PORT', 8080))
 CANVAS_HOST  = 'smjuhsd.instructure.com'

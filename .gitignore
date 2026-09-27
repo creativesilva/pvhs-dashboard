@@ -2,3 +2,5 @@ __pycache__/
 *.pyc
 .DS_Store
 roster_data.json
+checkouts.json
+checkouts.json.tmp

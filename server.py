@@ -19,6 +19,7 @@ import mimetypes
 import time
 import base64
 import gzip
+import threading
 
 sys.stdout.reconfigure(line_buffering=True)
 
@@ -48,6 +49,63 @@ if _roster_env:
             print(f'[roster] Auto-loaded from env: {len(data["students"])} students, {len(data["sections"])} sections')
         except Exception as e:
             print(f'[roster] Failed to load from env: {e}')
+
+# ---------------------------------------------------------------------------
+# Camera checkout: durable storage on the Render disk (/var/data), roster lookup
+# ---------------------------------------------------------------------------
+
+# Camera inventory (edit this list to match the real kits; the form + calendar read it).
+CAMERAS = ["R50 Kit 1", "R50 Kit 2", "R50 Kit 3", "R50 Kit 4", "R50 Kit 5", "R50 Kit 6"]
+
+def _data_dir():
+    """The Render persistent disk mount, or the app dir as a local/dev fallback."""
+    for d in ('/var/data', '/data'):
+        if os.path.isdir(d):
+            return d
+    return SERVE_DIR
+
+CHECKOUTS_PATH = os.path.join(_data_dir(), 'checkouts.json')
+_checkouts_lock = threading.Lock()
+
+def load_checkouts():
+    try:
+        with open(CHECKOUTS_PATH) as f:
+            return json.load(f)
+    except Exception:
+        return []
+
+def save_checkouts(items):
+    tmp = CHECKOUTS_PATH + '.tmp'
+    with open(tmp, 'w') as f:
+        json.dump(items, f)
+    os.replace(tmp, CHECKOUTS_PATH)
+
+def _roster_students():
+    try:
+        with open(os.path.join(SERVE_DIR, 'roster_data.json')) as f:
+            return json.load(f).get('students', [])
+    except Exception:
+        return []
+
+def resolve_student(student_id):
+    """Look a student up by ID in the roster. Returns name + period + emergency phones.
+    Never exposed on public endpoints; used server-side only."""
+    sid = str(student_id).strip()
+    for s in _roster_students():
+        if str(s.get('student_id', '')).strip() == sid:
+            first = (s.get('first_name') or '').strip()
+            last = (s.get('last_name') or '').strip()
+            return {
+                'found': True,
+                'name': (last + ', ' + first).strip().strip(','),
+                'period': str(s.get('period', '')),
+                'course': s.get('course') or s.get('course_code') or '',
+                'student_cell': s.get('Student Cell') or s.get('student_cell') or '',
+                'parent_guardian': s.get('Parent Guardian') or s.get('parent_guardian') or '',
+                'parent_cell': s.get('Parent Cell') or s.get('parent_cell') or '',
+            }
+    return {'found': False, 'name': '', 'period': '', 'course': '',
+            'student_cell': '', 'parent_guardian': '', 'parent_cell': ''}
 
 # ---------------------------------------------------------------------------
 # Firebase ID-token verification (lightweight, no Admin SDK needed)
@@ -141,6 +199,14 @@ class Handler(BaseHTTPRequestHandler):
             if not self.require_auth():
                 return
             self.handle_roster()
+        elif path == '/api/camera/calendar':
+            self.handle_camera_calendar()          # PUBLIC, sanitized (no names/phones/IDs)
+        elif path == '/api/camera/cameras':
+            self.handle_camera_cameras()           # PUBLIC, inventory list only
+        elif path == '/api/camera/checkouts':
+            if not self.require_auth():
+                return
+            self.handle_camera_checkouts()         # AUTH, full detail for the teacher
         elif path in ('/', ''):
             self.path = '/index.html'
             self.serve_file()
@@ -149,6 +215,11 @@ class Handler(BaseHTTPRequestHandler):
 
     def do_POST(self):
         path = urlparse(self.path).path
+        # PUBLIC student checkout (no auth: the static site can't hold a secret key).
+        # Validated server-side; resolves the ID to a name without echoing it back.
+        if path == '/api/camera/checkout':
+            self.handle_camera_checkout()
+            return
         if not self.require_auth():
             return
         if path == '/api/auth/verify':
@@ -159,6 +230,12 @@ class Handler(BaseHTTPRequestHandler):
             self.handle_batch_grades()
         elif path == '/api/batch/comments':
             self.handle_bulk_comments()
+        elif path == '/api/camera/return':
+            self.handle_camera_return()            # AUTH: mark returned
+        elif path == '/api/camera/update':
+            self.handle_camera_update()            # AUTH: edit a checkout
+        elif path == '/api/camera/delete':
+            self.handle_camera_delete()            # AUTH: remove a checkout
         elif path.startswith('/api/v1/'):
             self.proxy_canvas('POST')
         else:
@@ -247,6 +324,139 @@ class Handler(BaseHTTPRequestHandler):
             'students': len(data['students']),
             'sections': len(data['sections']),
         })
+
+    # -- Camera checkout ----------------------------------------------------
+
+    def _client_ip(self):
+        xff = self.headers.get('X-Forwarded-For', '')
+        return xff.split(',')[0].strip() if xff else self.client_address[0]
+
+    def handle_camera_cameras(self):
+        """PUBLIC: the camera inventory only (for the form dropdown + the calendar)."""
+        self.json_response(200, {'cameras': CAMERAS})
+
+    def handle_camera_calendar(self):
+        """PUBLIC: sanitized checkouts. NO names, IDs, or phone numbers, ever."""
+        out = []
+        for c in load_checkouts():
+            out.append({
+                'id': c.get('id'),
+                'camera': c.get('camera', ''),
+                'out': c.get('out', ''),
+                'due': c.get('due', ''),
+                'returned': bool(c.get('returned')),
+                'returned_date': c.get('returned_date', ''),
+                'status': 'returned' if c.get('returned') else 'out',
+            })
+        self.json_response(200, {'cameras': CAMERAS, 'checkouts': out})
+
+    def handle_camera_checkouts(self):
+        """AUTH: full detail for the teacher (names + emergency phones)."""
+        self.json_response(200, {'cameras': CAMERAS, 'checkouts': load_checkouts()})
+
+    def handle_camera_checkout(self):
+        """PUBLIC submit. Student enters ID + camera + dates only. We resolve the ID to a
+        name/phones server-side, store it, and return a generic ack with NO name echoed
+        (so the roster can't be harvested). Unknown IDs are recorded + flagged, not rejected."""
+        data = self._read_json_body()
+        if data is None:
+            return
+        sid = str(data.get('student_id', '')).strip()
+        camera = str(data.get('camera', '')).strip()
+        due = str(data.get('due', '')).strip()
+        out = str(data.get('out', '')).strip() or time.strftime('%Y-%m-%d')
+        if not sid or not camera or not due:
+            self.json_response(400, {'error': 'Please enter your student ID, a camera, and a due date.'})
+            return
+        r = resolve_student(sid)
+        flags = []
+        if not r['found']:
+            flags.append('unknown student id')
+        if camera not in CAMERAS:
+            flags.append('unknown camera')
+        rec = {
+            'id': 'ck_' + str(int(time.time() * 1000)),
+            'student_id': sid,
+            'student_name': r['name'],
+            'period': r['period'],
+            'course': r['course'],
+            'student_cell': r['student_cell'],
+            'parent_guardian': r['parent_guardian'],
+            'parent_cell': r['parent_cell'],
+            'camera': camera,
+            'out': out,
+            'due': due,
+            'returned': False,
+            'returned_date': '',
+            'created': time.strftime('%Y-%m-%dT%H:%M:%SZ', time.gmtime()),
+            'flag': '; '.join(flags),
+            '_ip': self._client_ip(),
+        }
+        with _checkouts_lock:
+            items = load_checkouts()
+            items.append(rec)
+            save_checkouts(items)
+        self.json_response(200, {'ok': True, 'message': 'Checked out. See Mr. Silva if anything looks off.'})
+
+    def _find_checkout(self, items, cid):
+        for x in items:
+            if x.get('id') == cid:
+                return x
+        return None
+
+    def handle_camera_return(self):
+        data = self._read_json_body()
+        if data is None:
+            return
+        cid = str(data.get('id', ''))
+        with _checkouts_lock:
+            items = load_checkouts()
+            c = self._find_checkout(items, cid)
+            if not c:
+                self.json_response(404, {'error': 'Checkout not found'})
+                return
+            c['returned'] = bool(data.get('returned', True))
+            c['returned_date'] = (data.get('returned_date') or
+                                  (time.strftime('%Y-%m-%d') if c['returned'] else ''))
+            save_checkouts(items)
+        self.json_response(200, {'ok': True})
+
+    def handle_camera_update(self):
+        data = self._read_json_body()
+        if data is None:
+            return
+        cid = str(data.get('id', ''))
+        with _checkouts_lock:
+            items = load_checkouts()
+            c = self._find_checkout(items, cid)
+            if not c:
+                self.json_response(404, {'error': 'Checkout not found'})
+                return
+            for k in ('camera', 'out', 'due', 'returned', 'returned_date'):
+                if k in data:
+                    c[k] = data[k]
+            if 'student_id' in data and str(data['student_id']).strip() != c.get('student_id'):
+                c['student_id'] = str(data['student_id']).strip()
+                r = resolve_student(c['student_id'])
+                c['student_name'] = r['name']
+                c['period'] = r['period']
+                c['course'] = r['course']
+                c['student_cell'] = r['student_cell']
+                c['parent_guardian'] = r['parent_guardian']
+                c['parent_cell'] = r['parent_cell']
+                c['flag'] = '' if r['found'] else 'unknown student id'
+            save_checkouts(items)
+        self.json_response(200, {'ok': True})
+
+    def handle_camera_delete(self):
+        data = self._read_json_body()
+        if data is None:
+            return
+        cid = str(data.get('id', ''))
+        with _checkouts_lock:
+            items = [x for x in load_checkouts() if x.get('id') != cid]
+            save_checkouts(items)
+        self.json_response(200, {'ok': True})
 
     # -- Canvas proxy -------------------------------------------------------
 

@@ -58,14 +58,36 @@ h1 { font-size: 1.5rem; } h2 { font-size: 1.05rem; }
 .muted { color: var(--text-faint); }
 .wrap { max-width: 1280px; margin: 0 auto; padding: 28px 24px 64px; }
 
-/* ---- Site header ---- */
-.site-header { background: #111111; border-bottom: 1px solid rgba(255,255,255,0.06); height: var(--header-h); position: relative; z-index: 100; }
-.header-inner { max-width: 1200px; margin: 0 auto; height: 100%; display: flex; align-items: center; justify-content: center; padding: 0 2rem; gap: 2rem; }
-.header-inner nav { display: flex; gap: 1.5rem; }
-.header-inner nav a { font-family: var(--font-head); font-size: 0.72rem; font-weight: 600; text-transform: uppercase; letter-spacing: 0.14em; color: var(--text-dim); text-decoration: none; transition: color .2s; }
-.header-inner nav a:hover { color: var(--text); }
-.header-inner .brand { display: flex; align-items: center; }
-.header-inner .brand img { height: 40px; }
+/* ---- Catalog header ---- */
+.catalog-sticky { position: sticky; top: 0; z-index: 500; background: linear-gradient(rgba(4,13,13,0.88), rgba(3,23,23,0.74)); backdrop-filter: blur(20px) saturate(1.4); -webkit-backdrop-filter: blur(20px) saturate(1.4); border-top: 3px solid var(--teal-bright); border-bottom: 1px solid rgba(0,184,184,0.22); box-shadow: 0 16px 40px -20px rgba(0,0,0,0.72); }
+.catalog-sticky-inner { max-width: 1200px; margin: 0 auto; padding: 0 32px; }
+.catalog-titlebar { display: flex; align-items: center; gap: 14px; flex-wrap: wrap; padding: 16px 0 15px; }
+.catalog-titlebar .page-title { margin: 0 auto 0 0; text-align: left; flex: 0 1 auto; font-family: var(--font-head); font-weight: 700; text-transform: uppercase; font-size: clamp(1.45rem,2.9vw,2.05rem); line-height: 1; letter-spacing: 0.005em; color: var(--text); }
+.cal-btn { flex: 0 0 auto; height: 32px; display: inline-flex; align-items: center; padding: 0 22px; font-family: var(--font-head); font-weight: 600; letter-spacing: 0.12em; text-transform: uppercase; font-size: 0.78rem; color: #fff; text-decoration: none; white-space: nowrap; background: var(--teal); border: 1px solid var(--teal-bright); transition: filter .15s; }
+.cal-btn:hover { filter: brightness(1.18); }
+.header-clock { flex: 0 0 auto; width: 158px; height: 48px; border: 0; background: transparent; display: block; }
+.cat-bar { background: rgba(0,0,0,0.18); border-top: 1px solid rgba(0,184,184,0.24); }
+.cat-bar-inner { display: flex; align-items: stretch; flex-wrap: wrap; min-height: 50px; }
+.cat-bar-label { display: flex; align-items: center; padding: 0 20px 0 0; margin-right: 4px; border-right: 1px solid rgba(255,255,255,0.08); }
+.cat-bar-logo-link { display: flex; align-items: center; transition: opacity .15s; }
+.cat-bar-logo-link:hover { opacity: 0.72; }
+.cat-bar-logo { height: 29px; width: auto; display: block; }
+.cat-bar-items { display: flex; align-items: stretch; flex-wrap: wrap; flex: 1 1 auto; }
+.cat-bar-course { position: relative; display: flex; }
+.cbc-trigger { display: flex; align-items: center; gap: 7px; padding: 0 19px; white-space: nowrap; font-family: var(--font-head); font-weight: 600; letter-spacing: 0.1em; text-transform: uppercase; font-size: 0.75rem; color: rgba(234,247,247,0.8); text-decoration: none; background: none; border: 0; cursor: pointer; transition: background .15s, color .15s; }
+.cbc-trigger:hover { background: rgba(0,184,184,0.12); color: #fff; }
+.cbc-trigger-catalog { align-self: center; margin: 7px 0 7px 4px; min-height: 32px; padding: 0 15px; gap: 9px; border: 1px solid rgba(0,184,184,0.42); background: rgba(0,0,0,0.26); }
+.cbc-trigger-catalog:hover { background: rgba(0,184,184,0.14); border-color: rgba(0,184,184,0.72); }
+.cat-bar-course.open .cbc-trigger { background: rgba(0,184,184,0.16); color: #fff; box-shadow: inset 0 -2px 0 var(--teal-bright); }
+.cat-bar-course.open .cbc-caret { transform: rotate(180deg); }
+.cbc-menu { display: none; position: absolute; top: calc(100% + 1px); left: 0; min-width: 264px; max-height: 74vh; overflow-y: auto; z-index: 600; background: rgba(6,26,25,0.85); border: 2px solid var(--teal-bright); border-width: 2px 1px 1px; border-color: var(--teal-bright) rgba(0,184,184,0.32) rgba(0,184,184,0.32); box-shadow: 0 18px 48px rgba(0,0,0,0.6); padding: 6px; backdrop-filter: blur(16px) saturate(1.2); }
+.cat-bar-course.open .cbc-menu { display: block; }
+.cbc-mod { display: block; color: rgba(234,247,247,0.85); text-decoration: none; font-size: 0.82rem; font-weight: 500; letter-spacing: 0.05em; text-transform: uppercase; padding: 10px 13px; transition: background .12s, color .12s; }
+.cbc-mod:hover { background: rgba(0,184,184,0.16); color: #fff; }
+.cbc-mod.cbc-main { color: rgb(234,247,247); font-weight: 700; letter-spacing: 0.09em; border-bottom: 1px solid rgba(255,255,255,0.12); margin-bottom: 5px; padding-bottom: 12px; }
+.cbc-mod.cbc-teacher { color: var(--teal-mint); font-weight: 700; }
+.cbc-course-hd { font-family: var(--font-head); font-size: 0.62rem; letter-spacing: 0.2em; text-transform: uppercase; color: var(--text-faint); padding: 14px 13px 4px; }
+.cbc-course-hd + .cbc-mod { border-top: 1px solid rgba(0,184,184,0.14); }
 
 /* ---- Topbar ---- */
 .topbar {
@@ -85,7 +107,7 @@ h1 { font-size: 1.5rem; } h2 { font-size: 1.05rem; }
 .user-avatar { width: 32px; height: 32px; border-radius: 6px; border: 1px solid var(--teal); }
 
 /* ---- Login ---- */
-#login-screen { display: flex; align-items: center; justify-content: center; min-height: calc(100vh - var(--header-h)); padding: 2rem; }
+#login-screen { display: flex; align-items: center; justify-content: center; min-height: 70vh; padding: 2rem; }
 .login-card { background: var(--panel); border: 1px solid var(--teal); padding: 3rem; max-width: 440px; width: 100%; text-align: center; }
 .login-card img { width: 100px; margin-bottom: 1.5rem; }
 .login-card h1 { font-size: 1.2rem; color: var(--teal-light); margin-bottom: 0.5rem; letter-spacing: 0.14em; }
@@ -214,8 +236,12 @@ textarea.field { font-family: var(--font-body); resize: vertical; }
 
 /* ---- Responsive ---- */
 @media (max-width: 768px) {
-  .header-inner .nav-left, .header-inner .nav-right { display: none; }
-  .site-header { height: 48px; } :root { --header-h: 48px; }
+  .catalog-sticky-inner { padding: 0 16px; }
+  .catalog-titlebar { gap: 10px; padding-bottom: 10px; }
+  .header-clock { display: none; }
+  .cat-bar-label { padding: 0 12px 0 0; }
+  .cbc-trigger { padding: 12px 14px; font-size: 0.72rem; }
+  .cbc-trigger-catalog { padding: 0 14px; }
   .topbar { padding: 10px 14px; gap: 10px; flex-wrap: wrap; }
   .topbar .titles h1 { font-size: 1rem; }
   .back-link { display: none; }
@@ -229,23 +255,38 @@ footer { text-align: center; color: var(--text-faint); font-size: 0.72rem; paddi
 </head>
 <body>
 
-<!-- Site Header -->
-<header class="site-header">
-  <div class="header-inner">
-    <nav class="nav-left" aria-label="Primary">
-      <a href="https://www.creativesilva.com/artist-statement.html">Artist Statement</a>
-      <a href="https://www.creativesilva.com/artist-biography.html">Artist Biography</a>
-    </nav>
-    <a class="brand" href="https://www.creativesilva.com/" aria-label="Chris Silva, Home">
-      <img src="https://www.creativesilva.com/logos/CS_Logo_Vector.svg" alt="Chris Silva">
-    </a>
-    <nav class="nav-right" aria-label="Primary">
-      <a href="https://www.creativesilva.com/work.html">Selected Works</a>
-      <a href="https://www.creativesilva.com/curriculum.html">Curriculum</a>
-      <a href="https://www.creativesilva.com/contact.html">Contact</a>
+<!-- Catalog Header -->
+<div class="catalog-sticky">
+  <div class="catalog-sticky-inner">
+    <div class="catalog-titlebar">
+      <h1 class="page-title">Curriculum Catalog</h1>
+      <a class="cal-btn" href="https://www.creativesilva.com/build-resources.html">Build Resources</a>
+      <a class="cal-btn" href="https://www.creativesilva.com/calendar.html">Calendar</a>
+      <button type="button" class="cal-btn" id="cat-search-btn" onclick="switchTab('canvas');document.getElementById('dashboard').style.display='block';">&#x1F50D; Search</button>
+      <iframe class="header-clock" src="https://www.creativesilva.com/assets/embeds/period-clock.html" title="Class period countdown" scrolling="no" loading="lazy"></iframe>
+    </div>
+    <nav class="cat-bar" aria-label="Quick catalog menu">
+      <div class="cat-bar-inner">
+        <span class="cat-bar-label">
+          <a class="cat-bar-logo-link" href="https://www.creativesilva.com/" aria-label="Back to creativesilva.com">
+            <img class="cat-bar-logo" src="https://www.creativesilva.com/logos/CS_Logo_Only_Teal.svg" alt="Chris Silva">
+          </a>
+        </span>
+        <div class="cat-bar-items">
+          <div class="cat-bar-course cat-bar-catalog" id="catalogDropdown">
+            <button type="button" class="cbc-trigger cbc-trigger-catalog" onclick="this.parentElement.classList.toggle('open')">Catalog <span class="cbc-caret">&#x25BE;</span></button>
+            <div class="cbc-menu">
+              <a href="https://www.creativesilva.com/curriculum.html" class="cbc-mod cbc-main">&larr; Main Catalog</a>
+              <a href="https://www.creativesilva.com/curriculum.html#teacher-resources" class="cbc-mod cbc-teacher">Teacher Resources</a>
+              <a href="https://www.creativesilva.com/build-resources.html" class="cbc-mod">Build Resources</a>
+              <a href="https://www.creativesilva.com/curriculum.html#universal" class="cbc-mod">All Courses</a>
+            </div>
+          </div>
+        </div>
+      </div>
     </nav>
   </div>
-</header>
+</div>
 
 <!-- Login Screen -->
 <div id="login-screen">
@@ -278,7 +319,7 @@ footer { text-align: center; color: var(--text-faint); font-size: 0.72rem; paddi
     </div>
     <div class="topbar-right">
       <div class="user-info" id="user-info">
-        <img class="user-avatar" id="user-avatar" src="PV_Monogram.png" alt="">
+        <img class="user-avatar" id="user-avatar" src="Mr.Silva_Profile_Picture.png" alt="">
         <span id="user-name">Mr. Silva</span>
       </div>
       <button id="themeToggle" class="btn ghost small" onclick="toggleTheme()">
@@ -317,12 +358,9 @@ footer { text-align: center; color: var(--text-faint); font-size: 0.72rem; paddi
           <option value="el">Sort: EL first</option>
         </select>
       </div>
-      <div class="support-legend" style="justify-content:space-between;">
-        <div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap;">
-          <span class="pill iep">IEP</span><span class="pill p504">504</span>
-          <span class="pill ssa">SSA</span><span class="pill el">EL</span>
-        </div>
-        <label class="btn ghost small" style="cursor:pointer;"><input type="file" accept=".json" id="rosterUpload" style="display:none;" onchange="uploadRosterFile(this)">Upload Roster JSON</label>
+      <div class="support-legend">
+        <span class="pill iep">IEP</span><span class="pill p504">504</span>
+        <span class="pill ssa">SSA</span><span class="pill el">EL</span>
       </div>
       <div class="panel flush" id="panel-students">
         <div class="stripe"></div>
@@ -448,7 +486,7 @@ async function initFirebase(){
       firebaseToken=await user.getIdToken();
       currentUser=user;
       document.getElementById('user-name').textContent='Mr. Silva';
-      document.getElementById('user-avatar').src='PV_Monogram.png';
+      document.getElementById('user-avatar').src='Mr.Silva_Profile_Picture.png';
       document.getElementById('login-screen').style.display='none';
       document.getElementById('dashboard').style.display='block';
       loadDashboard();
@@ -630,20 +668,6 @@ function renderRoster(){
   document.getElementById('supportFilter').addEventListener('change',render);
   document.getElementById('sortBy').addEventListener('change',render);
   render();
-}
-
-// ---- Roster upload ----
-async function uploadRosterFile(input){
-  const file=input.files[0]; if(!file) return;
-  showLoading('Uploading roster data...');
-  try {
-    const text=await file.text();
-    const data=JSON.parse(text);
-    const r=await api('/api/roster/upload',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(data)});
-    if(r.ok){ const res=await r.json(); alert(`Uploaded ${res.students} students, ${res.sections} sections.`); location.reload(); }
-    else { const e=await r.json(); alert('Upload failed: '+(e.error||r.status)); }
-  } catch(e){ alert('Error: '+e.message); }
-  hideLoading(); input.value='';
 }
 
 // ---- Student modal ----

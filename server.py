@@ -17,6 +17,8 @@ import os
 import sys
 import mimetypes
 import time
+import base64
+import gzip
 
 sys.stdout.reconfigure(line_buffering=True)
 
@@ -32,6 +34,20 @@ ALLOWED_EMAILS = [
     for e in os.environ.get('ALLOWED_EMAILS', '').split(',')
     if e.strip()
 ]
+
+# Auto-load roster data from ROSTER_DATA env var (base64+gzip compressed)
+_roster_env = os.environ.get('ROSTER_DATA', '')
+if _roster_env:
+    _roster_path = os.path.join(SERVE_DIR, 'roster_data.json')
+    if not os.path.exists(_roster_path):
+        try:
+            raw = gzip.decompress(base64.b64decode(_roster_env))
+            with open(_roster_path, 'wb') as f:
+                f.write(raw)
+            data = json.loads(raw)
+            print(f'[roster] Auto-loaded from env: {len(data["students"])} students, {len(data["sections"])} sections')
+        except Exception as e:
+            print(f'[roster] Failed to load from env: {e}')
 
 # ---------------------------------------------------------------------------
 # Firebase ID-token verification (lightweight, no Admin SDK needed)

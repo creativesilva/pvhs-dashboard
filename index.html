@@ -414,7 +414,7 @@ footer { text-align: center; color: var(--text-faint); font-size: 0.72rem; paddi
         <div class="stripe"></div>
         <div class="section-head">
           <div class="head-row"><span class="eyebrow">Canvas Live</span><h2>Students with Most Missing Work</h2>
-            <button class="btn ghost small" onclick="loadMissingOverview()">Refresh</button>
+            <button class="btn ghost small" onclick="loadAllCanvasData()">Refresh</button>
           </div>
           <span class="rule"></span>
         </div>
@@ -431,7 +431,7 @@ footer { text-align: center; color: var(--text-faint); font-size: 0.72rem; paddi
           <div class="head-row">
             <span class="eyebrow">Canvas Live</span>
             <h2>Missing Assignments by Period</h2>
-            <button class="btn ghost small" onclick="renderMissingByPeriod()">Refresh</button>
+            <button class="btn ghost small" onclick="loadAllCanvasData()">Refresh</button>
           </div>
           <span class="rule"></span>
         </div>
@@ -472,7 +472,7 @@ footer { text-align: center; color: var(--text-faint); font-size: 0.72rem; paddi
         <div class="controls" style="margin-bottom:14px;">
           <span class="sub" id="canvas-status">Loading courses from Canvas...</span>
           <div style="flex:1;"></div>
-          <button class="btn ghost small" onclick="loadCanvasData()">Refresh</button>
+          <button class="btn ghost small" onclick="loadAllCanvasData()">Refresh</button>
         </div>
         <div class="sort-bar" id="canvas-sort-bar" style="display:none;margin-bottom:14px;">
           <span class="sort-label">Sort:</span>
@@ -613,7 +613,6 @@ function hideLoading(){ document.getElementById('loading-overlay').classList.rem
 function switchTab(tab){
   document.querySelectorAll('.tab-btn').forEach(b=>b.classList.toggle('active',b.dataset.tab===tab));
   document.querySelectorAll('.tab-content').forEach(el=>el.classList.toggle('active',el.id==='tab-'+tab));
-  if(tab==='canvas' && !document.getElementById('canvas-courses').innerHTML) loadCanvasData();
 }
 
 // ---- Roster support ----
@@ -656,17 +655,14 @@ async function loadDashboard(){
       document.getElementById('studentRows').innerHTML='<tr><td colspan="8" class="empty">No roster data uploaded yet.</td></tr>';
     }
   } catch(e){ console.error('Roster load error:',e); }
-  showLoading('Loading Canvas courses...');
+  showLoading('Loading Canvas data...');
   try {
     coursesCache=await canvasFetch('/courses?enrollment_type=teacher&state[]=available&include[]=term&include[]=total_students');
     coursesCache=coursesCache.filter(c=>c.enrollments&&c.enrollments.some(e=>e.type==='teacher'));
     coursesCache=coursesCache.filter(c=>(c.total_students||0)>0);
     populateCourseSelects();
     renderStatCards();
-    loadMissingOverview().then(()=>{
-      renderMissingByPeriod();
-      if(typeof window._rosterRender==='function') window._rosterRender();
-    });
+    await loadAllCanvasData();
   } catch(e){ console.error('Canvas load error:',e); }
   hideLoading();
 }
@@ -692,38 +688,56 @@ function renderStatCards(){
   });
 }
 
-// ---- Missing work overview (auto-loads, bulk fetch) ----
-let missingOverviewData=[], canvasLoaded=false;
-async function loadMissingOverview(){
-  const tbody=document.getElementById('missingOverviewRows'), status=document.getElementById('missing-overview-status');
-  tbody.innerHTML='<tr><td colspan="5" class="empty">Scanning Canvas courses...</td></tr>';
-  status.textContent='Scanning courses for missing work...';
-  missingOverviewData=[];
-  for(const course of coursesCache){
-    try {
-      status.textContent=`Scanning ${course.name}...`;
-      const [enrollments, assignments, allSubs] = await Promise.all([
-        canvasFetch(`/courses/${course.id}/enrollments?type[]=StudentEnrollment&state[]=active&per_page=100`),
-        canvasFetch(`/courses/${course.id}/assignments?per_page=100`),
-        canvasFetch(`/courses/${course.id}/students/submissions?student_ids[]=all&per_page=100`),
-      ]);
-      const nameMap={}; enrollments.forEach(e=>{ nameMap[e.user_id]=e.user?.sortable_name||e.user?.name||'Unknown'; });
-      const missingSubs=allSubs.filter(s=>s.missing||s.late_policy_status==='missing');
-      const byStudent={};
-      missingSubs.forEach(s=>{
-        if(!byStudent[s.user_id]) byStudent[s.user_id]={count:0,pts:0};
-        byStudent[s.user_id].count++;
-        byStudent[s.user_id].pts+=(assignments.find(a=>a.id===s.assignment_id)?.points_possible||0);
-      });
-      Object.entries(byStudent).forEach(([uid,d])=>{
-        missingOverviewData.push({name:nameMap[uid]||'Unknown',userId:+uid,course:course.name,courseId:course.id,count:d.count,pts:d.pts});
-      });
-    } catch(e){ console.error(`Missing overview error for ${course.name}:`,e); }
-  }
+// ---- Canvas data: single fetch, parallel courses, shared cache ----
+let canvasLoaded=false, missingOverviewData=[];
+let canvasCoursesMissing=[];
+
+async function loadAllCanvasData(){
+  canvasLoaded=false; missingOverviewData=[]; canvasCoursesMissing=[];
+  const status=document.getElementById('missing-overview-status');
+  const tbody=document.getElementById('missingOverviewRows');
+  tbody.innerHTML='<tr><td colspan="5" class="empty">Scanning all courses...</td></tr>';
+  status.textContent='Loading all courses in parallel...';
+
+  const results=await Promise.allSettled(coursesCache.map(async course=>{
+    const [enrollments,assignments,allSubs]=await Promise.all([
+      canvasFetch(`/courses/${course.id}/enrollments?type[]=StudentEnrollment&state[]=active&per_page=100`),
+      canvasFetch(`/courses/${course.id}/assignments?per_page=100`),
+      canvasFetch(`/courses/${course.id}/students/submissions?student_ids[]=all&per_page=100`),
+    ]);
+    return {course,enrollments,assignments,allSubs};
+  }));
+
+  results.forEach(r=>{
+    if(r.status!=='fulfilled') return;
+    const {course,enrollments,assignments,allSubs}=r.value;
+    const nameMap={}; enrollments.forEach(e=>{nameMap[e.user_id]=e.user?.sortable_name||e.user?.name||'Unknown';});
+    const missingSubs=allSubs.filter(s=>s.missing||s.late_policy_status==='missing');
+    const byStudent={};
+    missingSubs.forEach(s=>{
+      if(!byStudent[s.user_id]) byStudent[s.user_id]={items:[],totalPts:0};
+      const a=assignments.find(x=>x.id===s.assignment_id);
+      byStudent[s.user_id].items.push({name:a?.name||'Unknown',pts:a?.points_possible||0});
+      byStudent[s.user_id].totalPts+=(a?.points_possible||0);
+    });
+    const students=Object.entries(byStudent).map(([uid,d])=>({name:nameMap[uid]||'Unknown',userId:+uid,missing:d.items,totalPts:d.totalPts}));
+    if(students.length) canvasCoursesMissing.push({courseId:course.id,courseName:course.name,students});
+    students.forEach(st=>{missingOverviewData.push({name:st.name,userId:st.userId,course:course.name,courseId:course.id,count:st.missing.length,pts:st.totalPts});});
+  });
+
   canvasLoaded=true;
   missingOverviewData.sort((a,b)=>b.count-a.count||b.pts-a.pts);
+  renderMissingOverview();
+  renderCanvasTab();
+  renderMissingByPeriod();
+  renderStatCards();
+  if(typeof window._rosterRender==='function') window._rosterRender();
+}
+
+function renderMissingOverview(){
+  const tbody=document.getElementById('missingOverviewRows'),status=document.getElementById('missing-overview-status');
   const top=missingOverviewData.slice(0,30);
-  if(top.length===0){
+  if(!top.length){
     tbody.innerHTML='<tr><td colspan="5" class="empty">No missing assignments found. Nice work!</td></tr>';
     status.textContent='All students are caught up.';
   } else {
@@ -734,7 +748,6 @@ async function loadMissingOverview(){
     const total=missingOverviewData.reduce((s,x)=>s+x.count,0);
     status.textContent=`${missingOverviewData.length} students across ${coursesCache.length} courses, ${total} total missing assignments.`;
   }
-  renderStatCards();
 }
 
 // ---- Roster table ----
@@ -874,49 +887,28 @@ document.getElementById('modalClose').addEventListener('click',()=>document.getE
 document.getElementById('modalBackdrop').addEventListener('click',e=>{ if(e.target===document.getElementById('modalBackdrop')) document.getElementById('modalBackdrop').classList.remove('open'); });
 document.addEventListener('keydown',e=>{ if(e.key==='Escape') document.getElementById('modalBackdrop').classList.remove('open'); });
 
-// ---- Canvas: Missing Work (bulk fetch) ----
-async function loadCanvasData(){
-  const container=document.getElementById('canvas-courses');
-  const statusEl=document.getElementById('canvas-status');
-  statusEl.textContent='Loading missing assignments...'; container.innerHTML='';
-  let totalMissing=0, totalStudents=0;
-  for(const course of coursesCache){
-    try {
-      statusEl.textContent=`Loading ${course.name}...`;
-      const [enrollments, assignments, allSubs] = await Promise.all([
-        canvasFetch(`/courses/${course.id}/enrollments?type[]=StudentEnrollment&state[]=active&per_page=100`),
-        canvasFetch(`/courses/${course.id}/assignments?per_page=100`),
-        canvasFetch(`/courses/${course.id}/students/submissions?student_ids[]=all&per_page=100`),
-      ]);
-      const nameMap={}; enrollments.forEach(e=>{ nameMap[e.user_id]=e.user?.sortable_name||e.user?.name||'Unknown'; });
-      const missingSubs=allSubs.filter(s=>s.missing||s.late_policy_status==='missing');
-      const byStudent={};
-      missingSubs.forEach(s=>{
-        if(!byStudent[s.user_id]) byStudent[s.user_id]={items:[],totalPts:0};
-        const a=assignments.find(x=>x.id===s.assignment_id);
-        byStudent[s.user_id].items.push({name:a?.name||'Unknown',pts:a?.points_possible||0});
-        byStudent[s.user_id].totalPts+=(a?.points_possible||0);
-      });
-      let studentsWithMissing=Object.entries(byStudent).map(([uid,d])=>({name:nameMap[uid]||'Unknown',userId:+uid,missing:d.items,totalPts:d.totalPts}));
-      if(studentsWithMissing.length>0){
-        if(canvasSort==='most') studentsWithMissing.sort((a,b)=>b.missing.length-a.missing.length);
-        else if(canvasSort==='pts') studentsWithMissing.sort((a,b)=>b.totalPts-a.totalPts);
-        else studentsWithMissing.sort((a,b)=>a.name.localeCompare(b.name));
-        totalMissing+=studentsWithMissing.reduce((s,st)=>s+st.missing.length,0);
-        totalStudents+=studentsWithMissing.length;
-        let html=`<div class="panel" style="margin-bottom:18px;"><div class="stripe"></div><div class="section-head"><div class="head-row"><span class="eyebrow">Course</span><h2>${esc(course.name)}</h2><span class="pill info">${studentsWithMissing.length} students</span></div><span class="rule"></span></div>`;
-        studentsWithMissing.forEach(st=>{
-          const cc=st.missing.length>=5?'alert':st.missing.length>=3?'warn':'';
-          html+=`<div class="student-row" onclick="this.classList.toggle('expanded')"><div class="student-row-header"><span class="student-name">${esc(st.name)}</span><span class="pill ${cc||'info'}">${st.missing.length} missing</span><span style="font-size:0.78rem;color:var(--teal-light);min-width:5rem;text-align:center;">${st.totalPts.toFixed(0)} pts</span><span class="expand-icon">&rsaquo;</span></div><div class="student-detail"><ul class="assignment-list">${st.missing.map(m=>`<li><span>${esc(m.name)}</span><span style="color:var(--teal-light)">${m.pts} pts</span></li>`).join('')}</ul></div></div>`;
-        });
-        html+='</div>'; container.innerHTML+=html;
-      }
-    } catch(e){ console.error(`Error loading ${course.name}:`,e); }
-  }
+// ---- Canvas: Missing Work tab (renders from cache, no re-fetch) ----
+function renderCanvasTab(){
+  const container=document.getElementById('canvas-courses'),statusEl=document.getElementById('canvas-status');
+  container.innerHTML=''; let totalMissing=0,totalStudents=0;
+  canvasCoursesMissing.forEach(cd=>{
+    let sorted=[...cd.students];
+    if(canvasSort==='most') sorted.sort((a,b)=>b.missing.length-a.missing.length);
+    else if(canvasSort==='pts') sorted.sort((a,b)=>b.totalPts-a.totalPts);
+    else sorted.sort((a,b)=>a.name.localeCompare(b.name));
+    totalMissing+=sorted.reduce((s,st)=>s+st.missing.length,0);
+    totalStudents+=sorted.length;
+    let html=`<div class="panel" style="margin-bottom:18px;"><div class="stripe"></div><div class="section-head"><div class="head-row"><span class="eyebrow">Course</span><h2>${esc(cd.courseName)}</h2><span class="pill info">${sorted.length} students</span></div><span class="rule"></span></div>`;
+    sorted.forEach(st=>{
+      const cc=st.missing.length>=5?'alert':st.missing.length>=3?'warn':'';
+      html+=`<div class="student-row" onclick="this.classList.toggle('expanded')"><div class="student-row-header"><span class="student-name">${esc(st.name)}</span><span class="pill ${cc||'info'}">${st.missing.length} missing</span><span style="font-size:0.78rem;color:var(--teal-light);min-width:5rem;text-align:center;">${st.totalPts.toFixed(0)} pts</span><span class="expand-icon">&rsaquo;</span></div><div class="student-detail"><ul class="assignment-list">${st.missing.map(m=>`<li><span>${esc(m.name)}</span><span style="color:var(--teal-light)">${m.pts} pts</span></li>`).join('')}</ul></div></div>`;
+    });
+    html+='</div>'; container.innerHTML+=html;
+  });
   document.getElementById('canvas-sort-bar').style.display=totalStudents>0?'flex':'none';
   statusEl.textContent=totalStudents>0?`${totalStudents} students with ${totalMissing} missing assignments`:'No missing assignments found.';
 }
-function changeCanvasSort(sort){ canvasSort=sort; document.querySelectorAll('#canvas-sort-bar .sort-btn').forEach(b=>b.classList.toggle('active',b.dataset.sort===sort)); loadCanvasData(); }
+function changeCanvasSort(sort){ canvasSort=sort; document.querySelectorAll('#canvas-sort-bar .sort-btn').forEach(b=>b.classList.toggle('active',b.dataset.sort===sort)); renderCanvasTab(); }
 
 // ---- Course selects ----
 function populateCourseSelects(){

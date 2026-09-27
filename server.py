@@ -205,10 +205,15 @@ class Handler(BaseHTTPRequestHandler):
             })
             resp = conn.getresponse()
             body = resp.read()
+            try:
+                body_text = body.decode('utf-8')[:500]
+            except Exception:
+                body_text = str(body[:500])
             self.json_response(200, {
                 'canvas_status': resp.status,
                 'token_length': len(CANVAS_TOKEN),
                 'token_prefix': CANVAS_TOKEN[:6],
+                'canvas_response': body_text,
             })
         except Exception as e:
             self.json_response(500, {'error': str(e)})

@@ -250,6 +250,18 @@ textarea.field { font-family: var(--font-body); resize: vertical; }
   .period-row { grid-template-columns: 100px 1fr 60px; }
   .user-info span { display: none; }
 }
+/* ---- Legend ---- */
+.legend { display: flex; gap: 16px; align-items: center; flex-wrap: wrap; font-size: 0.78rem; color: var(--text-faint); }
+.swatch { display: inline-block; width: 12px; height: 12px; margin-right: 5px; vertical-align: middle; }
+
+/* ---- Clickable stat cards ---- */
+.stat.clickable { cursor: pointer; transition: border-color 0.15s, background 0.15s; }
+.stat.clickable:hover { border-color: var(--teal); background: var(--teal-dim); }
+
+/* ---- Support flags table clickable counts ---- */
+.flag-count { cursor: pointer; color: var(--teal-light); text-decoration: underline; text-decoration-color: transparent; transition: text-decoration-color 0.15s; }
+.flag-count:hover { text-decoration-color: var(--teal-light); }
+
 footer { text-align: center; color: var(--text-faint); font-size: 0.72rem; padding: 26px 0 4px; }
 </style>
 </head>
@@ -341,34 +353,62 @@ footer { text-align: center; color: var(--text-faint); font-size: 0.72rem; paddi
 
     <!-- Roster Tab -->
     <div id="tab-roster" class="tab-content active">
-      <div class="controls" style="margin-bottom:14px;">
-        <input class="field" type="search" id="search" placeholder="Search name or ID">
-        <select class="field" id="periodFilter"></select>
-        <select class="field" id="supportFilter">
-          <option value="">All support</option>
-          <option value="iep">IEP</option>
-          <option value="p504">504</option>
-          <option value="ssa">SSA</option>
-          <option value="el">EL</option>
-        </select>
-        <select class="field" id="sortBy">
-          <option value="seat">Sort: Seat</option>
-          <option value="name">Sort: Name</option>
-          <option value="iep">Sort: IEP first</option>
-          <option value="el">Sort: EL first</option>
-        </select>
-      </div>
-      <div class="support-legend">
-        <span class="pill iep">IEP</span><span class="pill p504">504</span>
-        <span class="pill ssa">SSA</span><span class="pill el">EL</span>
-      </div>
       <div class="panel flush" id="panel-students">
         <div class="stripe"></div>
+        <div class="panel-inner">
+          <div class="section-head">
+            <div class="head-row">
+              <span class="eyebrow">Roster</span>
+              <h2 id="rosterHeading">Students Enrolled</h2>
+            </div>
+            <span class="rule"></span>
+          </div>
+          <div class="controls" style="margin-bottom:14px;">
+            <input class="field" type="search" id="search" placeholder="Search name or ID">
+            <select class="field" id="periodFilter"></select>
+            <select class="field" id="statusFilter">
+              <option value="">All statuses</option>
+              <option value="missing">Has missing work</option>
+              <option value="clean">No missing work</option>
+              <option value="flagged">Has a flagged field</option>
+            </select>
+            <select class="field" id="supportFilter">
+              <option value="">All support</option>
+              <option value="iep">IEP</option>
+              <option value="p504">504</option>
+              <option value="ssa">SSA</option>
+              <option value="el">EL</option>
+            </select>
+            <select class="field" id="sortBy">
+              <option value="seat">Sort: Seat</option>
+              <option value="name">Sort: Name</option>
+              <option value="iep">Sort: IEP first</option>
+              <option value="p504">Sort: 504 first</option>
+              <option value="ssa">Sort: SSA first</option>
+              <option value="el">Sort: EL first</option>
+              <option value="missing">Sort: Most missing</option>
+            </select>
+          </div>
+          <div class="support-legend">
+            <span class="pill iep">IEP</span>
+            <span class="pill p504">504</span>
+            <span class="pill ssa">SSA</span>
+            <span class="pill el">EL</span>
+          </div>
+        </div>
         <div style="max-height:560px; overflow:auto;">
-          <table class="tbl"><thead><tr><th>Seat</th><th>Per</th><th>Student</th><th>Support</th><th></th></tr></thead>
-          <tbody id="studentRows"></tbody></table>
+          <table class="tbl">
+            <thead>
+              <tr>
+                <th>Seat</th><th>Period</th><th>Student</th><th>Support</th>
+                <th>Missing</th><th>Flags</th><th>Notes</th><th></th>
+              </tr>
+            </thead>
+            <tbody id="studentRows"></tbody>
+          </table>
         </div>
       </div>
+
       <div class="panel" id="panel-missing-overview" style="margin-top:24px;">
         <div class="stripe"></div>
         <div class="section-head">
@@ -382,6 +422,41 @@ footer { text-align: center; color: var(--text-faint); font-size: 0.72rem; paddi
           <table class="tbl"><thead><tr><th>#</th><th>Student</th><th>Course</th><th>Missing</th><th>Points at Risk</th></tr></thead>
           <tbody id="missingOverviewRows"><tr><td colspan="5" class="empty">Loading...</td></tr></tbody></table>
         </div>
+      </div>
+
+      <div class="panel" id="panel-missing-period" style="margin-top:24px;">
+        <div class="stripe"></div>
+        <div class="section-head">
+          <div class="head-row">
+            <span class="eyebrow">Canvas Live</span>
+            <h2>Missing Assignments by Period</h2>
+            <button class="btn ghost small" onclick="renderMissingByPeriod()">Refresh</button>
+          </div>
+          <span class="rule"></span>
+        </div>
+        <div class="period-bars" id="missingPeriodBars"><div class="empty">Loading Canvas data...</div></div>
+        <div class="legend" style="margin-top:14px;">
+          <span><i class="swatch" style="background:var(--ok)"></i> No missing work</span>
+          <span><i class="swatch" style="background:var(--warn)"></i> 1-2 missing</span>
+          <span><i class="swatch" style="background:rgba(230,36,41,0.55)"></i> 3+ missing</span>
+        </div>
+      </div>
+
+      <div class="panel flush" style="margin-top:24px;">
+        <div class="stripe"></div>
+        <div class="panel-inner">
+          <div class="section-head">
+            <div class="head-row">
+              <span class="eyebrow">Support</span>
+              <h2>Support Flags by Period: IEP, 504, SSA, English Learner</h2>
+            </div>
+            <span class="rule"></span>
+          </div>
+        </div>
+        <table class="tbl">
+          <thead><tr><th>Period</th><th>Course</th><th>Enrolled</th><th>IEP</th><th>504</th><th>SSA</th><th>EL</th></tr></thead>
+          <tbody id="flagRows"></tbody>
+        </table>
       </div>
     </div>
 
@@ -550,6 +625,19 @@ const CLASS_DEF={
 const CLASS_KEYS=Object.keys(CLASS_DEF);
 function supportBadges(s){ return CLASS_KEYS.filter(k=>CLASS_DEF[k].test(s)).map(k=>`<span class="pill ${CLASS_DEF[k].cls}">${CLASS_DEF[k].label}</span>`).join(''); }
 function seatSort(s){ const n=parseInt(s.Seat,10); return isNaN(n)?999:n; }
+function flaggedFields(s){ return ['Student Cell','Parent Guardian','Parent Cell'].filter(f=>(s[f]||'').startsWith('?')); }
+function firstNote(v){ if(!v) return ''; const t=String(v).trim(); return t.length>80?t.slice(0,77)+'...':t; }
+function getStudentMissingCount(s){
+  const key=`${s.last_name}, ${s.first_name}`.toLowerCase();
+  return missingOverviewData.filter(m=>(m.name||'').toLowerCase()===key).reduce((sum,m)=>sum+m.count,0);
+}
+function goTo(filter,value){
+  switchTab('roster');
+  if(filter==='period') document.getElementById('periodFilter').value=value;
+  else if(filter==='support') document.getElementById('supportFilter').value=value;
+  else if(filter==='status') document.getElementById('statusFilter').value=value;
+  if(typeof window._rosterRender==='function') window._rosterRender();
+}
 
 // ---- Dashboard load ----
 let rosterData=null, coursesCache=[], canvasSort='last';
@@ -564,7 +652,7 @@ async function loadDashboard(){
       renderRoster(); renderStatCards();
     } else {
       document.getElementById('topbarSub').textContent='Pioneer Valley High School';
-      document.getElementById('studentRows').innerHTML='<tr><td colspan="6" class="empty">No roster data uploaded yet.</td></tr>';
+      document.getElementById('studentRows').innerHTML='<tr><td colspan="8" class="empty">No roster data uploaded yet.</td></tr>';
     }
   } catch(e){ console.error('Roster load error:',e); }
   showLoading('Loading Canvas courses...');
@@ -574,7 +662,10 @@ async function loadDashboard(){
     coursesCache=coursesCache.filter(c=>(c.total_students||0)>0);
     populateCourseSelects();
     renderStatCards();
-    loadMissingOverview();
+    loadMissingOverview().then(()=>{
+      renderMissingByPeriod();
+      if(typeof window._rosterRender==='function') window._rosterRender();
+    });
   } catch(e){ console.error('Canvas load error:',e); }
   hideLoading();
 }
@@ -584,15 +675,21 @@ function renderStatCards(){
   const cards=[];
   if(rosterData){
     const s=rosterData.students;
-    cards.push({label:'Total Students',num:s.length,cls:''});
-    cards.push({label:'IEP',num:s.filter(x=>x.iep==='Y').length,cls:'warn'});
-    cards.push({label:'504 Plans',num:s.filter(x=>x.plan_504==='Y').length,cls:'warn'});
-    cards.push({label:'English Learners',num:s.filter(x=>x.langflu_code==='L').length,cls:''});
+    const flagCount=s.filter(x=>flaggedFields(x).length>0).length;
+    cards.push({label:'Total Students',num:s.length,cls:'',action:()=>goTo('support','')});
+    cards.push({label:'IEP',num:s.filter(x=>x.iep==='Y').length,cls:'warn',action:()=>goTo('support','iep')});
+    cards.push({label:'504 Plans',num:s.filter(x=>x.plan_504==='Y').length,cls:'warn',action:()=>goTo('support','p504')});
+    cards.push({label:'SSA',num:s.filter(x=>x.ssa_flag==='Y').length,cls:'',action:()=>goTo('support','ssa')});
+    cards.push({label:'English Learners',num:s.filter(x=>x.langflu_code==='L').length,cls:'',action:()=>goTo('support','el')});
+    cards.push({label:'Flagged for Verification',num:flagCount,cls:flagCount?'alert':'ok',action:()=>goTo('status','flagged')});
   }
   if(coursesCache.length) cards.push({label:'Canvas Courses',num:coursesCache.length,cls:'ok'});
-  if(missingOverviewData.length) cards.push({label:'Students w/ Missing',num:missingOverviewData.length,cls:'alert'});
-  if(rosterData) cards.push({label:'Sections',num:rosterData.sections.length,cls:''});
-  document.getElementById('statCards').innerHTML=cards.map(c=>`<div class="stat ${c.cls}"><div class="n num">${c.num}</div><div class="k">${c.label}</div></div>`).join('');
+  if(missingOverviewData.length) cards.push({label:'Students w/ Missing',num:missingOverviewData.length,cls:'alert',action:()=>goTo('status','missing')});
+  const el=document.getElementById('statCards');
+  el.innerHTML=cards.map((c,i)=>`<div class="stat ${c.cls} ${c.action?'clickable':''}" data-card="${i}"><div class="n num">${c.num}</div><div class="k">${c.label}</div></div>`).join('');
+  el.querySelectorAll('.stat.clickable').forEach(card=>{
+    card.addEventListener('click',()=>{ const c=cards[+card.dataset.card]; if(c.action) c.action(); });
+  });
 }
 
 // ---- Missing work overview (auto-loads) ----
@@ -639,35 +736,111 @@ async function loadMissingOverview(){
 
 // ---- Roster table ----
 function renderRoster(){
-  if(!rosterData){ document.getElementById('studentRows').innerHTML='<tr><td colspan="6" class="empty">No roster data.</td></tr>'; return; }
+  if(!rosterData){ document.getElementById('studentRows').innerHTML='<tr><td colspan="8" class="empty">No roster data.</td></tr>'; return; }
   const students=rosterData.students, sections=rosterData.sections;
   const pf=document.getElementById('periodFilter');
   pf.innerHTML='<option value="">All periods</option>'+sections.map(s=>`<option value="${s.period}">Period ${s.period}: ${s.course_code}</option>`).join('');
 
   function render(){
     const q=document.getElementById('search').value.trim().toLowerCase();
-    const period=pf.value, cf=document.getElementById('supportFilter').value, sortKey=document.getElementById('sortBy').value;
+    const period=pf.value, cf=document.getElementById('supportFilter').value;
+    const sf=document.getElementById('statusFilter').value;
+    const sortKey=document.getElementById('sortBy').value;
     let rows=students.filter(s=>{
       if(period&&s.period!==period) return false;
       if(q){ const h=`${s.last_name} ${s.first_name} ${s.student_id} ${s.preferred_name||''}`.toLowerCase(); if(!h.includes(q)) return false; }
       if(cf&&!CLASS_DEF[cf]?.test(s)) return false;
+      if(sf==='flagged'&&flaggedFields(s).length===0) return false;
+      if(sf==='missing'&&getStudentMissingCount(s)===0) return false;
+      if(sf==='clean'&&getStudentMissingCount(s)>0) return false;
       return true;
     });
     if(sortKey==='name') rows.sort((a,b)=>`${a.last_name} ${a.first_name}`.localeCompare(`${b.last_name} ${b.first_name}`));
+    else if(sortKey==='missing') rows.sort((a,b)=>getStudentMissingCount(b)-getStudentMissingCount(a)||(parseInt(a.period)-parseInt(b.period))||(seatSort(a)-seatSort(b)));
     else if(CLASS_DEF[sortKey]){ const t=CLASS_DEF[sortKey].test; rows.sort((a,b)=>(t(b)?1:0)-(t(a)?1:0)||(parseInt(a.period)-parseInt(b.period))||(seatSort(a)-seatSort(b))); }
     else rows.sort((a,b)=>(parseInt(a.period)-parseInt(b.period))||(seatSort(a)-seatSort(b)));
 
-    document.getElementById('studentRows').innerHTML=rows.map((s,i)=>`<tr class="rowclick" data-idx="${i}"><td class="num">${s.Seat||NONE}</td><td>P${s.period}</td><td class="name">${esc(s.last_name)}, ${esc(s.first_name)}${s.preferred_name?` <span class="muted">(${esc(s.preferred_name)})</span>`:''}<div class="muted num" style="font-size:11px">${s.student_id}</div></td><td class="support-flags">${supportBadges(s)||NONE}</td><td><button class="btn ghost small" data-view="${i}">View</button></td></tr>`).join('')||'<tr><td colspan="5" class="empty">No students match.</td></tr>';
+    document.getElementById('rosterHeading').textContent=`${rows.length} Students Enrolled`;
+
+    document.getElementById('studentRows').innerHTML=rows.map((s,i)=>{
+      const nFlags=flaggedFields(s).length;
+      const notesText=firstNote(s['Form Notes']);
+      const mc=getStudentMissingCount(s);
+      const mBadge=mc>0?`<span class="pill ${mc>=5?'absent':mc>=3?'flag':'info'}">${mc}</span>`:NONE;
+      return `<tr class="rowclick" data-idx="${i}">
+        <td class="num">${s.Seat||NONE}</td>
+        <td>P${s.period}</td>
+        <td class="name">${esc(s.last_name)}, ${esc(s.first_name)}${s.preferred_name?` <span class="muted">(${esc(s.preferred_name)})</span>`:''}<div class="muted num" style="font-size:11px">${s.student_id}</div></td>
+        <td class="support-flags">${supportBadges(s)||NONE}</td>
+        <td>${mBadge}</td>
+        <td>${nFlags?`<span class="pill flag">${nFlags} flag${nFlags>1?'s':''}</span>`:NONE}</td>
+        <td style="max-width:260px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-size:0.8rem;color:var(--text-dim);">${esc(notesText)||NONE}</td>
+        <td><button class="btn ghost small" data-view="${i}">View</button></td>
+      </tr>`;
+    }).join('')||'<tr><td colspan="8" class="empty">No students match.</td></tr>';
 
     document.querySelectorAll('#studentRows tr.rowclick').forEach(tr=>{ tr.addEventListener('click',e=>{ if(e.target.closest('[data-view]')) return; openStudentModal(rows[+tr.dataset.idx]); }); });
     document.querySelectorAll('#studentRows [data-view]').forEach(btn=>{ btn.addEventListener('click',e=>{ e.stopPropagation(); openStudentModal(rows[+btn.dataset.view]); }); });
     window._rosterRows=rows;
   }
+  window._rosterRender=render;
   document.getElementById('search').addEventListener('input',render);
   pf.addEventListener('change',render);
   document.getElementById('supportFilter').addEventListener('change',render);
+  document.getElementById('statusFilter').addEventListener('change',render);
   document.getElementById('sortBy').addEventListener('change',render);
   render();
+  renderSupportFlags();
+}
+
+// ---- Support Flags by Period ----
+function renderSupportFlags(){
+  if(!rosterData) return;
+  const sections=rosterData.sections, students=rosterData.students;
+  document.getElementById('flagRows').innerHTML=sections.map(sec=>{
+    const ps=students.filter(s=>s.period===sec.period);
+    const counts={iep:ps.filter(s=>s.iep==='Y').length,p504:ps.filter(s=>s.plan_504==='Y').length,ssa:ps.filter(s=>s.ssa_flag==='Y').length,el:ps.filter(s=>s.langflu_code==='L').length};
+    function cell(key,n){ return n?`<td class="num"><span class="flag-count" onclick="goTo('period','${sec.period}');goTo('support','${key}')">${n}</span></td>`:`<td class="num">${NONE}</td>`; }
+    return `<tr>
+      <td style="font-weight:600;">P${sec.period}</td>
+      <td style="font-size:0.8rem;max-width:200px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${esc(sec.course_code)}</td>
+      <td class="num">${ps.length}</td>
+      ${cell('iep',counts.iep)}${cell('p504',counts.p504)}${cell('ssa',counts.ssa)}${cell('el',counts.el)}
+    </tr>`;
+  }).join('');
+}
+
+// ---- Missing Assignments by Period (bar charts) ----
+function renderMissingByPeriod(){
+  if(!rosterData||!missingOverviewData.length){
+    document.getElementById('missingPeriodBars').innerHTML='<div class="empty">Canvas data not loaded yet.</div>';
+    return;
+  }
+  const sections=rosterData.sections, students=rosterData.students;
+  document.getElementById('missingPeriodBars').innerHTML=sections.map(sec=>{
+    const ps=students.filter(s=>s.period===sec.period);
+    const total=ps.length;
+    if(!total) return '';
+    let clean=0,low=0,high=0;
+    ps.forEach(s=>{
+      const mc=getStudentMissingCount(s);
+      if(mc===0) clean++;
+      else if(mc<=2) low++;
+      else high++;
+    });
+    const pClean=((clean/total)*100).toFixed(1);
+    const pLow=((low/total)*100).toFixed(1);
+    const pHigh=((high/total)*100).toFixed(1);
+    return `<div class="period-row" style="cursor:pointer" onclick="goTo('period','${sec.period}')">
+      <div class="plabel">Period ${sec.period}<small>${esc(sec.course_code)}</small></div>
+      <div class="bar">
+        <div style="width:${pClean}%;background:var(--ok);" title="${clean} clean"></div>
+        <div style="width:${pLow}%;background:var(--warn);" title="${low} with 1-2 missing"></div>
+        <div style="width:${pHigh}%;background:rgba(230,36,41,0.55);" title="${high} with 3+ missing"></div>
+      </div>
+      <div class="pct">${clean}/${total} clean</div>
+    </div>`;
+  }).join('');
 }
 
 // ---- Student modal ----
@@ -682,7 +855,16 @@ function openStudentModal(s){
     ['Language',s.langflu_meaning||'n/a'],
   ];
   const kv=fields.map(([k,v])=>`<div class="k">${k}</div><div class="v">${esc(v).replace(/^\?/,'<span class="pill flag">?</span> ')}</div>`).join('');
-  document.getElementById('modalBody').innerHTML=`<div class="modal-section"><h4>Support Flags</h4><div class="support-flags">${supportBadges(s)||'<span class="muted">None</span>'}</div></div><div class="modal-section"><h4>Contact Information</h4><div class="kv">${kv}</div></div>`;
+  const ff=flaggedFields(s);
+  const flagsHtml=ff.length?`<div class="modal-section"><h4>Data Quality Flags</h4><div>${ff.map(f=>`<span class="pill flag">${esc(f)}</span> `).join('')}</div></div>`:'';
+  const notesHtml=s['Form Notes']?`<div class="modal-section"><h4>Notes</h4><p style="font-size:0.86rem;color:var(--text-dim);">${esc(s['Form Notes'])}</p></div>`:'';
+  const mc=getStudentMissingCount(s);
+  const missingHtml=mc?`<div class="modal-section"><h4>Missing Assignments</h4><span class="pill ${mc>=5?'absent':mc>=3?'flag':'info'}">${mc} missing across courses</span></div>`:'';
+  document.getElementById('modalBody').innerHTML=`
+    <div class="modal-section"><h4>Support Flags</h4><div class="support-flags">${supportBadges(s)||'<span class="muted">None</span>'}</div></div>
+    ${flagsHtml}${missingHtml}
+    <div class="modal-section"><h4>Contact Information</h4><div class="kv">${kv}</div></div>
+    ${notesHtml}`;
   document.getElementById('modalBackdrop').classList.add('open');
 }
 document.getElementById('modalClose').addEventListener('click',()=>document.getElementById('modalBackdrop').classList.remove('open'));

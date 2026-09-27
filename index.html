@@ -317,9 +317,12 @@ footer { text-align: center; color: var(--text-faint); font-size: 0.72rem; paddi
           <option value="el">Sort: EL first</option>
         </select>
       </div>
-      <div class="support-legend">
-        <span class="pill iep">IEP</span><span class="pill p504">504</span>
-        <span class="pill ssa">SSA</span><span class="pill el">EL</span>
+      <div class="support-legend" style="justify-content:space-between;">
+        <div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap;">
+          <span class="pill iep">IEP</span><span class="pill p504">504</span>
+          <span class="pill ssa">SSA</span><span class="pill el">EL</span>
+        </div>
+        <label class="btn ghost small" style="cursor:pointer;"><input type="file" accept=".json" id="rosterUpload" style="display:none;" onchange="uploadRosterFile(this)">Upload Roster JSON</label>
       </div>
       <div class="panel flush" id="panel-students">
         <div class="stripe"></div>
@@ -627,6 +630,20 @@ function renderRoster(){
   document.getElementById('supportFilter').addEventListener('change',render);
   document.getElementById('sortBy').addEventListener('change',render);
   render();
+}
+
+// ---- Roster upload ----
+async function uploadRosterFile(input){
+  const file=input.files[0]; if(!file) return;
+  showLoading('Uploading roster data...');
+  try {
+    const text=await file.text();
+    const data=JSON.parse(text);
+    const r=await api('/api/roster/upload',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(data)});
+    if(r.ok){ const res=await r.json(); alert(`Uploaded ${res.students} students, ${res.sections} sections.`); location.reload(); }
+    else { const e=await r.json(); alert('Upload failed: '+(e.error||r.status)); }
+  } catch(e){ alert('Error: '+e.message); }
+  hideLoading(); input.value='';
 }
 
 // ---- Student modal ----

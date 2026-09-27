@@ -675,16 +675,15 @@ function renderStatCards(){
   const cards=[];
   if(rosterData){
     const s=rosterData.students;
-    const flagCount=s.filter(x=>flaggedFields(x).length>0).length;
     cards.push({label:'Total Students',num:s.length,cls:'',action:()=>goTo('support','')});
     cards.push({label:'IEP',num:s.filter(x=>x.iep==='Y').length,cls:'warn',action:()=>goTo('support','iep')});
     cards.push({label:'504 Plans',num:s.filter(x=>x.plan_504==='Y').length,cls:'warn',action:()=>goTo('support','p504')});
     cards.push({label:'SSA',num:s.filter(x=>x.ssa_flag==='Y').length,cls:'',action:()=>goTo('support','ssa')});
     cards.push({label:'English Learners',num:s.filter(x=>x.langflu_code==='L').length,cls:'',action:()=>goTo('support','el')});
-    cards.push({label:'Flagged for Verification',num:flagCount,cls:flagCount?'alert':'ok',action:()=>goTo('status','flagged')});
   }
   if(coursesCache.length) cards.push({label:'Canvas Courses',num:coursesCache.length,cls:'ok'});
-  if(missingOverviewData.length) cards.push({label:'Students w/ Missing',num:missingOverviewData.length,cls:'alert',action:()=>goTo('status','missing')});
+  const missingCount=missingOverviewData.length;
+  cards.push({label:'Flagged for Missing Work',num:missingCount,cls:missingCount?'alert':'ok',action:()=>goTo('status','missing')});
   const el=document.getElementById('statCards');
   el.innerHTML=cards.map((c,i)=>`<div class="stat ${c.cls} ${c.action?'clickable':''}" data-card="${i}"><div class="n num">${c.num}</div><div class="k">${c.label}</div></div>`).join('');
   el.querySelectorAll('.stat.clickable').forEach(card=>{

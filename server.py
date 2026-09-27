@@ -430,5 +430,16 @@ if __name__ == '__main__':
     print(f'  Canvas token: {"configured (" + str(len(CANVAS_TOKEN)) + " chars)" if CANVAS_TOKEN else "NOT SET"}')
     print(f'  Allowed emails: {ALLOWED_EMAILS or "(any authenticated user)"}')
     print(f'  API key: {"configured" if API_KEY else "not set"}')
+    if CANVAS_TOKEN:
+        import urllib.request
+        try:
+            rq = urllib.request.Request(
+                f'https://{CANVAS_HOST}/api/v1/users/self',
+                headers={'Authorization': f'Bearer {CANVAS_TOKEN}'},
+            )
+            with urllib.request.urlopen(rq, timeout=10) as r:
+                print(f'  Canvas token test: OK ({r.status})')
+        except Exception as e:
+            print(f'  Canvas token test: FAILED ({e})')
     server = ThreadedHTTPServer(('0.0.0.0', PORT), Handler)
     server.serve_forever()

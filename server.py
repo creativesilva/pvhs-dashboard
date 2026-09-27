@@ -202,6 +202,7 @@ class Handler(BaseHTTPRequestHandler):
         try:
             conn.request('GET', '/api/v1/users/self', headers={
                 'Authorization': f'Bearer {CANVAS_TOKEN}',
+                'User-Agent': 'PVHS-Dashboard/2.0',
             })
             resp = conn.getresponse()
             body = resp.read()
@@ -467,7 +468,10 @@ if __name__ == '__main__':
         try:
             rq = urllib.request.Request(
                 f'https://{CANVAS_HOST}/api/v1/users/self',
-                headers={'Authorization': f'Bearer {CANVAS_TOKEN}'},
+                headers={
+                    'Authorization': f'Bearer {CANVAS_TOKEN}',
+                    'User-Agent': 'PVHS-Dashboard/2.0',
+                },
             )
             with urllib.request.urlopen(rq, timeout=10) as r:
                 print(f'  Canvas token test: OK ({r.status})')

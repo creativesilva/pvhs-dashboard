@@ -121,6 +121,10 @@ class Handler(BaseHTTPRequestHandler):
             self.proxy_canvas('GET')
         elif path == '/api/status':
             self.handle_status()
+        elif path == '/api/roster':
+            if not self.require_auth():
+                return
+            self.handle_roster()
         elif path in ('/', ''):
             self.path = '/index.html'
             self.serve_file()
@@ -133,6 +137,8 @@ class Handler(BaseHTTPRequestHandler):
             return
         if path == '/api/auth/verify':
             self.handle_auth_verify()
+        elif path == '/api/roster/upload':
+            self.handle_roster_upload()
         elif path == '/api/batch/grades':
             self.handle_batch_grades()
         elif path == '/api/batch/comments':
@@ -189,6 +195,41 @@ class Handler(BaseHTTPRequestHandler):
             'ok': True,
             'canvas_host': CANVAS_HOST,
             'canvas_connected': bool(CANVAS_TOKEN),
+        })
+
+    # -- Roster data (authenticated) ----------------------------------------
+
+    def handle_roster(self):
+        roster_path = os.path.join(SERVE_DIR, 'roster_data.json')
+        if not os.path.exists(roster_path):
+            self.json_response(404, {'error': 'No roster data uploaded'})
+            return
+        with open(roster_path, 'r') as f:
+            data = json.load(f)
+        self.json_response(200, data)
+
+    def handle_roster_upload(self):
+        length = int(self.headers.get('Content-Length', 0))
+        if length > 5_000_000:
+            self.json_response(413, {'error': 'Roster data too large'})
+            return
+        body = self.rfile.read(length)
+        try:
+            data = json.loads(body)
+        except json.JSONDecodeError:
+            self.json_response(400, {'error': 'Invalid JSON'})
+            return
+        if 'students' not in data or 'sections' not in data:
+            self.json_response(400, {'error': 'Missing students or sections'})
+            return
+        roster_path = os.path.join(SERVE_DIR, 'roster_data.json')
+        with open(roster_path, 'w') as f:
+            json.dump(data, f)
+        print(f'[roster] Uploaded: {len(data["students"])} students, {len(data["sections"])} sections')
+        self.json_response(200, {
+            'ok': True,
+            'students': len(data['students']),
+            'sections': len(data['sections']),
         })
 
     # -- Canvas proxy -------------------------------------------------------

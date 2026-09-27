@@ -1,406 +1,235 @@
-<!DOCTYPE html>
-<html lang="en">
+<!doctype html>
+<html lang="en" data-theme="dark">
 <head>
-<meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
 <meta name="apple-mobile-web-app-title" content="PVHS Dashboard">
-<meta name="theme-color" content="#1a1a1a">
+<meta name="theme-color" content="#007474">
 <link rel="manifest" href="manifest.json">
 <link rel="apple-touch-icon" href="icon-512.png">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Oswald:wght@400;600;700&display=swap" rel="stylesheet">
-<title>PVHS Dashboard</title>
+<title>PVHS Teacher Command Center</title>
 <style>
-  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+/* ---- PV Teal tokens (dark default) ---- */
+:root {
+  --bg: #080808;
+  --panel: rgba(255,255,255,0.03);
+  --panel-2: rgba(255,255,255,0.05);
+  --line: rgba(255,255,255,0.08);
+  --line-strong: rgba(255,255,255,0.16);
+  --page-grad: linear-gradient(180deg, rgba(8,8,8,0.97) 0%, rgba(0,56,56,0.55) 50%, rgba(8,8,8,0.97) 100%);
+  --topbar-grad: linear-gradient(120deg, rgba(0,130,130,0.55) 0%, rgba(0,60,60,0.65) 50%, rgba(8,8,8,0.75) 100%);
+  --text: #ffffff; --text-dim: #aaaaaa; --text-faint: #777777;
+  --teal: #007474; --teal-bright: #00b8b8; --teal-light: #80e0e0;
+  --teal-mint: #5eead4; --teal-tint: rgba(0,116,116,0.12); --teal-dim: rgba(0,184,184,0.08);
+  --chip-bg: rgba(0,0,0,0.40); --th-bg: rgba(0,116,116,0.18); --row-hover: rgba(0,116,116,0.10);
+  --btn-bg: rgba(255,255,255,0.92); --btn-ink: #003838;
+  --ok: #5fcc8a; --warn: #ffb27c; --alert: #e62429;
+  --font-head: "Oswald", "Bebas Neue", "Helvetica Neue", Arial, sans-serif;
+  --font-body: -apple-system, BlinkMacSystemFont, "Helvetica Neue", Arial, sans-serif;
+  --header-h: 60px;
+}
+:root[data-theme="light"] {
+  --bg: #f4f7f7; --panel: #ffffff; --panel-2: #eef3f3;
+  --line: rgba(0,0,0,0.10); --line-strong: rgba(0,0,0,0.22);
+  --page-grad: linear-gradient(180deg, #f7f9f9 0%, #e6f0f0 50%, #f7f9f9 100%);
+  --topbar-grad: linear-gradient(120deg, rgba(0,116,116,0.22) 0%, rgba(255,255,255,0.72) 60%, rgba(255,255,255,0.85) 100%);
+  --text: #12302e; --text-dim: #4b5b5b; --text-faint: #7d8c8c;
+  --teal-bright: #006e6e; --teal-light: #0a6360; --teal-mint: #005f5f;
+  --teal-tint: rgba(0,116,116,0.06); --teal-dim: rgba(0,116,116,0.05);
+  --chip-bg: rgba(0,116,116,0.10); --th-bg: rgba(0,116,116,0.10); --row-hover: rgba(0,116,116,0.07);
+  --btn-bg: #007474; --btn-ink: #ffffff;
+  --ok: #2f9e63; --warn: #b26a2a; --alert: #cc0000;
+}
+* { box-sizing: border-box; }
+body {
+  margin: 0; background-color: var(--bg); background-image: var(--page-grad);
+  background-attachment: fixed; color: var(--text); font-family: var(--font-body);
+  line-height: 1.55; -webkit-font-smoothing: antialiased;
+}
+h1,h2,h3,.label { font-family: var(--font-head); font-weight: 700; letter-spacing: 0.05em; text-transform: uppercase; color: var(--text); margin: 0; }
+h1 { font-size: 1.5rem; } h2 { font-size: 1.05rem; }
+.num { font-variant-numeric: tabular-nums; }
+.sub { color: var(--text-faint); font-size: 0.82rem; margin-top: 6px; }
+.muted { color: var(--text-faint); }
+.wrap { max-width: 1280px; margin: 0 auto; padding: 28px 24px 64px; }
 
-  :root {
-    --bg: #1a1a1a;
-    --bg-2: #222222;
-    --surface: rgba(255,255,255,0.03);
-    --surface2: rgba(255,255,255,0.06);
-    --border: rgba(255,255,255,0.08);
-    --border-hover: rgba(255,255,255,0.16);
-    --teal: #007474;
-    --teal-light: #40dede;
-    --teal-dim: rgba(0,180,180,0.07);
-    --accent: #cc0000;
-    --text: #ffffff;
-    --text-dim: #aaaaaa;
-    --text-muted: rgba(255,255,255,0.45);
-    --text-bright: #ffffff;
-    --danger: #ff5b5b;
-    --warning: #ffac39;
-    --success: #50c864;
-    --panel-radius: 22px;
-    --btn-radius: 16px;
-    --shadow: 0 12px 24px rgba(0,0,0,0.22);
-    --header-height: 84px;
-    --font-head: "Oswald", "Bebas Neue", "Helvetica Neue", Arial, sans-serif;
-    --font-body: -apple-system, BlinkMacSystemFont, "Helvetica Neue", Arial, sans-serif;
-    --max-width: 1200px;
-  }
+/* ---- Site header ---- */
+.site-header { background: #111111; border-bottom: 1px solid rgba(255,255,255,0.06); height: var(--header-h); position: relative; z-index: 100; }
+.header-inner { max-width: 1200px; margin: 0 auto; height: 100%; display: flex; align-items: center; justify-content: center; padding: 0 2rem; gap: 2rem; }
+.header-inner nav { display: flex; gap: 1.5rem; }
+.header-inner nav a { font-family: var(--font-head); font-size: 0.72rem; font-weight: 600; text-transform: uppercase; letter-spacing: 0.14em; color: var(--text-dim); text-decoration: none; transition: color .2s; }
+.header-inner nav a:hover { color: var(--text); }
+.header-inner .brand { display: flex; align-items: center; }
+.header-inner .brand img { height: 40px; }
 
-  body {
-    font-family: var(--font-body);
-    background: var(--bg);
-    color: var(--text);
-    min-height: 100vh;
-  }
+/* ---- Topbar ---- */
+.topbar {
+  position: sticky; top: 0; z-index: 50;
+  display: flex; align-items: center; gap: 16px; padding: 12px 24px;
+  background: var(--topbar-grad); backdrop-filter: blur(16px) saturate(140%);
+  -webkit-backdrop-filter: blur(16px) saturate(140%); border-bottom: 2px solid var(--teal);
+}
+.topbar .pv-logo { height: 42px; width: auto; }
+.topbar .titles { flex: 1; }
+.topbar .titles h1 { margin: 0; font-size: 1.3rem; }
+.topbar .titles .sub { margin: 2px 0 0; font-size: 0.78rem; }
+.topbar-right { display: flex; align-items: center; gap: 10px; }
+.back-link { font-family: var(--font-head); font-size: 0.65rem; text-transform: uppercase; letter-spacing: 0.1em; color: var(--text-faint); text-decoration: none; }
+.back-link:hover { color: var(--teal-light); }
+.user-info { display: flex; align-items: center; gap: 8px; font-size: 0.82rem; color: var(--text-dim); }
+.user-avatar { width: 32px; height: 32px; border-radius: 6px; border: 1px solid var(--teal); }
 
-  /* -- Site Header (matches creativesilva.com) -- */
-  .site-header {
-    background: #111111;
-    border-bottom: 1px solid rgba(255,255,255,0.06);
-    height: var(--header-height);
-    position: sticky; top: 0; z-index: 200;
-  }
-  .header-inner {
-    max-width: var(--max-width);
-    margin: 0 auto;
-    height: 100%;
-    display: flex; align-items: center; justify-content: center;
-    padding: 0 2rem;
-    gap: 2rem;
-  }
-  .header-inner nav { display: flex; gap: 1.5rem; }
-  .header-inner nav a {
-    font-family: var(--font-head);
-    font-size: 0.72rem;
-    font-weight: 600;
-    text-transform: uppercase;
-    letter-spacing: 0.14em;
-    color: var(--text-dim);
-    text-decoration: none;
-    transition: color 0.2s;
-  }
-  .header-inner nav a:hover { color: var(--text); }
-  .brand { display: flex; align-items: center; }
-  .brand img { height: 50px; }
+/* ---- Login ---- */
+#login-screen { display: flex; align-items: center; justify-content: center; min-height: calc(100vh - var(--header-h)); padding: 2rem; }
+.login-card { background: var(--panel); border: 1px solid var(--teal); padding: 3rem; max-width: 440px; width: 100%; text-align: center; }
+.login-card img { width: 100px; margin-bottom: 1.5rem; }
+.login-card h1 { font-size: 1.2rem; color: var(--teal-light); margin-bottom: 0.5rem; letter-spacing: 0.14em; }
+.login-card p { color: var(--text-faint); margin-bottom: 2rem; font-size: 0.85rem; }
+.login-error { color: var(--alert); font-size: 0.85rem; margin-bottom: 1rem; display: none; }
+.login-card .btn { display: inline-flex; align-items: center; gap: 12px; }
+.login-card .btn svg { flex-shrink: 0; }
 
-  /* -- Login Screen -- */
-  #login-screen {
-    display: flex; align-items: center; justify-content: center;
-    min-height: calc(100vh - var(--header-height)); padding: 2rem;
-  }
-  .login-card {
-    background: rgba(255,255,255,0.03); border: 1px solid var(--teal);
-    border-radius: 6px; padding: 3rem;
-    max-width: 440px; width: 100%; text-align: center;
-    box-shadow: var(--shadow);
-  }
-  .login-card img { width: 100px; margin-bottom: 1.5rem; }
-  .login-card h1 {
-    font-family: var(--font-head); font-size: 1.3rem; color: var(--teal-light);
-    margin-bottom: 0.5rem; text-transform: uppercase; letter-spacing: 0.18em;
-  }
-  .login-card p { color: var(--text-dim); margin-bottom: 2rem; font-size: 0.85rem; line-height: 1.5; }
-  .login-error { color: var(--danger); font-size: 0.85rem; margin-bottom: 1rem; display: none; }
+/* ---- Stat tiles ---- */
+.stat-row { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px,1fr)); gap: 12px; margin-bottom: 24px; }
+.stat { background: var(--panel); border: 1px solid var(--line); border-left: 4px solid var(--teal-bright); padding: 14px 16px; text-align: left; }
+.stat .n { font-family: var(--font-head); font-size: 1.9rem; line-height: 1; color: var(--teal-mint); font-variant-numeric: tabular-nums; }
+.stat .k { font-size: 0.6rem; letter-spacing: 0.18em; text-transform: uppercase; color: var(--text-faint); margin-top: 6px; }
+.stat.ok { border-left-color: var(--ok); } .stat.ok .n { color: var(--ok); }
+.stat.warn { border-left-color: var(--warn); } .stat.warn .n { color: var(--warn); }
+.stat.alert { border-left-color: var(--alert); } .stat.alert .n { color: var(--alert); }
 
-  .google-btn {
-    display: inline-flex; align-items: center; gap: 12px;
-    padding: 12px 28px; border-radius: 8px; border: 1px solid var(--border-hover);
-    background: rgba(255,255,255,0.05); color: var(--text-bright);
-    font-size: 1rem; font-weight: 600; cursor: pointer;
-    transition: all 0.2s;
-  }
-  .google-btn:hover { background: rgba(255,255,255,0.1); border-color: var(--teal); }
-  .google-btn:active { transform: scale(0.97); }
-  .google-btn svg { flex-shrink: 0; }
+/* ---- Tab bar ---- */
+.tab-bar { display: flex; gap: 0; border-bottom: 1px solid var(--line); margin-bottom: 0; }
+.tab-btn { font-family: var(--font-head); font-size: 0.7rem; letter-spacing: 0.12em; text-transform: uppercase; padding: 12px 20px; border: none; background: none; color: var(--text-faint); cursor: pointer; border-bottom: 2px solid transparent; transition: color .15s; }
+.tab-btn:hover { color: var(--text); }
+.tab-btn.active { color: var(--teal-light); border-bottom-color: var(--teal); }
+.tab-content { display: none; padding-top: 20px; }
+.tab-content.active { display: block; }
 
-  /* -- Dashboard -- */
-  #dashboard { display: none; }
+/* ---- Panel ---- */
+.panel { background: var(--teal-tint); border: 1px solid transparent; border-image: linear-gradient(135deg, var(--teal) 0%, rgba(0,116,116,0.08) 100%) 1; padding: 22px; margin-bottom: 26px; position: relative; overflow: hidden; }
+.panel > .stripe { height: 4px; background: var(--teal); margin: -22px -22px 20px -22px; }
+.panel.flush { padding: 0; } .panel.flush > .stripe { margin: 0; } .panel.flush .panel-inner { padding: 22px 22px 4px; }
+.section-head { margin-bottom: 14px; }
+.section-head .head-row { display: flex; align-items: center; flex-wrap: wrap; gap: 14px; margin-bottom: 10px; }
+.eyebrow { display: inline-block; background: var(--chip-bg); border-left: 3px solid var(--teal); padding: 5px 12px 5px 10px; font-family: var(--font-head); font-size: 0.62rem; letter-spacing: 0.22em; text-transform: uppercase; color: var(--teal-light); }
+.section-head .rule { display: block; width: 60px; height: 2px; background: var(--teal); }
 
-  .top-bar {
-    background: var(--bg-2); border-bottom: 1px solid var(--border);
-    padding: 0.75rem 2rem; display: flex; align-items: center; gap: 1.25rem;
-    position: sticky; top: var(--header-height); z-index: 100;
-  }
-  .top-bar img { height: 40px; }
-  .top-bar-title {
-    font-family: var(--font-head);
-    font-size: 14px; font-weight: 600; color: var(--teal-light);
-    text-transform: uppercase; letter-spacing: 0.14em;
-  }
-  .top-bar-spacer { flex: 1; }
-  .user-info {
-    display: flex; align-items: center; gap: 0.6rem;
-    font-size: 0.8rem; color: var(--text-muted);
-  }
-  .user-avatar {
-    width: 32px; height: 32px; border-radius: 50%;
-    border: 2px solid var(--teal);
-  }
-  .status-area { display: flex; align-items: center; gap: 0.75rem; }
-  .last-updated { font-size: 0.72rem; color: var(--text-muted); text-align: right; line-height: 1.3; }
+/* ---- Data table ---- */
+.tbl { width: 100%; border-collapse: collapse; font-size: 0.86rem; }
+.tbl thead th { text-align: left; font-family: var(--font-head); font-size: 0.6rem; letter-spacing: 0.14em; text-transform: uppercase; color: var(--teal-light); background: var(--th-bg); border-bottom: 2px solid var(--teal); padding: 10px 12px; position: sticky; top: 0; }
+.tbl tbody td { padding: 9px 12px; border-bottom: 1px solid var(--line); color: var(--text-dim); vertical-align: top; }
+.tbl tbody tr:hover td { background: var(--row-hover); color: var(--text); }
+.tbl tbody td.name { color: var(--text); font-weight: 600; }
+.tbl tbody tr.rowclick { cursor: pointer; }
 
-  .btn {
-    display: inline-block; padding: 0.5rem 1.2rem; border-radius: 8px;
-    border: none; font-size: 0.85rem; font-weight: 600; cursor: pointer;
-    transition: all 0.2s;
-  }
-  .btn-small { padding: 0.35rem 0.85rem; font-size: 0.78rem; }
-  .btn-outline {
-    background: transparent; border: 1px solid var(--border); color: var(--text-muted);
-  }
-  .btn-outline:hover { border-color: var(--teal); color: var(--teal-light); }
-  .btn-primary {
-    background: rgba(0,180,180,0.14); border: 1px solid rgba(0,210,210,0.16);
-    color: var(--teal-light);
-  }
-  .btn-primary:hover { background: rgba(0,180,180,0.22); }
-  .btn-primary:active { transform: scale(0.97); }
-  .btn-danger {
-    background: rgba(255,77,77,0.1); border: 1px solid rgba(255,77,77,0.25);
-    color: var(--danger);
-  }
-  .btn-danger:hover { background: rgba(255,77,77,0.2); }
+/* ---- Pills ---- */
+.pill { display: inline-block; font-family: var(--font-head); font-size: 0.55rem; font-weight: 600; letter-spacing: 0.14em; text-transform: uppercase; padding: 3px 9px; border: 1px solid; white-space: nowrap; }
+.pill.present { color: var(--ok); border-color: rgba(95,204,138,0.5); background: rgba(95,204,138,0.08); }
+.pill.absent { color: var(--alert); border-color: rgba(230,36,41,0.5); background: rgba(230,36,41,0.08); }
+.pill.flag { color: var(--warn); border-color: rgba(255,178,124,0.5); background: rgba(255,178,124,0.08); }
+.pill.info { color: var(--teal-light); border-color: rgba(0,184,184,0.5); background: rgba(0,184,184,0.08); }
+.pill.iep { color: var(--teal-mint); border-color: var(--teal-mint); background: rgba(94,234,212,0.10); }
+.pill.p504 { color: var(--teal-bright); border-color: var(--teal-bright); background: rgba(0,184,184,0.10); }
+.pill.ssa { color: var(--teal-light); border-color: var(--teal-light); background: rgba(128,224,224,0.10); }
+.pill.el { color: var(--teal); border-color: var(--teal); background: rgba(0,116,116,0.14); }
+.support-flags .pill { margin-right: 4px; margin-bottom: 3px; }
+.support-legend { display: flex; gap: 10px; align-items: center; margin-bottom: 16px; flex-wrap: wrap; }
 
-  .refresh-btn {
-    background: none; border: 1px solid var(--border); color: var(--teal-light);
-    width: 34px; height: 34px; border-radius: 8px; cursor: pointer;
-    display: flex; align-items: center; justify-content: center;
-    transition: all 0.2s;
-  }
-  .refresh-btn:hover { border-color: var(--teal); background: var(--teal-dim); }
-  .refresh-btn.spinning svg { animation: spin-ccw 1s linear infinite; }
-  @keyframes spin-ccw { from { transform: rotate(0); } to { transform: rotate(-360deg); } }
+/* ---- Controls ---- */
+.controls { display: flex; gap: 10px; align-items: center; flex-wrap: wrap; }
+.field, select, input[type=search] { background: var(--panel); color: var(--text); border: 1px solid var(--line); padding: 8px 10px; font-family: var(--font-body); font-size: 0.86rem; }
+input[type=search] { width: 220px; }
+select:focus, input:focus { outline: none; border-color: var(--teal); }
+textarea.field { font-family: var(--font-body); resize: vertical; }
+.btn { background: var(--btn-bg); color: var(--btn-ink); border: 0; border-top: 2px solid var(--teal-bright); padding: 7px 16px; font-family: var(--font-head); font-size: 0.7rem; letter-spacing: 0.08em; text-transform: uppercase; font-weight: 700; cursor: pointer; }
+.btn:disabled { opacity: 0.4; cursor: not-allowed; }
+.btn.ghost { background: transparent; color: var(--teal-light); border: 1px solid var(--line-strong); border-top: 1px solid var(--line-strong); }
+.btn.small { padding: 4px 10px; font-size: 0.62rem; }
+.empty { padding: 24px; text-align: center; color: var(--text-faint); font-size: 0.86rem; }
 
-  /* -- Tabs -- */
-  .tab-bar {
-    display: flex; gap: 0; background: var(--bg);
-    border-bottom: 1px solid var(--border); padding: 0 2rem;
-  }
-  .tab-btn {
-    padding: 0.8rem 1.5rem; border: none; background: none;
-    color: var(--text-muted); font-size: 10px; font-weight: 700;
-    cursor: pointer; border-bottom: 2px solid transparent;
-    transition: all 0.2s; text-transform: uppercase; letter-spacing: 0.12em;
-  }
-  .tab-btn:hover { color: var(--text); }
-  .tab-btn.active { color: var(--teal-light); border-bottom-color: var(--teal); }
-  .tab-content { display: none; }
-  .tab-content.active { display: block; }
+/* ---- Sort bar ---- */
+.sort-bar { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; }
+.sort-label { font-size: 0.72rem; color: var(--text-faint); margin-right: 4px; }
+.sort-btn { padding: 5px 14px; border: 1px solid var(--line); background: none; color: var(--text-faint); font-family: var(--font-head); font-size: 0.65rem; letter-spacing: 0.1em; text-transform: uppercase; cursor: pointer; }
+.sort-btn:hover { border-color: var(--teal); color: var(--text); }
+.sort-btn.active { background: var(--teal-dim); border-color: var(--teal); color: var(--teal-light); }
 
-  /* -- Main Area -- */
-  .main-content { padding: 1.5rem 2rem 3rem; }
+/* ---- Period bars ---- */
+.period-bars { display: flex; flex-direction: column; gap: 12px; }
+.period-row { display: grid; grid-template-columns: 140px 1fr 96px; gap: 12px; align-items: center; }
+.period-row .plabel { font-family: var(--font-head); font-weight: 600; font-size: 0.8rem; letter-spacing: 0.03em; color: var(--text); }
+.period-row .plabel small { display: block; font-family: var(--font-body); font-weight: 400; letter-spacing: 0; text-transform: none; color: var(--text-faint); font-size: 0.72rem; margin-top: 2px; }
+.bar { display: flex; height: 20px; overflow: hidden; background: var(--panel-2); border: 1px solid var(--line); }
+.bar > div { height: 100%; }
+.period-row .pct { text-align: right; font-variant-numeric: tabular-nums; font-size: 0.8rem; color: var(--text-dim); }
 
-  /* -- Summary Cards -- */
-  .summary-row { display: flex; gap: 1rem; margin-bottom: 1.5rem; flex-wrap: wrap; }
-  .summary-card {
-    background: var(--surface); border: 1px solid var(--border);
-    border-radius: var(--panel-radius); padding: 1.25rem 1.5rem;
-    flex: 1; min-width: 180px; backdrop-filter: blur(10px); box-shadow: var(--shadow);
-  }
-  .summary-card .label {
-    font-size: 9px; text-transform: uppercase; letter-spacing: 0.12em;
-    color: var(--text-muted); margin-bottom: 0.35rem; font-weight: 700;
-  }
-  .summary-card .value { font-size: 2rem; font-weight: 700; color: var(--teal-light); }
-  .summary-card .sub { font-size: 0.8rem; color: var(--text-muted); margin-top: 0.2rem; }
+/* ---- Student expand rows (canvas missing) ---- */
+.student-row { border-bottom: 1px solid var(--line); }
+.student-row-header { display: flex; align-items: center; padding: 8px 12px; gap: 8px; cursor: pointer; transition: background .1s; }
+.student-row-header:hover { background: var(--row-hover); }
+.student-name { font-weight: 600; color: var(--text); flex: 1; min-width: 0; }
+.expand-icon { color: var(--text-faint); font-size: 0.7rem; transition: transform .2s; }
+.student-row.expanded .expand-icon { transform: rotate(90deg); }
+.student-detail { display: none; padding: 0 12px 10px; }
+.student-row.expanded .student-detail { display: block; }
+.assignment-list { list-style: none; padding: 0; margin: 0; }
+.assignment-list li { padding: 4px 10px; font-size: 0.82rem; color: var(--text-dim); border-left: 2px solid var(--line); margin-bottom: 2px; display: flex; justify-content: space-between; gap: 1rem; }
 
-  /* -- Course Sections -- */
-  .course-section { margin-bottom: 2rem; }
-  .course-header { display: flex; align-items: center; gap: 0.75rem; margin-bottom: 1rem; }
-  .course-header h2 { font-size: 1.15rem; color: var(--text-bright); font-weight: 700; }
-  .course-badge {
-    background: var(--teal-dim); color: var(--teal-light);
-    font-size: 0.7rem; font-weight: 600; padding: 0.2rem 0.6rem;
-    border-radius: 20px; text-transform: uppercase;
-  }
+/* ---- Grade cards ---- */
+.grade-card { background: var(--panel); border: 1px solid var(--line); padding: 12px 14px; margin-bottom: 8px; display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+.grade-card-name { font-weight: 600; color: var(--text); flex: 1; min-width: 160px; }
+.grade-input { width: 60px; padding: 6px 8px; background: var(--panel-2); border: 1px solid var(--line); color: var(--text); text-align: center; font-family: var(--font-body); }
+.grade-input:focus { outline: none; border-color: var(--teal); }
+.grade-comment { width: 100%; margin-top: 6px; padding: 8px 10px; background: var(--panel-2); border: 1px solid var(--line); color: var(--text); resize: vertical; min-height: 40px; font-family: var(--font-body); font-size: 0.85rem; }
+.grade-comment:focus { outline: none; border-color: var(--teal); }
 
-  /* -- Period Groups -- */
-  .period-group { margin-bottom: 1rem; }
-  .period-label {
-    font-size: 10px; font-weight: 700; text-transform: uppercase;
-    letter-spacing: 0.12em; color: var(--teal-light); margin-bottom: 0.5rem;
-    padding-left: 0.25rem;
-  }
+/* ---- Modal ---- */
+.modal-backdrop { display: none; position: fixed; inset: 0; background: rgba(0,0,0,0.65); z-index: 70; align-items: flex-start; justify-content: center; padding: 6vh 16px; overflow-y: auto; }
+.modal-backdrop.open { display: flex; }
+.modal { background: var(--bg); border: 1px solid var(--teal); max-width: 640px; width: 100%; overflow: hidden; }
+.modal > .stripe { height: 4px; background: var(--teal); }
+.modal-head { background: var(--panel-2); border-bottom: 1px solid var(--line); padding: 18px 22px; display: flex; justify-content: space-between; align-items: flex-start; gap: 12px; }
+.modal-head h3 { font-size: 1.05rem; margin-bottom: 4px; }
+.modal-close { background: transparent; border: 1px solid var(--line-strong); color: var(--text); width: 28px; height: 28px; font-size: 15px; cursor: pointer; line-height: 1; font-family: var(--font-body); }
+.modal-close:hover { border-color: var(--teal-bright); color: var(--teal-light); }
+.modal-body { padding: 20px 22px; max-height: 68vh; overflow-y: auto; }
+.modal-section { margin-bottom: 20px; } .modal-section:last-child { margin-bottom: 0; }
+.modal-section h4 { font-family: var(--font-head); margin: 0 0 10px; font-size: 0.62rem; letter-spacing: 0.18em; text-transform: uppercase; color: var(--teal-light); }
+.kv { display: grid; grid-template-columns: 130px 1fr; gap: 7px 12px; font-size: 0.86rem; }
+.kv .k { color: var(--text-faint); font-size: 0.72rem; letter-spacing: 0.05em; text-transform: uppercase; padding-top: 2px; }
+.kv .v { color: var(--text); }
 
-  /* -- Student Rows -- */
-  .student-list {
-    background: var(--surface); border: 1px solid var(--border);
-    border-radius: var(--panel-radius); overflow: hidden;
-    backdrop-filter: blur(10px); box-shadow: var(--shadow);
-  }
-  .student-row { border-bottom: 1px solid var(--border); cursor: pointer; transition: background 0.15s; }
-  .student-row:last-child { border-bottom: none; }
-  .student-row:hover { background: var(--surface2); }
-  .student-row-header {
-    display: flex; align-items: center; padding: 0.65rem 1rem; gap: 0.6rem;
-  }
-  .student-name { font-weight: 600; font-size: 0.92rem; color: var(--text-bright); flex: 1; min-width: 0; }
-  .student-num { font-size: 0.75rem; color: var(--text-muted); min-width: 1.5rem; text-align: right; }
-  .missing-count {
-    font-size: 0.78rem; font-weight: 700; padding: 0.18rem 0.6rem;
-    border-radius: 20px; min-width: 7rem; text-align: center;
-  }
-  .missing-count.high { background: rgba(255,77,77,0.15); color: var(--danger); }
-  .missing-count.medium { background: rgba(240,160,48,0.15); color: var(--warning); }
-  .missing-count.low { background: rgba(0,116,116,0.15); color: var(--teal-light); }
-  .missing-pts {
-    font-size: 0.78rem; font-weight: 700; background: rgba(64,222,222,0.1);
-    color: var(--teal-light); padding: 0.15rem 0.5rem; border-radius: 999px;
-    white-space: nowrap; min-width: 5rem; text-align: center;
-  }
-  .expand-icon { color: var(--text-muted); font-size: 0.7rem; transition: transform 0.2s; }
-  .student-row.expanded .expand-icon { transform: rotate(90deg); }
-  .student-detail { display: none; padding: 0 1rem 0.65rem; }
-  .student-row.expanded .student-detail { display: block; }
-  .assignment-list { list-style: none; }
-  .assignment-list li {
-    padding: 0.35rem 0.65rem; font-size: 0.83rem; color: var(--text-muted);
-    border-left: 2px solid var(--border); margin-bottom: 0.2rem;
-    display: flex; justify-content: space-between; gap: 1rem;
-  }
-  .assignment-list li .asgn-name { flex: 1; }
-  .assignment-list li .asgn-due { font-size: 0.72rem; color: var(--text-muted); white-space: nowrap; }
-  .assignment-list li .asgn-pts { font-size: 0.72rem; color: var(--teal-light); white-space: nowrap; opacity: 0.8; }
+/* ---- Loading / Spinner ---- */
+.loading-overlay { display: none; position: fixed; inset: 0; background: rgba(0,0,0,0.7); z-index: 200; align-items: center; justify-content: center; flex-direction: column; gap: 1rem; }
+.loading-overlay.visible { display: flex; }
+.spinner { width: 48px; height: 48px; border: 4px solid var(--line); border-top-color: var(--teal); border-radius: 50%; animation: spin 0.8s linear infinite; }
+@keyframes spin { from { transform: rotate(0); } to { transform: rotate(360deg); } }
+.loading-text { color: var(--text-faint); font-size: 0.9rem; }
 
-  /* -- On-Track Section -- */
-  .on-track-section { margin-top: 0.4rem; border: 1px solid rgba(80,200,100,0.2); border-radius: 8px; overflow: hidden; }
-  .on-track-header {
-    display: flex; align-items: center; gap: 0.5rem; padding: 0.4rem 0.75rem;
-    cursor: pointer; user-select: none; font-size: 0.8rem; color: var(--success);
-    background: rgba(50,205,100,0.06);
-  }
-  .on-track-header:hover { background: rgba(50,205,100,0.12); }
-  .on-track-chevron { transition: transform 0.2s; font-size: 0.55rem; }
-  .on-track-section.open .on-track-chevron { transform: rotate(90deg); }
-  .on-track-list { display: none; }
-  .on-track-section.open .on-track-list { display: block; }
-  .on-track-row {
-    display: flex; align-items: center; gap: 0.6rem;
-    padding: 0.35rem 0.75rem; font-size: 0.85rem; border-top: 1px solid var(--border);
-  }
-
-  /* -- Sort Bar -- */
-  .sort-bar { display: flex; align-items: center; gap: 0.5rem; margin-bottom: 1.5rem; flex-wrap: wrap; }
-  .sort-label { font-size: 0.78rem; color: var(--text-muted); margin-right: 0.25rem; }
-  .sort-btn {
-    padding: 0.3rem 0.8rem; border-radius: 20px; border: 1px solid var(--border);
-    background: none; color: var(--text-muted); font-size: 0.78rem; font-weight: 600;
-    cursor: pointer; transition: all 0.2s;
-  }
-  .sort-btn:hover { border-color: var(--teal); color: var(--text); }
-  .sort-btn.active { background: var(--teal-dim); border-color: var(--teal); color: var(--teal-light); }
-
-  /* -- Search Tab -- */
-  .search-box { display: flex; gap: 0.75rem; max-width: 600px; margin-bottom: 1rem; }
-  .search-box input {
-    flex: 1; padding: 10px 14px; border-radius: var(--btn-radius);
-    border: 1px solid var(--border-hover); background: rgba(0,0,0,0.18);
-    color: var(--text-bright); font-size: 0.95rem; outline: none;
-    transition: border-color 0.2s;
-  }
-  .search-box input:focus { border-color: var(--teal-light); }
-  .search-box input::placeholder { color: var(--text-muted); }
-
-  /* -- Grading Tab -- */
-  .grading-controls { display: flex; align-items: center; gap: 1rem; flex-wrap: wrap; margin-bottom: 1.5rem; }
-  .grading-label { font-size: 0.82rem; color: var(--text-muted); white-space: nowrap; }
-  .select-input {
-    background: var(--surface); border: 1px solid var(--border);
-    border-radius: 8px; color: var(--text); font-size: 0.85rem;
-    padding: 0.4rem 0.75rem; cursor: pointer; min-width: 200px;
-  }
-  .select-input:focus { outline: none; border-color: var(--teal); }
-
-  .grade-card {
-    background: var(--surface); border: 1px solid var(--border);
-    border-radius: 10px; margin-bottom: 0.6rem; padding: 0.75rem 1rem;
-    display: flex; align-items: center; gap: 0.75rem; flex-wrap: wrap;
-  }
-  .grade-card-name { font-size: 0.9rem; font-weight: 600; color: var(--text-bright); flex: 1; min-width: 160px; }
-  .grade-card-status {
-    font-size: 0.72rem; padding: 0.1rem 0.45rem; border-radius: 999px;
-    white-space: nowrap; font-weight: 600;
-  }
-  .grade-card-status.submitted { background: rgba(64,222,222,0.1); color: var(--teal-light); }
-  .grade-card-status.missing { background: rgba(255,100,100,0.1); color: #ff7070; }
-  .grade-card-status.graded { background: rgba(80,200,100,0.1); color: var(--success); }
-  .grade-input {
-    width: 60px; padding: 0.3rem 0.5rem; border-radius: 6px;
-    border: 1px solid var(--border); background: rgba(0,0,0,0.2);
-    color: var(--text-bright); font-size: 0.85rem; text-align: center;
-  }
-  .grade-input:focus { outline: none; border-color: var(--teal-light); }
-  .grade-max { font-size: 0.78rem; color: var(--text-muted); }
-  .grade-comment {
-    width: 100%; margin-top: 0.4rem; padding: 0.4rem 0.6rem; border-radius: 6px;
-    border: 1px solid var(--border); background: rgba(0,0,0,0.15);
-    color: var(--text); font-size: 0.82rem; resize: vertical; min-height: 36px;
-    font-family: inherit;
-  }
-  .grade-comment:focus { outline: none; border-color: var(--teal-light); }
-
-  /* -- Bulk Comment Panel -- */
-  .bulk-panel {
-    background: var(--surface); border: 1px solid var(--border);
-    border-radius: var(--panel-radius); padding: 1.25rem; margin-bottom: 1.5rem;
-  }
-  .bulk-panel h3 { font-size: 0.9rem; color: var(--text-bright); margin-bottom: 0.75rem; }
-  .bulk-panel textarea {
-    width: 100%; padding: 0.6rem 0.8rem; border-radius: 8px;
-    border: 1px solid var(--border); background: rgba(0,0,0,0.15);
-    color: var(--text); font-size: 0.85rem; resize: vertical; min-height: 60px;
-    font-family: inherit; margin-bottom: 0.75rem;
-  }
-  .bulk-panel textarea:focus { outline: none; border-color: var(--teal-light); }
-  .bulk-count { font-size: 0.78rem; color: var(--text-muted); margin-bottom: 0.5rem; }
-
-  /* -- Loading / Error -- */
-  .loading-overlay {
-    display: none; position: fixed; inset: 0;
-    background: rgba(0,0,0,0.7); z-index: 200;
-    align-items: center; justify-content: center; flex-direction: column; gap: 1rem;
-  }
-  .loading-overlay.visible { display: flex; }
-  .spinner {
-    width: 48px; height: 48px; border: 4px solid var(--border);
-    border-top-color: var(--teal); border-radius: 50%;
-    animation: spin 0.8s linear infinite;
-  }
-  @keyframes spin { from { transform: rotate(0); } to { transform: rotate(360deg); } }
-  .loading-text { color: var(--text-muted); font-size: 0.9rem; }
-  .error-banner {
-    background: rgba(255,77,77,0.1); border: 1px solid rgba(255,77,77,0.3);
-    border-radius: 10px; padding: 1rem 1.25rem; margin-bottom: 1.5rem;
-    color: var(--danger); font-size: 0.9rem; display: none;
-  }
-  .empty-state { text-align: center; padding: 3rem; color: var(--text-muted); font-size: 1rem; }
-
-  /* -- Back Link -- */
-  .back-to-catalog {
-    font-family: var(--font-head);
-    font-size: 0.72rem; font-weight: 600;
-    text-transform: uppercase; letter-spacing: 0.1em;
-    color: var(--text-dim); text-decoration: none;
-    transition: color 0.2s;
-  }
-  .back-to-catalog:hover { color: var(--teal-light); }
-
-  /* -- Responsive -- */
-  @media (max-width: 768px) {
-    .site-header { height: 56px; }
-    :root { --header-height: 56px; }
-    .header-inner { padding: 0 1rem; gap: 1rem; }
-    .header-inner .nav-left, .header-inner .nav-right { display: none; }
-    .brand img { height: 36px; }
-    .top-bar { padding: 0.6rem 1rem; gap: 0.75rem; }
-    .top-bar-title { font-size: 11px; }
-    .main-content { padding: 1rem; }
-    .tab-btn { padding: 0.6rem 1rem; font-size: 9px; }
-    .summary-card .value { font-size: 1.5rem; }
-    .user-info span { display: none; }
-  }
+/* ---- Responsive ---- */
+@media (max-width: 768px) {
+  .header-inner .nav-left, .header-inner .nav-right { display: none; }
+  .site-header { height: 48px; } :root { --header-h: 48px; }
+  .topbar { padding: 10px 14px; gap: 10px; flex-wrap: wrap; }
+  .topbar .titles h1 { font-size: 1rem; }
+  .back-link { display: none; }
+  .wrap { padding: 18px 14px 48px; }
+  .tab-btn { padding: 10px 14px; font-size: 0.62rem; }
+  .period-row { grid-template-columns: 100px 1fr 60px; }
+  .user-info span { display: none; }
+}
+footer { text-align: center; color: var(--text-faint); font-size: 0.72rem; padding: 26px 0 4px; }
 </style>
 </head>
 <body>
 
-<!-- Site Header (matches creativesilva.com) -->
+<!-- Site Header -->
 <header class="site-header">
   <div class="header-inner">
     <nav class="nav-left" aria-label="Primary">
@@ -422,10 +251,10 @@
 <div id="login-screen">
   <div class="login-card">
     <img src="PV_Logo.png" alt="PVHS">
-    <h1>PVHS Dashboard</h1>
-    <p>Sign in with your Google account to access the teacher command center.</p>
+    <h1>Teacher Command Center</h1>
+    <p>Private access. Sign in with your authorized Google account.</p>
     <div id="login-error" class="login-error"></div>
-    <button class="google-btn" onclick="googleSignIn()">
+    <button class="btn" onclick="googleSignIn()">
       <svg width="20" height="20" viewBox="0 0 48 48"><path fill="#EA4335" d="M24 9.5c3.54 0 6.71 1.22 9.21 3.6l6.85-6.85C35.9 2.38 30.47 0 24 0 14.62 0 6.51 5.38 2.56 13.22l7.98 6.19C12.43 13.72 17.74 9.5 24 9.5z"/><path fill="#4285F4" d="M46.98 24.55c0-1.57-.15-3.09-.38-4.55H24v9.02h12.94c-.58 2.96-2.26 5.48-4.78 7.18l7.73 6c4.51-4.18 7.09-10.36 7.09-17.65z"/><path fill="#FBBC05" d="M10.53 28.59c-.48-1.45-.76-2.99-.76-4.59s.27-3.14.76-4.59l-7.98-6.19C.92 16.46 0 20.12 0 24c0 3.88.92 7.54 2.56 10.78l7.97-6.19z"/><path fill="#34A853" d="M24 48c6.48 0 11.93-2.13 15.89-5.81l-7.73-6c-2.15 1.45-4.92 2.3-8.16 2.3-6.26 0-11.57-4.22-13.47-9.91l-7.98 6.19C6.51 42.62 14.62 48 24 48z"/></svg>
       Sign in with Google
     </button>
@@ -438,715 +267,512 @@
   <div class="loading-text" id="loading-text">Loading...</div>
 </div>
 
-<!-- Dashboard -->
-<div id="dashboard">
-  <div class="top-bar">
-    <a href="https://www.creativesilva.com/curriculum.html#teacher-resources" class="back-to-catalog">&larr; Catalog</a>
-    <img src="PV_Logo.png" alt="PVHS">
-    <div class="top-bar-title">Teacher Command Center</div>
-    <div class="top-bar-spacer"></div>
-    <div class="status-area">
-      <div class="last-updated" id="last-updated"></div>
-      <button class="refresh-btn" id="refresh-btn" onclick="manualRefresh()" title="Refresh data from Canvas">
-        <svg width="15" height="15" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round">
-          <path d="M1 1v5h5"/><path d="M2.5 10A5.5 5.5 0 1 0 3 5.5L1 6"/>
-        </svg>
-      </button>
+<!-- Dashboard (hidden until auth) -->
+<div id="dashboard" style="display:none;">
+  <header class="topbar">
+    <a href="https://www.creativesilva.com/curriculum.html#teacher-resources" class="back-link">&larr; Catalog</a>
+    <img class="pv-logo" src="PV_Logo.png" alt="PVHS">
+    <div class="titles">
+      <h1>Teacher Command Center</h1>
+      <p class="sub" id="topbarSub"></p>
     </div>
-    <div class="user-info" id="user-info">
-      <span id="user-name"></span>
-      <img class="user-avatar" id="user-avatar" src="" alt="" style="display:none">
-    </div>
-    <button class="btn btn-small btn-outline" onclick="signOut()">Sign Out</button>
-  </div>
-
-  <div class="tab-bar">
-    <button class="tab-btn active" data-tab="overview" onclick="switchTab('overview')">Overview</button>
-    <button class="tab-btn" data-tab="grading" onclick="switchTab('grading')">Grading</button>
-    <button class="tab-btn" data-tab="search" onclick="switchTab('search')">Search</button>
-    <button class="tab-btn" data-tab="bulk" onclick="switchTab('bulk')">Bulk Comment</button>
-  </div>
-
-  <div class="main-content">
-    <div id="error-banner" class="error-banner"></div>
-
-    <!-- Overview Tab -->
-    <div id="tab-overview" class="tab-content active">
-      <div class="summary-row" id="summary-row"></div>
-      <div class="sort-bar">
-        <span class="sort-label">Sort:</span>
-        <button class="sort-btn active" data-sort="last" onclick="changeSort('last')">Last Name</button>
-        <button class="sort-btn" data-sort="first" onclick="changeSort('first')">First Name</button>
-        <button class="sort-btn" data-sort="most" onclick="changeSort('most')">Most Missing</button>
-        <button class="sort-btn" data-sort="pts" onclick="changeSort('pts')">Most Points</button>
+    <div class="topbar-right">
+      <div class="user-info" id="user-info">
+        <img class="user-avatar" id="user-avatar" src="PV_Monogram.png" alt="">
+        <span id="user-name">Mr. Silva</span>
       </div>
-      <div id="courses-container"></div>
+      <button id="themeToggle" class="btn ghost small" onclick="toggleTheme()">
+        <span data-when="dark">Light</span><span data-when="light" hidden>Dark</span>
+      </button>
+      <button class="btn ghost small" onclick="signOut()">Sign Out</button>
+    </div>
+  </header>
+
+  <div class="wrap">
+    <div class="stat-row" id="statCards"></div>
+
+    <div class="tab-bar">
+      <button class="tab-btn active" data-tab="roster" onclick="switchTab('roster')">Roster</button>
+      <button class="tab-btn" data-tab="canvas" onclick="switchTab('canvas')">Missing Work</button>
+      <button class="tab-btn" data-tab="grading" onclick="switchTab('grading')">Grading</button>
+      <button class="tab-btn" data-tab="bulk" onclick="switchTab('bulk')">Bulk Comment</button>
+    </div>
+
+    <!-- Roster Tab -->
+    <div id="tab-roster" class="tab-content active">
+      <div class="controls" style="margin-bottom:14px;">
+        <input class="field" type="search" id="search" placeholder="Search name or ID">
+        <select class="field" id="periodFilter"></select>
+        <select class="field" id="supportFilter">
+          <option value="">All support</option>
+          <option value="iep">IEP</option>
+          <option value="p504">504</option>
+          <option value="ssa">SSA</option>
+          <option value="el">EL</option>
+        </select>
+        <select class="field" id="sortBy">
+          <option value="seat">Sort: Seat</option>
+          <option value="name">Sort: Name</option>
+          <option value="iep">Sort: IEP first</option>
+          <option value="el">Sort: EL first</option>
+        </select>
+      </div>
+      <div class="support-legend">
+        <span class="pill iep">IEP</span><span class="pill p504">504</span>
+        <span class="pill ssa">SSA</span><span class="pill el">EL</span>
+      </div>
+      <div class="panel flush" id="panel-students">
+        <div class="stripe"></div>
+        <div style="max-height:560px; overflow:auto;">
+          <table class="tbl"><thead><tr><th>Seat</th><th>Per</th><th>Student</th><th>Support</th><th></th></tr></thead>
+          <tbody id="studentRows"></tbody></table>
+        </div>
+      </div>
+      <div class="panel" id="panel-missing-overview" style="margin-top:24px;">
+        <div class="stripe"></div>
+        <div class="section-head">
+          <div class="head-row"><span class="eyebrow">Canvas Live</span><h2>Students with Most Missing Work</h2>
+            <button class="btn ghost small" onclick="loadMissingOverview()">Refresh</button>
+          </div>
+          <span class="rule"></span>
+        </div>
+        <div id="missing-overview-status" class="sub" style="margin-bottom:10px;">Loading from Canvas...</div>
+        <div style="max-height:420px; overflow:auto;">
+          <table class="tbl"><thead><tr><th>#</th><th>Student</th><th>Course</th><th>Missing</th><th>Points at Risk</th></tr></thead>
+          <tbody id="missingOverviewRows"><tr><td colspan="5" class="empty">Loading...</td></tr></tbody></table>
+        </div>
+      </div>
+    </div>
+
+    <!-- Missing Work Tab -->
+    <div id="tab-canvas" class="tab-content">
+      <div class="panel">
+        <div class="stripe"></div>
+        <div class="section-head">
+          <div class="head-row"><span class="eyebrow">Canvas</span><h2>Missing Assignments</h2></div>
+          <span class="rule"></span>
+        </div>
+        <div class="controls" style="margin-bottom:14px;">
+          <span class="sub" id="canvas-status">Loading courses from Canvas...</span>
+          <div style="flex:1;"></div>
+          <button class="btn ghost small" onclick="loadCanvasData()">Refresh</button>
+        </div>
+        <div class="sort-bar" id="canvas-sort-bar" style="display:none;margin-bottom:14px;">
+          <span class="sort-label">Sort:</span>
+          <button class="sort-btn active" data-sort="last" onclick="changeCanvasSort('last')">Last Name</button>
+          <button class="sort-btn" data-sort="most" onclick="changeCanvasSort('most')">Most Missing</button>
+          <button class="sort-btn" data-sort="pts" onclick="changeCanvasSort('pts')">Most Points</button>
+        </div>
+        <div id="canvas-courses"></div>
+      </div>
     </div>
 
     <!-- Grading Tab -->
     <div id="tab-grading" class="tab-content">
-      <div class="grading-controls">
-        <label class="grading-label">Course</label>
-        <select id="grade-course-select" class="select-input" onchange="loadAssignmentsForGrading()">
-          <option value="">Select course</option>
-        </select>
-        <label class="grading-label">Assignment</label>
-        <select id="grade-assignment-select" class="select-input" onchange="loadGradingQueue()">
-          <option value="">Select assignment</option>
-        </select>
-      </div>
-      <div id="grading-queue">
-        <div class="empty-state">Select a course and assignment to load the grading queue.</div>
-      </div>
-      <div id="grading-actions" style="display:none; margin-top:1rem;">
-        <button class="btn btn-primary" onclick="submitAllGrades()">Apply All Grades to Canvas</button>
-      </div>
-    </div>
-
-    <!-- Search Tab -->
-    <div id="tab-search" class="tab-content">
-      <div class="search-box">
-        <input type="text" id="assignment-search" placeholder="Type an assignment name to find who hasn't submitted..." oninput="handleAssignmentSearch()">
-      </div>
-      <div id="search-results">
-        <div class="empty-state">Start typing an assignment name to search across all courses.</div>
+      <div class="panel">
+        <div class="stripe"></div>
+        <div class="section-head">
+          <div class="head-row"><span class="eyebrow">Canvas</span><h2>Grade Submissions</h2></div>
+          <span class="rule"></span>
+        </div>
+        <div class="controls" style="margin-bottom:14px;">
+          <select class="field" id="grade-course-select" onchange="loadAssignmentsForGrading()"><option value="">Select course</option></select>
+          <select class="field" id="grade-assignment-select" onchange="loadGradingQueue()"><option value="">Select assignment</option></select>
+        </div>
+        <div id="grading-queue"><div class="empty">Select a course and assignment.</div></div>
+        <div id="grading-actions" style="display:none;margin-top:14px;">
+          <button class="btn" onclick="submitAllGrades()">Apply All Grades to Canvas</button>
+        </div>
       </div>
     </div>
 
     <!-- Bulk Comment Tab -->
     <div id="tab-bulk" class="tab-content">
-      <div class="bulk-panel">
-        <h3>Bulk Comment on Missing Assignments</h3>
-        <div class="grading-controls" style="margin-bottom:1rem;">
-          <label class="grading-label">Course</label>
-          <select id="bulk-course-select" class="select-input" onchange="loadAssignmentsForBulk()">
-            <option value="">Select course</option>
-          </select>
-          <label class="grading-label">Assignment</label>
-          <select id="bulk-assignment-select" class="select-input" onchange="loadBulkTargets()">
-            <option value="">Select assignment</option>
-          </select>
+      <div class="panel">
+        <div class="stripe"></div>
+        <div class="section-head">
+          <div class="head-row"><span class="eyebrow">Canvas</span><h2>Bulk Comment on Missing Work</h2></div>
+          <span class="rule"></span>
         </div>
-        <div class="bulk-count" id="bulk-count"></div>
-        <textarea id="bulk-comment" placeholder="Write a comment that will be sent to all students who haven't turned in this assignment..."></textarea>
-        <button class="btn btn-primary" id="bulk-send-btn" onclick="sendBulkComments()" disabled>Send Comment to All Missing Students</button>
+        <div class="controls" style="margin-bottom:14px;">
+          <select class="field" id="bulk-course-select" onchange="loadAssignmentsForBulk()"><option value="">Select course</option></select>
+          <select class="field" id="bulk-assignment-select" onchange="loadBulkTargets()"><option value="">Select assignment</option></select>
+        </div>
+        <div class="sub" id="bulk-count"></div>
+        <textarea class="field" id="bulk-comment" placeholder="Write a comment for all students missing this assignment..." style="width:100%;min-height:80px;margin:10px 0;"></textarea>
+        <button class="btn" id="bulk-send-btn" onclick="sendBulkComments()" disabled>Send to All Missing Students</button>
+        <div id="bulk-results" style="margin-top:14px;"></div>
       </div>
-      <div id="bulk-results"></div>
     </div>
+
+    <footer>PVHS Teacher Command Center. Roster data is confidential.</footer>
   </div>
 </div>
 
-<!-- Firebase SDK -->
-<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-app-compat.js"></script>
-<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-auth-compat.js"></script>
+<!-- Student Modal -->
+<div class="modal-backdrop" id="modalBackdrop">
+  <div class="modal">
+    <div class="stripe"></div>
+    <div class="modal-head">
+      <div><h3 id="modalTitle"></h3><div class="sub" id="modalSub"></div></div>
+      <button class="modal-close" id="modalClose" aria-label="Close">&times;</button>
+    </div>
+    <div class="modal-body" id="modalBody"></div>
+  </div>
+</div>
 
 <script>
-// ───────────────────────────────────────────────────────
-// Firebase Config
-// ───────────────────────────────────────────────────────
-firebase.initializeApp({
-  apiKey:            'AIzaSyCXVzzAeh3U-RwYaKzCXOTBiNAarHWNqVo',
-  authDomain:        'girl-scouts-silva.firebaseapp.com',
-  projectId:         'girl-scouts-silva',
-  storageBucket:     'girl-scouts-silva.firebasestorage.app',
-  messagingSenderId: '662350541127',
-  appId:             '1:662350541127:web:174dd8e1114695d8dadc62',
-});
+// ---- Theme ----
+let themeMemory = 'dark';
+function readStoredTheme(){ try { return localStorage.getItem('pv-theme'); } catch(e){ return themeMemory; } }
+function writeStoredTheme(m){ themeMemory=m; try { localStorage.setItem('pv-theme',m); } catch(e){} }
+function applyTheme(m){ document.documentElement.setAttribute('data-theme',m); document.querySelectorAll('#themeToggle [data-when]').forEach(el=>{ el.hidden=el.getAttribute('data-when')!==m; }); }
+function toggleTheme(){ const n=document.documentElement.getAttribute('data-theme')==='light'?'dark':'light'; writeStoredTheme(n); applyTheme(n); }
+applyTheme(readStoredTheme()||'dark');
 
-const auth = firebase.auth();
+// ---- Firebase Auth ----
+const firebaseConfig = { apiKey:"AIzaSyAx1KPBX_ypJuVFGJOpIRn3lFqXkOuKuXU", authDomain:"girl-scouts-silva.firebaseapp.com", projectId:"girl-scouts-silva" };
+let firebaseToken=null, currentUser=null;
 
-// ───────────────────────────────────────────────────────
-// State
-// ───────────────────────────────────────────────────────
-let currentUser   = null;
-let idToken       = null;
-let dashboardData = [];
-let currentSort   = 'last';
-let coursesCache  = [];
-let bulkTargets   = [];
-
-// ───────────────────────────────────────────────────────
-// Auth
-// ───────────────────────────────────────────────────────
-auth.onAuthStateChanged(async user => {
-  if (user) {
-    currentUser = user;
-    idToken = await user.getIdToken();
-    document.getElementById('login-screen').style.display = 'none';
-    document.getElementById('dashboard').style.display = 'block';
-    document.getElementById('user-name').textContent = user.displayName || user.email;
-    if (user.photoURL) {
-      const av = document.getElementById('user-avatar');
-      av.src = user.photoURL;
-      av.style.display = 'block';
+async function initFirebase(){
+  const {initializeApp}=await import('https://www.gstatic.com/firebasejs/10.12.0/firebase-app.js');
+  const {getAuth,signInWithPopup,GoogleAuthProvider,onAuthStateChanged,signOut:fbSignOut}=await import('https://www.gstatic.com/firebasejs/10.12.0/firebase-auth.js');
+  const app=initializeApp(firebaseConfig);
+  const auth=getAuth(app);
+  window._fbAuth=auth; window._fbProvider=new GoogleAuthProvider();
+  onAuthStateChanged(auth, async user=>{
+    if(user){
+      firebaseToken=await user.getIdToken();
+      currentUser=user;
+      document.getElementById('user-name').textContent='Mr. Silva';
+      document.getElementById('user-avatar').src='PV_Monogram.png';
+      document.getElementById('login-screen').style.display='none';
+      document.getElementById('dashboard').style.display='block';
+      loadDashboard();
+    } else {
+      firebaseToken=null; currentUser=null;
+      document.getElementById('login-screen').style.display='';
+      document.getElementById('dashboard').style.display='none';
     }
-    loadDashboard();
-  } else {
-    currentUser = null;
-    idToken = null;
-    document.getElementById('login-screen').style.display = 'flex';
-    document.getElementById('dashboard').style.display = 'none';
-  }
-});
-
-function googleSignIn() {
-  const provider = new firebase.auth.GoogleAuthProvider();
-  auth.signInWithPopup(provider).catch(err => {
-    const el = document.getElementById('login-error');
-    el.textContent = err.message;
-    el.style.display = 'block';
   });
 }
-
-function signOut() { auth.signOut(); }
-
-// ───────────────────────────────────────────────────────
-// API Helper (injects Firebase token, retries on 401)
-// ───────────────────────────────────────────────────────
-async function api(path, opts = {}) {
-  if (!idToken) idToken = await currentUser.getIdToken(true);
-  const headers = { 'Authorization': 'Bearer ' + idToken, ...(opts.headers || {}) };
-  let resp = await fetch(path, { ...opts, headers, cache: 'no-store' });
-  if (resp.status === 401) {
-    idToken = await currentUser.getIdToken(true);
-    headers['Authorization'] = 'Bearer ' + idToken;
-    resp = await fetch(path, { ...opts, headers, cache: 'no-store' });
-  }
-  return resp;
+async function googleSignIn(){
+  try { const {signInWithPopup}=await import('https://www.gstatic.com/firebasejs/10.12.0/firebase-auth.js'); await signInWithPopup(window._fbAuth,window._fbProvider); }
+  catch(e){ document.getElementById('login-error').textContent=e.message; document.getElementById('login-error').style.display='block'; }
 }
+async function signOut(){
+  const {signOut:fbSignOut}=await import('https://www.gstatic.com/firebasejs/10.12.0/firebase-auth.js');
+  await fbSignOut(window._fbAuth);
+}
+initFirebase();
 
-async function canvasFetch(path) {
-  let all = [];
-  let url = '/api/v1' + path;
-  url += (url.includes('?') ? '&' : '?') + 'per_page=100';
-
-  while (url) {
-    const resp = await api(url);
-    if (!resp.ok) throw new Error('Canvas ' + resp.status + ': ' + resp.statusText);
-    const data = await resp.json();
-    all = all.concat(data);
-    url = null;
-    const link = resp.headers.get('Link');
-    if (link) {
-      const next = link.split(',').find(s => s.includes('rel="next"'));
-      if (next) {
-        const m = next.match(/<([^>]+)>/);
-        if (m) url = m[1];
-      }
-    }
+// ---- API helpers ----
+async function api(path, opts={}){
+  if(!firebaseToken && currentUser) firebaseToken=await currentUser.getIdToken(true);
+  const headers={'Authorization':`Bearer ${firebaseToken}`,...opts.headers};
+  let res=await fetch(path,{...opts,headers});
+  if(res.status===401 && currentUser){ firebaseToken=await currentUser.getIdToken(true); headers['Authorization']=`Bearer ${firebaseToken}`; res=await fetch(path,{...opts,headers}); }
+  return res;
+}
+async function canvasFetch(canvasPath){
+  let all=[], url=`/api/v1${canvasPath}`;
+  while(url){
+    const r=await api(url); if(!r.ok) throw new Error(`Canvas ${r.status}`);
+    const data=await r.json(); all=all.concat(data);
+    const link=r.headers.get('Link')||'';
+    const next=link.match(/<([^>]+)>;\s*rel="next"/);
+    url=next?new URL(next[1]).pathname+new URL(next[1]).search:null;
   }
   return all;
 }
 
-// ───────────────────────────────────────────────────────
-// Dashboard Loading
-// ───────────────────────────────────────────────────────
-async function loadDashboard() {
-  showLoading(true, 'Loading courses...');
-  hideError();
+// ---- Helpers ----
+function esc(s){ return (s==null?'':String(s)).replace(/[&<>"]/g, c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c])); }
+const NONE='<span class="muted">&middot;</span>';
+function showLoading(msg){ document.getElementById('loading-text').textContent=msg||'Loading...'; document.getElementById('loading-overlay').classList.add('visible'); }
+function hideLoading(){ document.getElementById('loading-overlay').classList.remove('visible'); }
+
+// ---- Tab switching ----
+function switchTab(tab){
+  document.querySelectorAll('.tab-btn').forEach(b=>b.classList.toggle('active',b.dataset.tab===tab));
+  document.querySelectorAll('.tab-content').forEach(el=>el.classList.toggle('active',el.id==='tab-'+tab));
+  if(tab==='canvas' && !document.getElementById('canvas-courses').innerHTML) loadCanvasData();
+}
+
+// ---- Roster support ----
+const CLASS_DEF={
+  iep:{label:'IEP',cls:'iep',test:s=>s.iep==='Y'},
+  p504:{label:'504',cls:'p504',test:s=>s.plan_504==='Y'},
+  ssa:{label:'SSA',cls:'ssa',test:s=>s.ssa_flag==='Y'},
+  el:{label:'EL',cls:'el',test:s=>s.langflu_code==='L'},
+};
+const CLASS_KEYS=Object.keys(CLASS_DEF);
+function supportBadges(s){ return CLASS_KEYS.filter(k=>CLASS_DEF[k].test(s)).map(k=>`<span class="pill ${CLASS_DEF[k].cls}">${CLASS_DEF[k].label}</span>`).join(''); }
+function seatSort(s){ const n=parseInt(s.Seat,10); return isNaN(n)?999:n; }
+
+// ---- Dashboard load ----
+let rosterData=null, coursesCache=[], canvasSort='last';
+
+async function loadDashboard(){
+  showLoading('Loading roster data...');
   try {
-    coursesCache = await canvasFetch('/courses?enrollment_type=teacher&state[]=available&include[]=term&include[]=total_students');
-    coursesCache = coursesCache.filter(c =>
-      c.enrollments && c.enrollments.some(e => e.type === 'teacher')
-    );
-    // Only load courses with enrolled students (skips empty/past courses)
-    coursesCache = coursesCache.filter(c => (c.total_students || 0) > 0);
+    const rr=await api('/api/roster');
+    if(rr.ok){
+      rosterData=await rr.json();
+      document.getElementById('topbarSub').textContent=`${rosterData.school} · ${rosterData.term} ${rosterData.school_year}`;
+      renderRoster(); renderStatCards();
+    } else {
+      document.getElementById('topbarSub').textContent='Pioneer Valley High School';
+      document.getElementById('studentRows').innerHTML='<tr><td colspan="6" class="empty">No roster data uploaded yet.</td></tr>';
+    }
+  } catch(e){ console.error('Roster load error:',e); }
+  showLoading('Loading Canvas courses...');
+  try {
+    coursesCache=await canvasFetch('/courses?enrollment_type=teacher&state[]=available&include[]=term&include[]=total_students');
+    coursesCache=coursesCache.filter(c=>c.enrollments&&c.enrollments.some(e=>e.type==='teacher'));
+    coursesCache=coursesCache.filter(c=>(c.total_students||0)>0);
     populateCourseSelects();
+    renderStatCards();
+    loadMissingOverview();
+  } catch(e){ console.error('Canvas load error:',e); }
+  hideLoading();
+}
 
-    showLoading(true, 'Loading missing assignments...');
-    const settled = await Promise.allSettled(coursesCache.map(c => loadCourse(c)));
-    dashboardData = settled.filter(r => r.status === 'fulfilled').map(r => r.value);
-    renderDashboard();
-    updateTimestamp();
-  } catch (err) {
-    showError('Failed to load: ' + err.message);
-    console.error(err);
-  } finally {
-    showLoading(false);
+// ---- Stat cards ----
+function renderStatCards(){
+  const cards=[];
+  if(rosterData){
+    const s=rosterData.students;
+    cards.push({label:'Total Students',num:s.length,cls:''});
+    cards.push({label:'IEP',num:s.filter(x=>x.iep==='Y').length,cls:'warn'});
+    cards.push({label:'504 Plans',num:s.filter(x=>x.plan_504==='Y').length,cls:'warn'});
+    cards.push({label:'English Learners',num:s.filter(x=>x.langflu_code==='L').length,cls:''});
   }
+  if(coursesCache.length) cards.push({label:'Canvas Courses',num:coursesCache.length,cls:'ok'});
+  if(missingOverviewData.length) cards.push({label:'Students w/ Missing',num:missingOverviewData.length,cls:'alert'});
+  if(rosterData) cards.push({label:'Sections',num:rosterData.sections.length,cls:''});
+  document.getElementById('statCards').innerHTML=cards.map(c=>`<div class="stat ${c.cls}"><div class="n num">${c.num}</div><div class="k">${c.label}</div></div>`).join('');
 }
 
-function populateCourseSelects() {
-  ['grade-course-select', 'bulk-course-select'].forEach(id => {
-    const el = document.getElementById(id);
-    el.innerHTML = '<option value="">Select course</option>';
-    coursesCache.forEach(c => {
-      el.innerHTML += '<option value="' + c.id + '">' + esc(c.name) + '</option>';
-    });
-  });
-}
-
-async function loadCourse(course) {
-  const [enrollments, sections] = await Promise.all([
-    canvasFetch('/courses/' + course.id + '/enrollments?type[]=StudentEnrollment&state[]=active&include[]=user'),
-    canvasFetch('/courses/' + course.id + '/sections'),
-  ]);
-
-  const sectionMap = {};
-  sections.forEach(s => { sectionMap[s.id] = s.name; });
-
-  const studentMap = {};
-  enrollments.forEach(e => {
-    if (!e.user) return;
-    const uid = e.user.id;
-    if (!studentMap[uid]) {
-      studentMap[uid] = {
-        id: uid,
-        name: e.user.name,
-        sortable_name: e.user.sortable_name || e.user.name,
-        section: sectionMap[e.course_section_id] || 'Unknown',
-        period: extractPeriod(sectionMap[e.course_section_id] || ''),
-        missing: [],
-      };
-    }
-  });
-
-  const assignments = await canvasFetch('/courses/' + course.id + '/assignments?order_by=due_at');
-  const published = assignments.filter(a => a.published && a.submission_types && !a.submission_types.includes('not_graded'));
-
-  const BATCH = 6;
-  for (let i = 0; i < published.length; i += BATCH) {
-    const batch = published.slice(i, i + BATCH);
-    await Promise.all(batch.map(async asgn => {
-      try {
-        const subs = await canvasFetch('/courses/' + course.id + '/assignments/' + asgn.id + '/submissions');
-        subs.forEach(sub => {
-          if ((sub.missing || sub.late_policy_status === 'missing') && studentMap[sub.user_id]) {
-            studentMap[sub.user_id].missing.push({
-              id: asgn.id,
-              name: asgn.name,
-              due: asgn.due_at ? fmtDate(asgn.due_at) : 'No due date',
-              points: asgn.points_possible || 0,
-            });
+// ---- Missing work overview (auto-loads) ----
+let missingOverviewData=[];
+async function loadMissingOverview(){
+  const tbody=document.getElementById('missingOverviewRows'), status=document.getElementById('missing-overview-status');
+  tbody.innerHTML='<tr><td colspan="5" class="empty">Scanning Canvas courses...</td></tr>';
+  status.textContent='Scanning courses for missing work...';
+  missingOverviewData=[];
+  for(const course of coursesCache){
+    try {
+      const enrollments=await canvasFetch(`/courses/${course.id}/enrollments?type[]=StudentEnrollment&state[]=active&per_page=100`);
+      const assignments=await canvasFetch(`/courses/${course.id}/assignments?per_page=100`);
+      for(let i=0;i<enrollments.length;i+=6){
+        const batch=enrollments.slice(i,i+6);
+        const results=await Promise.allSettled(batch.map(async enr=>{
+          const subs=await canvasFetch(`/courses/${course.id}/students/submissions?student_ids[]=${enr.user_id}&per_page=100`);
+          const missing=subs.filter(s=>s.missing||s.late_policy_status==='missing');
+          if(missing.length>0){
+            const pts=missing.reduce((sum,s)=>sum+(assignments.find(a=>a.id===s.assignment_id)?.points_possible||0),0);
+            return {name:enr.user?.sortable_name||enr.user?.name||'Unknown',userId:enr.user_id,course:course.name,courseId:course.id,count:missing.length,pts};
           }
-        });
-      } catch (err) { console.warn('Skip assignment ' + asgn.id + ': ' + err.message); }
-    }));
-  }
-
-  return {
-    course,
-    students: Object.values(studentMap).sort((a, b) => a.sortable_name.localeCompare(b.sortable_name)),
-  };
-}
-
-function extractPeriod(name) {
-  const cleaned = name.replace(/\s*\([^)]*\)/g, '').trim();
-  const m = cleaned.match(/(?:per(?:iod)?\.?\s*)(\d+)/i) ||
-            cleaned.match(/\bp\s*(\d+)\b/i) ||
-            cleaned.match(/[-\s](\d+)$/) ||
-            cleaned.match(/^(\d+)/);
-  return m ? 'Period ' + m[1] : cleaned;
-}
-
-function fmtDate(iso) {
-  return iso ? new Date(iso).toLocaleDateString('en-US', { month: 'short', day: 'numeric' }) : '';
-}
-
-function esc(s) {
-  const d = document.createElement('div');
-  d.textContent = s;
-  return d.innerHTML;
-}
-
-// ───────────────────────────────────────────────────────
-// Rendering: Overview
-// ───────────────────────────────────────────────────────
-function renderDashboard() {
-  renderSummary();
-  renderCourses();
-}
-
-function renderSummary() {
-  let enrolled = 0, withMissing = 0, totalMissing = 0, maxMissing = 0;
-  dashboardData.forEach(cd => {
-    enrolled += cd.students.length;
-    cd.students.forEach(s => {
-      if (s.missing.length > 0) {
-        withMissing++;
-        totalMissing += s.missing.length;
-        if (s.missing.length > maxMissing) maxMissing = s.missing.length;
+          return null;
+        }));
+        results.forEach(r=>{ if(r.status==='fulfilled'&&r.value) missingOverviewData.push(r.value); });
       }
-    });
-  });
-  document.getElementById('summary-row').innerHTML =
-    '<div class="summary-card">' +
-      '<div class="label">Students with Missing Work</div>' +
-      '<div class="value">' + withMissing + '</div>' +
-      '<div class="sub">' + enrolled + ' enrolled across ' + coursesCache.length + ' courses</div>' +
-    '</div>' +
-    '<div class="summary-card">' +
-      '<div class="label">Total Missing Assignments</div>' +
-      '<div class="value">' + totalMissing + '</div>' +
-    '</div>' +
-    '<div class="summary-card">' +
-      '<div class="label">Most Missing (Single Student)</div>' +
-      '<div class="value">' + maxMissing + '</div>' +
-    '</div>';
-}
-
-function renderCourses() {
-  const container = document.getElementById('courses-container');
-  const sorted = [...dashboardData].sort((a, b) => {
-    const mp = cd => Math.min(...cd.students.map(s => parseInt((s.period || '').replace(/\D/g, '')) || 999));
-    return mp(a) - mp(b);
-  });
-  container.innerHTML = sorted.map(cd => renderCourseSection(cd)).join('');
-}
-
-function renderCourseSection(cd) {
-  const periods = {};
-  cd.students.forEach(s => {
-    const p = s.period || 'Unknown';
-    if (!periods[p]) periods[p] = { missing: [], onTrack: [] };
-    if (s.missing.length > 0) periods[p].missing.push(s);
-    else periods[p].onTrack.push(s);
-  });
-
-  const periodKeys = Object.keys(periods).sort((a, b) => {
-    const na = parseInt(a.replace(/\D/g, '')) || 999;
-    const nb = parseInt(b.replace(/\D/g, '')) || 999;
-    return na - nb;
-  });
-
-  return '<div class="course-section">' +
-    '<div class="course-header">' +
-      '<h2>' + esc(cd.course.name) + '</h2>' +
-      '<span class="course-badge">' + cd.students.length + ' students</span>' +
-    '</div>' +
-    periodKeys.map(p => renderPeriod(p, periods[p])).join('') +
-  '</div>';
-}
-
-function renderPeriod(period, data) {
-  const students = sortStudents(data.missing);
-
-  const rows = students.map((s, i) => {
-    const count = s.missing.length;
-    const pts = s.missing.reduce((t, a) => t + (a.points || 0), 0);
-    const cls = count >= 5 ? 'high' : count >= 3 ? 'medium' : 'low';
-    const details = s.missing.map(a =>
-      '<li>' +
-        '<span class="asgn-name">' + esc(a.name) + '</span>' +
-        '<span class="asgn-pts">' + a.points + 'pts</span>' +
-        '<span class="asgn-due">' + a.due + '</span>' +
-      '</li>'
-    ).join('');
-    return '<div class="student-row" onclick="this.classList.toggle(\'expanded\')">' +
-      '<div class="student-row-header">' +
-        '<span class="student-num">' + (i + 1) + '</span>' +
-        '<span class="student-name">' + esc(s.name) + '</span>' +
-        '<span class="missing-pts">' + pts + ' pts</span>' +
-        '<span class="missing-count ' + cls + '">' + count + ' missing</span>' +
-        '<span class="expand-icon">&#9654;</span>' +
-      '</div>' +
-      '<div class="student-detail">' +
-        '<ul class="assignment-list">' + details + '</ul>' +
-      '</div>' +
-    '</div>';
-  }).join('');
-
-  let onTrackHTML = '';
-  if (data.onTrack.length > 0) {
-    onTrackHTML = '<div class="on-track-section" onclick="this.classList.toggle(\'open\')">' +
-      '<div class="on-track-header">' +
-        '<span class="on-track-chevron">&#9654;</span> ' +
-        data.onTrack.length + ' students on track' +
-      '</div>' +
-      '<div class="on-track-list">' +
-        data.onTrack.map(s => '<div class="on-track-row"><span class="student-name">' + esc(s.name) + '</span></div>').join('') +
-      '</div>' +
-    '</div>';
+    } catch(e){ console.error(`Missing overview error for ${course.name}:`,e); }
   }
-
-  return '<div class="period-group">' +
-    '<div class="period-label">' + esc(period) + '</div>' +
-    (students.length > 0 ? '<div class="student-list">' + rows + '</div>' : '') +
-    onTrackHTML +
-  '</div>';
-}
-
-function sortStudents(students) {
-  const s = [...students];
-  switch (currentSort) {
-    case 'first':
-      return s.sort((a, b) => a.name.split(' ')[0].localeCompare(b.name.split(' ')[0]));
-    case 'most':
-      return s.sort((a, b) => b.missing.length - a.missing.length);
-    case 'pts':
-      return s.sort((a, b) => {
-        const pa = a.missing.reduce((t, m) => t + m.points, 0);
-        const pb = b.missing.reduce((t, m) => t + m.points, 0);
-        return pb - pa;
-      });
-    default:
-      return s.sort((a, b) => a.sortable_name.localeCompare(b.sortable_name));
-  }
-}
-
-function changeSort(sort) {
-  currentSort = sort;
-  document.querySelectorAll('.sort-btn').forEach(b => b.classList.toggle('active', b.dataset.sort === sort));
-  renderCourses();
-}
-
-// ───────────────────────────────────────────────────────
-// Grading Tab
-// ───────────────────────────────────────────────────────
-async function loadAssignmentsForGrading() {
-  const courseId = document.getElementById('grade-course-select').value;
-  const sel = document.getElementById('grade-assignment-select');
-  sel.innerHTML = '<option value="">Select assignment</option>';
-  document.getElementById('grading-queue').innerHTML = '<div class="empty-state">Select an assignment.</div>';
-  document.getElementById('grading-actions').style.display = 'none';
-  if (!courseId) return;
-  try {
-    const assignments = await canvasFetch('/courses/' + courseId + '/assignments?order_by=due_at');
-    assignments.filter(a => a.published).forEach(a => {
-      sel.innerHTML += '<option value="' + a.id + '" data-pts="' + (a.points_possible || 0) + '">' +
-        esc(a.name) + ' (' + (a.points_possible || 0) + ' pts)</option>';
-    });
-  } catch (e) { showError('Failed to load assignments: ' + e.message); }
-}
-
-async function loadGradingQueue() {
-  const courseId = document.getElementById('grade-course-select').value;
-  const assignmentId = document.getElementById('grade-assignment-select').value;
-  const container = document.getElementById('grading-queue');
-  document.getElementById('grading-actions').style.display = 'none';
-  if (!courseId || !assignmentId) {
-    container.innerHTML = '<div class="empty-state">Select an assignment.</div>';
-    return;
-  }
-
-  const selOpt = document.getElementById('grade-assignment-select').selectedOptions[0];
-  const maxPts = selOpt ? selOpt.dataset.pts : '0';
-
-  showLoading(true, 'Loading submissions...');
-  try {
-    const [submissions, sections] = await Promise.all([
-      canvasFetch('/courses/' + courseId + '/assignments/' + assignmentId + '/submissions?include[]=user'),
-      canvasFetch('/courses/' + courseId + '/sections'),
-    ]);
-
-    const cards = submissions.filter(s => s.user).map(sub => {
-      const user = sub.user;
-      let status, statusLabel, statusCls;
-      if (sub.missing) {
-        status = 'missing'; statusLabel = 'Missing'; statusCls = 'missing';
-      } else if (sub.workflow_state === 'graded') {
-        status = 'graded'; statusLabel = 'Graded'; statusCls = 'graded';
-      } else {
-        status = 'submitted'; statusLabel = 'Submitted'; statusCls = 'submitted';
-      }
-      const currentGrade = sub.grade || '';
-      return '<div class="grade-card" data-student-id="' + user.id + '">' +
-        '<span class="grade-card-name">' + esc(user.sortable_name || user.name) + '</span>' +
-        '<span class="grade-card-status ' + statusCls + '">' + statusLabel + '</span>' +
-        '<input class="grade-input" type="number" min="0" max="' + maxPts + '" placeholder="Score" value="' + currentGrade + '" data-field="score">' +
-        '<span class="grade-max">/ ' + maxPts + '</span>' +
-        '<div style="width:100%">' +
-          '<textarea class="grade-comment" placeholder="Comment (optional)" data-field="comment"></textarea>' +
-        '</div>' +
-      '</div>';
+  missingOverviewData.sort((a,b)=>b.count-a.count||b.pts-a.pts);
+  const top=missingOverviewData.slice(0,30);
+  if(top.length===0){
+    tbody.innerHTML='<tr><td colspan="5" class="empty">No missing assignments found. Nice work!</td></tr>';
+    status.textContent='All students are caught up.';
+  } else {
+    tbody.innerHTML=top.map((s,i)=>{
+      const cc=s.count>=5?'alert':s.count>=3?'warn':'';
+      return `<tr><td class="num">${i+1}</td><td class="name">${esc(s.name)}</td><td style="font-size:0.8rem;max-width:200px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${esc(s.course)}</td><td><span class="pill ${cc||'info'}">${s.count} missing</span></td><td style="color:var(--warn);font-variant-numeric:tabular-nums;">${s.pts.toFixed(0)} pts</td></tr>`;
     }).join('');
-
-    container.innerHTML = cards || '<div class="empty-state">No submissions found.</div>';
-    if (cards) document.getElementById('grading-actions').style.display = 'block';
-  } catch (e) {
-    container.innerHTML = '<div class="empty-state">Error: ' + esc(e.message) + '</div>';
-  } finally { showLoading(false); }
-}
-
-async function submitAllGrades() {
-  const courseId = document.getElementById('grade-course-select').value;
-  const assignmentId = document.getElementById('grade-assignment-select').value;
-  if (!courseId || !assignmentId) return;
-
-  const cards = document.querySelectorAll('#grading-queue .grade-card');
-  const grades = [];
-  cards.forEach(card => {
-    const sid = card.dataset.studentId;
-    const score = card.querySelector('[data-field="score"]').value;
-    const comment = card.querySelector('[data-field="comment"]').value.trim();
-    if (score !== '' || comment) {
-      grades.push({ student_id: sid, score: score !== '' ? Number(score) : null, comment });
-    }
-  });
-
-  if (grades.length === 0) { alert('No grades to submit. Enter scores or comments first.'); return; }
-  if (!confirm('Apply ' + grades.length + ' grade(s) to Canvas? This will update student records.')) return;
-
-  showLoading(true, 'Applying ' + grades.length + ' grades...');
-  try {
-    const resp = await api('/api/batch/grades', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ course_id: courseId, assignment_id: assignmentId, grades }),
-    });
-    const result = await resp.json();
-    const ok = result.results.filter(r => r.ok).length;
-    const failed = grades.length - ok;
-    alert('Done! ' + ok + '/' + grades.length + ' grades applied.' + (failed > 0 ? ' ' + failed + ' failed.' : ''));
-    loadGradingQueue();
-  } catch (e) {
-    showError('Grade submission failed: ' + e.message);
-  } finally { showLoading(false); }
-}
-
-// ───────────────────────────────────────────────────────
-// Search Tab
-// ───────────────────────────────────────────────────────
-function handleAssignmentSearch() {
-  const q = document.getElementById('assignment-search').value.trim().toLowerCase();
-  const container = document.getElementById('search-results');
-  if (q.length < 2) {
-    container.innerHTML = '<div class="empty-state">Type at least 2 characters to search.</div>';
-    return;
+    const total=missingOverviewData.reduce((s,x)=>s+x.count,0);
+    status.textContent=`${missingOverviewData.length} students across ${coursesCache.length} courses, ${total} total missing assignments.`;
   }
-  const results = [];
-  dashboardData.forEach(cd => {
-    const assignmentMap = {};
-    cd.students.forEach(s => {
-      s.missing.forEach(a => {
-        if (a.name.toLowerCase().includes(q)) {
-          if (!assignmentMap[a.name]) assignmentMap[a.name] = { name: a.name, students: [] };
-          assignmentMap[a.name].students.push(s);
-        }
-      });
-    });
-    Object.values(assignmentMap).forEach(a => results.push({ ...a, course: cd.course.name }));
-  });
+  renderStatCards();
+}
 
-  if (results.length === 0) {
-    container.innerHTML = '<div class="empty-state">No matching missing assignments found.</div>';
-    return;
+// ---- Roster table ----
+function renderRoster(){
+  if(!rosterData){ document.getElementById('studentRows').innerHTML='<tr><td colspan="6" class="empty">No roster data.</td></tr>'; return; }
+  const students=rosterData.students, sections=rosterData.sections;
+  const pf=document.getElementById('periodFilter');
+  pf.innerHTML='<option value="">All periods</option>'+sections.map(s=>`<option value="${s.period}">Period ${s.period}: ${s.course_code}</option>`).join('');
+
+  function render(){
+    const q=document.getElementById('search').value.trim().toLowerCase();
+    const period=pf.value, cf=document.getElementById('supportFilter').value, sortKey=document.getElementById('sortBy').value;
+    let rows=students.filter(s=>{
+      if(period&&s.period!==period) return false;
+      if(q){ const h=`${s.last_name} ${s.first_name} ${s.student_id} ${s.preferred_name||''}`.toLowerCase(); if(!h.includes(q)) return false; }
+      if(cf&&!CLASS_DEF[cf]?.test(s)) return false;
+      return true;
+    });
+    if(sortKey==='name') rows.sort((a,b)=>`${a.last_name} ${a.first_name}`.localeCompare(`${b.last_name} ${b.first_name}`));
+    else if(CLASS_DEF[sortKey]){ const t=CLASS_DEF[sortKey].test; rows.sort((a,b)=>(t(b)?1:0)-(t(a)?1:0)||(parseInt(a.period)-parseInt(b.period))||(seatSort(a)-seatSort(b))); }
+    else rows.sort((a,b)=>(parseInt(a.period)-parseInt(b.period))||(seatSort(a)-seatSort(b)));
+
+    document.getElementById('studentRows').innerHTML=rows.map((s,i)=>`<tr class="rowclick" data-idx="${i}"><td class="num">${s.Seat||NONE}</td><td>P${s.period}</td><td class="name">${esc(s.last_name)}, ${esc(s.first_name)}${s.preferred_name?` <span class="muted">(${esc(s.preferred_name)})</span>`:''}<div class="muted num" style="font-size:11px">${s.student_id}</div></td><td class="support-flags">${supportBadges(s)||NONE}</td><td><button class="btn ghost small" data-view="${i}">View</button></td></tr>`).join('')||'<tr><td colspan="5" class="empty">No students match.</td></tr>';
+
+    document.querySelectorAll('#studentRows tr.rowclick').forEach(tr=>{ tr.addEventListener('click',e=>{ if(e.target.closest('[data-view]')) return; openStudentModal(rows[+tr.dataset.idx]); }); });
+    document.querySelectorAll('#studentRows [data-view]').forEach(btn=>{ btn.addEventListener('click',e=>{ e.stopPropagation(); openStudentModal(rows[+btn.dataset.view]); }); });
+    window._rosterRows=rows;
   }
-  container.innerHTML = results.map(r =>
-    '<div style="background:var(--surface);border:1px solid var(--border);border-radius:10px;padding:1rem;margin-bottom:1rem;">' +
-      '<h3 style="font-size:0.95rem;color:var(--text-bright);margin-bottom:0.25rem;">' + esc(r.name) + '</h3>' +
-      '<div style="font-size:0.78rem;color:var(--text-muted);margin-bottom:0.5rem;">' +
-        esc(r.course) + ' &middot; ' + r.students.length + ' students missing' +
-      '</div>' +
-      '<ul style="list-style:none;">' +
-        r.students.map(s =>
-          '<li style="padding:0.2rem 0;font-size:0.85rem;color:var(--text);">' +
-            esc(s.name) +
-            ' <span style="color:var(--text-muted);font-size:0.75rem;">' + esc(s.period) + '</span>' +
-          '</li>'
-        ).join('') +
-      '</ul>' +
-    '</div>'
-  ).join('');
+  document.getElementById('search').addEventListener('input',render);
+  pf.addEventListener('change',render);
+  document.getElementById('supportFilter').addEventListener('change',render);
+  document.getElementById('sortBy').addEventListener('change',render);
+  render();
 }
 
-// ───────────────────────────────────────────────────────
-// Bulk Comment Tab
-// ───────────────────────────────────────────────────────
-async function loadAssignmentsForBulk() {
-  const courseId = document.getElementById('bulk-course-select').value;
-  const sel = document.getElementById('bulk-assignment-select');
-  sel.innerHTML = '<option value="">Select assignment</option>';
-  document.getElementById('bulk-count').textContent = '';
-  document.getElementById('bulk-send-btn').disabled = true;
-  bulkTargets = [];
-  if (!courseId) return;
-  try {
-    const assignments = await canvasFetch('/courses/' + courseId + '/assignments?order_by=due_at');
-    assignments.filter(a => a.published).forEach(a => {
-      sel.innerHTML += '<option value="' + a.id + '">' + esc(a.name) + '</option>';
-    });
-  } catch (e) { showError(e.message); }
+// ---- Student modal ----
+function openStudentModal(s){
+  document.getElementById('modalTitle').textContent=`${s.last_name}, ${s.first_name}`+(s.preferred_name?` (${s.preferred_name})`:'');
+  document.getElementById('modalSub').textContent=`ID ${s.student_id} · Period ${s.period} · Seat ${s.Seat||'none'} · ${s.course||''}`;
+  const fields=[
+    ['Student Cell',s['Student Cell']||'none on file'],
+    ['Parent / Guardian',(s['Parent Guardian']||'none on file')+(s['Parent Relationship']?` (${s['Parent Relationship']})`:'')],
+    ['Parent Cell',s['Parent Cell']||'none on file'],
+    ['Grade',s.grade||'n/a'],
+    ['Language',s.langflu_meaning||'n/a'],
+  ];
+  const kv=fields.map(([k,v])=>`<div class="k">${k}</div><div class="v">${esc(v).replace(/^\?/,'<span class="pill flag">?</span> ')}</div>`).join('');
+  document.getElementById('modalBody').innerHTML=`<div class="modal-section"><h4>Support Flags</h4><div class="support-flags">${supportBadges(s)||'<span class="muted">None</span>'}</div></div><div class="modal-section"><h4>Contact Information</h4><div class="kv">${kv}</div></div>`;
+  document.getElementById('modalBackdrop').classList.add('open');
+}
+document.getElementById('modalClose').addEventListener('click',()=>document.getElementById('modalBackdrop').classList.remove('open'));
+document.getElementById('modalBackdrop').addEventListener('click',e=>{ if(e.target===document.getElementById('modalBackdrop')) document.getElementById('modalBackdrop').classList.remove('open'); });
+document.addEventListener('keydown',e=>{ if(e.key==='Escape') document.getElementById('modalBackdrop').classList.remove('open'); });
+
+// ---- Canvas: Missing Work ----
+async function loadCanvasData(){
+  const container=document.getElementById('canvas-courses');
+  const statusEl=document.getElementById('canvas-status');
+  statusEl.textContent='Loading missing assignments...'; container.innerHTML='';
+  const BATCH=6; let totalMissing=0, totalStudents=0;
+  for(const course of coursesCache){
+    try {
+      const enrollments=await canvasFetch(`/courses/${course.id}/enrollments?type[]=StudentEnrollment&state[]=active&per_page=100`);
+      const assignments=await canvasFetch(`/courses/${course.id}/assignments?per_page=100`);
+      let studentsWithMissing=[];
+      for(let i=0;i<enrollments.length;i+=BATCH){
+        const batch=enrollments.slice(i,i+BATCH);
+        const results=await Promise.allSettled(batch.map(async enr=>{
+          const subs=await canvasFetch(`/courses/${course.id}/students/submissions?student_ids[]=${enr.user_id}&per_page=100`);
+          const missing=subs.filter(s=>s.missing||s.late_policy_status==='missing');
+          if(missing.length>0){
+            const pts=missing.reduce((sum,s)=>sum+(assignments.find(a=>a.id===s.assignment_id)?.points_possible||0),0);
+            return {name:enr.user?.sortable_name||enr.user?.name||'Unknown',userId:enr.user_id,missing:missing.map(m=>{const a=assignments.find(x=>x.id===m.assignment_id);return{name:a?.name||'Unknown',pts:a?.points_possible||0};}),totalPts:pts};
+          }
+          return null;
+        }));
+        results.forEach(r=>{ if(r.status==='fulfilled'&&r.value) studentsWithMissing.push(r.value); });
+      }
+      if(studentsWithMissing.length>0){
+        if(canvasSort==='most') studentsWithMissing.sort((a,b)=>b.missing.length-a.missing.length);
+        else if(canvasSort==='pts') studentsWithMissing.sort((a,b)=>b.totalPts-a.totalPts);
+        else studentsWithMissing.sort((a,b)=>a.name.localeCompare(b.name));
+        totalMissing+=studentsWithMissing.reduce((s,st)=>s+st.missing.length,0);
+        totalStudents+=studentsWithMissing.length;
+        let html=`<div class="panel" style="margin-bottom:18px;"><div class="stripe"></div><div class="section-head"><div class="head-row"><span class="eyebrow">Course</span><h2>${esc(course.name)}</h2><span class="pill info">${studentsWithMissing.length} students</span></div><span class="rule"></span></div>`;
+        studentsWithMissing.forEach(st=>{
+          const cc=st.missing.length>=5?'alert':st.missing.length>=3?'warn':'';
+          html+=`<div class="student-row" onclick="this.classList.toggle('expanded')"><div class="student-row-header"><span class="student-name">${esc(st.name)}</span><span class="pill ${cc||'info'}">${st.missing.length} missing</span><span style="font-size:0.78rem;color:var(--teal-light);min-width:5rem;text-align:center;">${st.totalPts.toFixed(0)} pts</span><span class="expand-icon">&rsaquo;</span></div><div class="student-detail"><ul class="assignment-list">${st.missing.map(m=>`<li><span>${esc(m.name)}</span><span style="color:var(--teal-light)">${m.pts} pts</span></li>`).join('')}</ul></div></div>`;
+        });
+        html+='</div>'; container.innerHTML+=html;
+      }
+    } catch(e){ console.error(`Error loading ${course.name}:`,e); }
+  }
+  document.getElementById('canvas-sort-bar').style.display=totalStudents>0?'flex':'none';
+  statusEl.textContent=totalStudents>0?`${totalStudents} students with ${totalMissing} missing assignments`:'No missing assignments found.';
+}
+function changeCanvasSort(sort){ canvasSort=sort; document.querySelectorAll('#canvas-sort-bar .sort-btn').forEach(b=>b.classList.toggle('active',b.dataset.sort===sort)); loadCanvasData(); }
+
+// ---- Course selects ----
+function populateCourseSelects(){
+  const opts=coursesCache.map(c=>`<option value="${c.id}">${esc(c.name)}</option>`).join('');
+  ['grade-course-select','bulk-course-select'].forEach(id=>{ document.getElementById(id).innerHTML='<option value="">Select course</option>'+opts; });
 }
 
-async function loadBulkTargets() {
-  const courseId = document.getElementById('bulk-course-select').value;
-  const assignmentId = document.getElementById('bulk-assignment-select').value;
-  bulkTargets = [];
-  document.getElementById('bulk-count').textContent = '';
-  document.getElementById('bulk-send-btn').disabled = true;
-  if (!courseId || !assignmentId) return;
-
-  showLoading(true, 'Finding missing students...');
-  try {
-    const subs = await canvasFetch('/courses/' + courseId + '/assignments/' + assignmentId + '/submissions?include[]=user');
-    bulkTargets = subs
-      .filter(s => s.missing && s.user)
-      .map(s => ({ student_id: s.user_id, name: s.user.name }));
-    document.getElementById('bulk-count').textContent =
-      bulkTargets.length + ' students have not submitted this assignment.';
-    document.getElementById('bulk-send-btn').disabled = bulkTargets.length === 0;
-  } catch (e) { showError(e.message); }
-  finally { showLoading(false); }
+// ---- Grading ----
+async function loadAssignmentsForGrading(){
+  const cid=document.getElementById('grade-course-select').value;
+  const sel=document.getElementById('grade-assignment-select');
+  if(!cid){ sel.innerHTML='<option value="">Select course first</option>'; return; }
+  sel.innerHTML='<option value="">Loading...</option>';
+  const a=await canvasFetch(`/courses/${cid}/assignments?per_page=100`);
+  sel.innerHTML='<option value="">Select assignment</option>'+a.filter(x=>x.published).map(x=>`<option value="${x.id}" data-pts="${x.points_possible||0}">${esc(x.name)} (${x.points_possible||0} pts)</option>`).join('');
+}
+async function loadGradingQueue(){
+  const cid=document.getElementById('grade-course-select').value, aid=document.getElementById('grade-assignment-select').value;
+  const container=document.getElementById('grading-queue');
+  if(!cid||!aid){ container.innerHTML='<div class="empty">Select a course and assignment.</div>'; return; }
+  container.innerHTML='<div class="empty">Loading submissions...</div>';
+  const subs=await canvasFetch(`/courses/${cid}/assignments/${aid}/submissions?per_page=100&include[]=user`);
+  const maxPts=document.querySelector(`#grade-assignment-select option[value="${aid}"]`)?.dataset.pts||0;
+  container.innerHTML=subs.map(s=>{
+    const name=s.user?.sortable_name||s.user?.name||'Student';
+    const status=s.grade?'graded':(s.missing?'missing':(s.submitted_at?'submitted':'missing'));
+    return `<div class="grade-card" data-user-id="${s.user_id}"><span class="grade-card-name">${esc(name)}</span><span class="pill ${status==='graded'?'present':status==='submitted'?'info':'absent'}">${status}</span><input class="grade-input field" type="number" min="0" max="${maxPts}" value="${s.score??''}" placeholder="/${maxPts}" data-original="${s.score??''}"><span class="muted">/ ${maxPts}</span><textarea class="grade-comment field" placeholder="Comment..." style="width:100%;margin-top:6px;min-height:36px;"></textarea></div>`;
+  }).join('')||'<div class="empty">No submissions found.</div>';
+  document.getElementById('grading-actions').style.display=subs.length?'':'none';
+}
+async function submitAllGrades(){
+  const cid=document.getElementById('grade-course-select').value, aid=document.getElementById('grade-assignment-select').value;
+  if(!cid||!aid) return;
+  let updated=0;
+  for(const card of document.querySelectorAll('#grading-queue .grade-card')){
+    const input=card.querySelector('.grade-input'), comment=card.querySelector('.grade-comment'), uid=card.dataset.userId;
+    const score=input.value, text=comment.value.trim();
+    if(score===input.dataset.original&&!text) continue;
+    const body={submission:{}};
+    if(score!=='') body.submission.posted_grade=score;
+    if(text) body.comment={text_comment:text};
+    await api(`/api/v1/courses/${cid}/assignments/${aid}/submissions/${uid}`,{method:'PUT',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)});
+    updated++; input.dataset.original=score;
+  }
+  alert(`Updated ${updated} submission${updated!==1?'s':''}.`);
 }
 
-async function sendBulkComments() {
-  const courseId = document.getElementById('bulk-course-select').value;
-  const assignmentId = document.getElementById('bulk-assignment-select').value;
-  const comment = document.getElementById('bulk-comment').value.trim();
-  if (!comment) { alert('Please write a comment first.'); return; }
-  if (bulkTargets.length === 0) return;
-  if (!confirm('Send this comment to ' + bulkTargets.length + ' students?')) return;
-
-  showLoading(true, 'Sending to ' + bulkTargets.length + ' students...');
-  try {
-    const resp = await api('/api/batch/comments', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        course_id: courseId,
-        assignment_id: assignmentId,
-        student_ids: bulkTargets.map(t => t.student_id),
-        comment,
-      }),
-    });
-    const result = await resp.json();
-    document.getElementById('bulk-results').innerHTML =
-      '<div style="background:rgba(50,205,100,0.08);border:1px solid rgba(50,205,100,0.2);border-radius:10px;padding:1rem;color:var(--success);font-size:0.9rem;">' +
-        'Sent ' + result.succeeded + '/' + result.total + ' comments successfully.' +
-      '</div>';
-    document.getElementById('bulk-comment').value = '';
-  } catch (e) { showError(e.message); }
-  finally { showLoading(false); }
+// ---- Bulk Comment ----
+async function loadAssignmentsForBulk(){
+  const cid=document.getElementById('bulk-course-select').value;
+  const sel=document.getElementById('bulk-assignment-select');
+  if(!cid){ sel.innerHTML='<option value="">Select course first</option>'; return; }
+  sel.innerHTML='<option value="">Loading...</option>';
+  const a=await canvasFetch(`/courses/${cid}/assignments?per_page=100`);
+  sel.innerHTML='<option value="">Select assignment</option>'+a.filter(x=>x.published).map(x=>`<option value="${x.id}">${esc(x.name)}</option>`).join('');
 }
-
-// ───────────────────────────────────────────────────────
-// Tab Switching
-// ───────────────────────────────────────────────────────
-function switchTab(tab) {
-  document.querySelectorAll('.tab-btn').forEach(b => b.classList.toggle('active', b.dataset.tab === tab));
-  document.querySelectorAll('.tab-content').forEach(t => t.classList.toggle('active', t.id === 'tab-' + tab));
+let bulkTargets=[];
+async function loadBulkTargets(){
+  const cid=document.getElementById('bulk-course-select').value, aid=document.getElementById('bulk-assignment-select').value;
+  const countEl=document.getElementById('bulk-count'), btn=document.getElementById('bulk-send-btn');
+  bulkTargets=[]; btn.disabled=true;
+  if(!cid||!aid){ countEl.textContent=''; return; }
+  countEl.textContent='Finding students...';
+  const subs=await canvasFetch(`/courses/${cid}/assignments/${aid}/submissions?per_page=100&include[]=user`);
+  bulkTargets=subs.filter(s=>s.missing||s.late_policy_status==='missing');
+  countEl.textContent=`${bulkTargets.length} student${bulkTargets.length!==1?'s':''} missing this assignment.`;
+  btn.disabled=bulkTargets.length===0;
+  document.getElementById('bulk-comment').addEventListener('input',()=>{ btn.disabled=bulkTargets.length===0||!document.getElementById('bulk-comment').value.trim(); });
 }
-
-// ───────────────────────────────────────────────────────
-// Utilities
-// ───────────────────────────────────────────────────────
-function manualRefresh() {
-  const btn = document.getElementById('refresh-btn');
-  btn.classList.add('spinning');
-  loadDashboard().finally(() => btn.classList.remove('spinning'));
-}
-
-function updateTimestamp() {
-  const now = new Date();
-  document.getElementById('last-updated').innerHTML =
-    'Last updated<br>' + now.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' });
-}
-
-function showLoading(show, text) {
-  const el = document.getElementById('loading-overlay');
-  if (text) document.getElementById('loading-text').textContent = text;
-  el.classList.toggle('visible', show);
-}
-
-function showError(msg) {
-  const el = document.getElementById('error-banner');
-  el.textContent = msg;
-  el.style.display = 'block';
-}
-
-function hideError() {
-  document.getElementById('error-banner').style.display = 'none';
+async function sendBulkComments(){
+  const cid=document.getElementById('bulk-course-select').value, aid=document.getElementById('bulk-assignment-select').value;
+  const comment=document.getElementById('bulk-comment').value.trim();
+  if(!comment||!bulkTargets.length) return;
+  const btn=document.getElementById('bulk-send-btn');
+  btn.disabled=true; btn.textContent='Sending...';
+  let sent=0, failed=0;
+  for(const sub of bulkTargets){
+    try { await api(`/api/v1/courses/${cid}/assignments/${aid}/submissions/${sub.user_id}`,{method:'PUT',headers:{'Content-Type':'application/json'},body:JSON.stringify({comment:{text_comment:comment}})}); sent++; }
+    catch(e){ failed++; }
+  }
+  document.getElementById('bulk-results').innerHTML=`<div class="pill ${failed?'flag':'present'}" style="font-size:0.8rem;padding:6px 12px;">Sent ${sent} comment${sent!==1?'s':''}${failed?`, ${failed} failed`:''}.</div>`;
+  btn.textContent='Send to All Missing Students'; btn.disabled=false;
 }
 </script>
 </body>

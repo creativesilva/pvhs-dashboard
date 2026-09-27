@@ -19,7 +19,7 @@ import time
 
 PORT         = int(os.environ.get('PORT', 8080))
 CANVAS_HOST  = 'smjuhsd.instructure.com'
-CANVAS_TOKEN = os.environ.get('CANVAS_TOKEN', '')
+CANVAS_TOKEN = os.environ.get('CANVAS_TOKEN', '').strip()
 API_KEY      = os.environ.get('API_KEY', '')
 SERVE_DIR    = os.path.dirname(os.path.abspath(__file__))
 
@@ -216,6 +216,8 @@ class Handler(BaseHTTPRequestHandler):
             conn.request(method, self.path, body=body, headers=headers)
             resp = conn.getresponse()
             resp_body = resp.read()
+            if resp.status >= 400:
+                print(f'[canvas] {method} {self.path} -> {resp.status}: {resp_body[:200]}')
 
             self.send_response(resp.status)
             ct = resp.getheader('Content-Type', 'application/json')
@@ -425,7 +427,7 @@ class ThreadedHTTPServer(ThreadingMixIn, HTTPServer):
 if __name__ == '__main__':
     print(f'PVHS Dashboard Server v2.0 on port {PORT}')
     print(f'  Canvas host: {CANVAS_HOST}')
-    print(f'  Canvas token: {"configured" if CANVAS_TOKEN else "NOT SET"}')
+    print(f'  Canvas token: {"configured (" + str(len(CANVAS_TOKEN)) + " chars)" if CANVAS_TOKEN else "NOT SET"}')
     print(f'  Allowed emails: {ALLOWED_EMAILS or "(any authenticated user)"}')
     print(f'  API key: {"configured" if API_KEY else "not set"}')
     server = ThreadedHTTPServer(('0.0.0.0', PORT), Handler)

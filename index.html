@@ -569,10 +569,12 @@ async function loadDashboard() {
   showLoading(true, 'Loading courses...');
   hideError();
   try {
-    coursesCache = await canvasFetch('/courses?enrollment_type=teacher&state[]=available');
+    coursesCache = await canvasFetch('/courses?enrollment_type=teacher&state[]=available&include[]=term&include[]=total_students');
     coursesCache = coursesCache.filter(c =>
       c.enrollments && c.enrollments.some(e => e.type === 'teacher')
     );
+    // Only load courses with enrolled students (skips empty/past courses)
+    coursesCache = coursesCache.filter(c => (c.total_students || 0) > 0);
     populateCourseSelects();
 
     showLoading(true, 'Loading missing assignments...');

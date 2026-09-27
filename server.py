@@ -1,8 +1,10 @@
 #!/usr/bin/env python3
 """
-PVHS Canvas Missing Assignments Dashboard -- proxy server.
-Serves the dashboard HTML and proxies Canvas API requests to avoid CORS.
-Includes POST /grade endpoint for AI-assisted rubric grading via Gemini.
+PVHS Dashboard Server
+- Firebase Auth (Google sign-in) verification
+- Canvas LMS API proxy (GET/POST/PUT/DELETE)
+- Batch operations (grades, comments)
+- Static file serving
 """
 
 from http.server import HTTPServer, BaseHTTPRequestHandler
@@ -13,643 +15,354 @@ import ssl
 import json
 import os
 import mimetypes
-import base64
-import urllib.request
-import urllib.error
 import time
 
-PORT        = int(os.environ.get('PORT', 8080))
-CANVAS_HOST = 'smjuhsd.instructure.com'
-GEMINI_KEY  = os.environ.get('GEMINI_API_KEY', '')
-COURSE_ID   = '111811'
-SERVE_DIR   = os.path.dirname(os.path.abspath(__file__))
+PORT         = int(os.environ.get('PORT', 8080))
+CANVAS_HOST  = 'smjuhsd.instructure.com'
+CANVAS_TOKEN = os.environ.get('CANVAS_TOKEN', '')
+API_KEY      = os.environ.get('API_KEY', '')
+SERVE_DIR    = os.path.dirname(os.path.abspath(__file__))
 
-GEMINI_MODEL = 'gemini-2.5-flash'
+FIREBASE_PROJECT_ID = 'girl-scouts-silva'
+ALLOWED_EMAILS = [
+    e.strip().lower()
+    for e in os.environ.get('ALLOWED_EMAILS', '').split(',')
+    if e.strip()
+]
 
-def gemini_url():
-    return (
-        'https://generativelanguage.googleapis.com/v1beta/models/'
-        + GEMINI_MODEL + ':generateContent?key=' + GEMINI_KEY
-)
+# ---------------------------------------------------------------------------
+# Firebase ID-token verification (lightweight, no Admin SDK needed)
+# ---------------------------------------------------------------------------
 
-def gemini_list_url():
-    return 'https://generativelanguage.googleapis.com/v1beta/models?key=' + GEMINI_KEY
+_cert_cache = {'data': None, 'exp': 0}
+
+def _fetch_google_certs():
+    """Fetch Google's public certs for Firebase token verification, cached."""
+    import urllib.request as req
+    now = time.time()
+    if _cert_cache['data'] and now < _cert_cache['exp']:
+        return _cert_cache['data']
+    url = ('https://www.googleapis.com/robot/v1/metadata/x509/'
+           'securetoken@system.gserviceaccount.com')
+    with req.urlopen(req.Request(url), timeout=10) as r:
+        _cert_cache['data'] = json.loads(r.read())
+        _cert_cache['exp'] = now + 3600
+    return _cert_cache['data']
 
 
-import re
-
-def parse_gemini_json(text):
-    """Parse JSON from Gemini, handling common formatting issues."""
-    # Strip markdown fences
-    text = re.sub(r'```[a-z]*\n?', '', text)
-    text = re.sub(r'\n?```', '', text)
-    # Find outermost JSON object
-    start = text.find('{')
-    end   = text.rfind('}')
-    if start != -1 and end != -1:
-        text = text[start:end+1]
-    text = text.strip()
-
-    # Attempt 1: try strict=False directly
+def verify_firebase_token(id_token_str):
+    """Verify a Firebase ID token. Returns decoded claims or None."""
     try:
-        return json.loads(text, strict=False)
-    except json.JSONDecodeError:
-        pass
-
-    # Attempt 2: rebuild string with proper escaping
-    # Handles: unescaped quotes inside strings, control chars, etc.
-    text = _repair_json_strings(text)
-    try:
-        return json.loads(text, strict=False)
-    except json.JSONDecodeError as e:
-        print(f'[gemini] JSON repair attempt failed: {e}')
-        raise ValueError(f'Gemini returned unparseable JSON: {e}')
-
-
-def _repair_json_strings(text):
-    """Walk through JSON text character by character, properly escaping
-    content inside string values. Handles unescaped quotes, newlines,
-    tabs, and other control characters."""
-    result = []
-    i = 0
-    n = len(text)
-    in_string = False
-
-    while i < n:
-        ch = text[i]
-
-        if not in_string:
-            result.append(ch)
-            if ch == '"':
-                in_string = True
-            i += 1
-        else:
-            # Inside a JSON string value
-            if ch == '\\' and i + 1 < n:
-                # Valid escape sequence -- keep as-is
-                result.append(ch)
-                result.append(text[i + 1])
-                i += 2
-            elif ch == '"':
-                # Is this the real end of the string, or an unescaped interior quote?
-                # Look ahead: if followed by structural JSON chars, it ends the string
-                rest = text[i + 1:].lstrip()
-                if not rest or rest[0] in ':,}]':
-                    # Structural close quote
-                    result.append('"')
-                    in_string = False
-                    i += 1
-                else:
-                    # Interior quote -- escape it
-                    result.append('\\"')
-                    i += 1
-            elif ch == '\n':
-                result.append('\\n')
-                i += 1
-            elif ch == '\r':
-                result.append('\\r')
-                i += 1
-            elif ch == '\t':
-                result.append('\\t')
-                i += 1
-            elif ord(ch) < 32:
-                # Other control character -- escape as unicode
-                result.append(f'\\u{ord(ch):04x}')
-                i += 1
-            else:
-                result.append(ch)
-                i += 1
-
-    return ''.join(result)
-
-# Teacher voice -- English
-VOICE_EN = (
-    "You are writing grading feedback on behalf of Mr. Silva, "
-    "an experienced professional photographer and educator at Pioneer Valley High School. "
-    "Write in his voice: firm, motivational, and friendly. He is passionate about the art of photography. "
-    "Use direct, clear language at a 5th grade reading level. "
-    "Be specific about what you see in the student's submitted images. "
-    "Praise what works. Explain what needs improvement and why it matters as a photographer. "
-    "Sound like a real teacher wrote this, not a form letter. Vary your sentence structure. "
-    "Never use em dashes under any circumstances."
-)
-
-# Teacher voice -- Spanish (full Spanish for flagged students)
-VOICE_ES = (
-    "Eres el asistente de calificacion del senor Silva, "
-    "un fotografo y educador profesional con mucha experiencia en Pioneer Valley High School. "
-    "Escribe todo el comentario en espanol usando el tuteo. "
-    "Su tono es firme, motivador y amigable. Es apasionado por el arte de la fotografia. "
-    "Usa lenguaje directo y claro, facil de entender para un estudiante de preparatoria. "
-    "Se especifico sobre lo que ves en las imagenes enviadas por el estudiante. "
-    "Felicita lo que funciona bien. Explica lo que necesita mejorar y por que importa como fotografo. "
-    "Escribe como un maestro real, no como una carta generica. Varia la estructura de las oraciones. "
-    "Nunca uses guiones largos bajo ninguna circunstancia."
-)
+        from google.oauth2 import id_token
+        from google.auth.transport import requests as g_requests
+        claims = id_token.verify_firebase_token(
+            id_token_str,
+            g_requests.Request(),
+            audience=FIREBASE_PROJECT_ID,
+        )
+        return claims
+    except Exception as e:
+        print(f'[auth] Token verification failed: {e}')
+        return None
 
 
-def build_criteria_block(criteria):
-    """Convert rubric criteria list to a readable text block for the prompt."""
-    lines = []
-    for c in criteria:
-        lines.append(f'Criterion ID: {c["id"]}')
-        lines.append(f'  Name: {c["description"]}')
-        lines.append(f'  Max Points: {c["points"]}')
-        lines.append('  Ratings:')
-        for r in c.get('ratings', []):
-            desc = r.get('long_description') or r.get('description', '')
-            lines.append(f'    {r["description"]} ({r["points"]} pts): {desc}')
-        lines.append('')
-    return '\n'.join(lines)
-
+# ---------------------------------------------------------------------------
+# Request handler
+# ---------------------------------------------------------------------------
 
 class Handler(BaseHTTPRequestHandler):
 
-    # ── Routing ──────────────────────────────────────────────────────────────
+    # -- Auth helpers -------------------------------------------------------
 
-    def do_POST(self):
-        if self.path == '/grade':
-            self.handle_grade()
-        else:
-            self.send_error(404)
+    def check_auth(self):
+        """Verify the request is authenticated. Returns email or None."""
+        # API-key auth (server-to-server, e.g. curriculum catalog)
+        key = self.headers.get('X-API-Key', '')
+        if API_KEY and key == API_KEY:
+            return 'api-key'
+
+        # Firebase ID token auth (browser)
+        auth = self.headers.get('Authorization', '')
+        if not auth.startswith('Bearer '):
+            return None
+        token = auth[7:]
+        claims = verify_firebase_token(token)
+        if not claims:
+            return None
+        email = (claims.get('email') or '').lower()
+        if ALLOWED_EMAILS and email not in ALLOWED_EMAILS:
+            print(f'[auth] Email not allowed: {email}')
+            return None
+        return email
+
+    def require_auth(self):
+        """Check auth; send 401 and return False if unauthenticated."""
+        email = self.check_auth()
+        if not email:
+            self.json_response(401, {'error': 'Unauthorized'})
+            return False
+        return True
+
+    # -- Routing ------------------------------------------------------------
+
+    def do_OPTIONS(self):
+        self.send_response(204)
+        self._cors_headers()
+        self.end_headers()
 
     def do_GET(self):
-        if self.path == '/list-models':
-            self.handle_list_models()
-        elif self.path.startswith('/api/'):
-            self.proxy_to_canvas()
-        elif self.path in ('/', ''):
+        path = urlparse(self.path).path
+        if path.startswith('/api/v1/'):
+            if not self.require_auth():
+                return
+            self.proxy_canvas('GET')
+        elif path == '/api/status':
+            self.handle_status()
+        elif path in ('/', ''):
             self.path = '/index.html'
             self.serve_file()
         else:
             self.serve_file()
 
-    def handle_list_models(self):
-        try:
-            req = urllib.request.Request(gemini_list_url(), headers={'User-Agent': 'PVHS/1.0'})
-            with urllib.request.urlopen(req, timeout=10) as r:
-                data = json.loads(r.read())
-            names = [m.get('name','') for m in data.get('models', [])]
-            self.json_response(200, {'models': names, 'key_prefix': GEMINI_KEY[:8] + '...'})
-        except urllib.error.HTTPError as e:
-            self.json_response(e.code, {'error': e.read().decode('utf-8', errors='replace')})
-        except Exception as e:
-            self.json_error(500, str(e))
-
-    def do_OPTIONS(self):
-        self.send_response(204)
-        self.send_header('Access-Control-Allow-Origin', '*')
-        self.send_header('Access-Control-Allow-Methods', 'GET, POST, OPTIONS')
-        self.send_header('Access-Control-Allow-Headers', 'Authorization, Content-Type')
-        self.send_header('Access-Control-Max-Age', '86400')
-        self.end_headers()
-
-    # ── Grade Endpoint ────────────────────────────────────────────────────────
-
-    def handle_grade(self):
-        self._last_gemini_error = None
-        try:
-            length = int(self.headers.get('Content-Length', 0))
-            body   = self.rfile.read(length)
-            data   = json.loads(body)
-
-            assignment_id = str(data.get('assignment_id', ''))
-            student_id    = str(data.get('student_id', ''))
-            student_name  = data.get('student_name', 'Student')
-            rubric_id     = str(data.get('rubric_id', ''))
-            spanish       = bool(data.get('spanish', False))
-            auth          = self.headers.get('Authorization', '')
-
-            if not all([assignment_id, student_id, rubric_id, auth]):
-                self.json_error(400, 'Missing required fields')
-                return
-
-            if not GEMINI_KEY:
-                self.json_error(503, 'Gemini API key not configured')
-                return
-
-            # 1. Fetch rubric
-            rubric = self.canvas_get(
-                f'/courses/{COURSE_ID}/rubrics/{rubric_id}', auth
-            )
-            # Canvas returns criteria under 'data' key on rubric objects
-            criteria = None
-            if isinstance(rubric, dict):
-                criteria = rubric.get('data') or rubric.get('criteria')
-            if not criteria:
-                print(f'[grade] Rubric response keys: {list(rubric.keys()) if isinstance(rubric, dict) else type(rubric)}')
-                self.json_error(500, 'Could not fetch rubric criteria')
-                return
-
-            # 2. Fetch submission
-            submission = self.canvas_get(
-                f'/courses/{COURSE_ID}/assignments/{assignment_id}'
-                f'/submissions/{student_id}?include[]=submission_comments',
-                auth
-            )
-
-            attachments    = submission.get('attachments', []) or []
-            workflow_state = submission.get('workflow_state', 'unsubmitted')
-            is_missing     = (workflow_state == 'unsubmitted') or not attachments
-
-            if is_missing:
-                result = self.generate_missing_comment(
-                    student_name, student_id, submission, spanish
-                )
-            else:
-                images = self.fetch_images(attachments, auth)
-                if not images:
-                    self.json_error(500, 'Could not download submission images')
-                    return
-                # Calculate days late from Canvas submission data
-                seconds_late = submission.get('seconds_late', 0) or 0
-                days_late = int(seconds_late / 86400)
-                result = self.grade_submission(
-                    student_name, images, criteria, spanish, days_late
-                )
-
-            if result is None:
-                err = getattr(self, '_last_gemini_error', 'Gemini grading failed')
-                self.json_error(500, err)
-                return
-
-            # 3. Post back to Canvas
-            canvas_resp = self.post_to_canvas(assignment_id, student_id, result, criteria, auth)
-
-            self.json_response(200, {
-                'success': True,
-                'missing': is_missing,
-                'overall_comment': result.get('overall_comment', ''),
-                'total_score': result.get('total_score', 0),
-                'canvas_posted': canvas_resp is not None,
-                'canvas_grade': canvas_resp.get('grade') if isinstance(canvas_resp, dict) else None
-            })
-
-        except Exception as e:
-            print(f'[grade] Unhandled error: {e}')
-            import traceback; traceback.print_exc()
-            self.json_error(500, str(e))
-
-    # ── Gemini: Grade Submitted Work ─────────────────────────────────────────
-
-    def grade_submission(self, student_name, images, criteria, spanish, days_late=0):
-        voice         = VOICE_ES if spanish else VOICE_EN
-        lang_note     = (
-            'Respond ENTIRELY in Spanish using tú. No English at all.'
-            if spanish else
-            'Respond in English.'
-        )
-
-        # Separate timeliness criterion from visual criteria
-        timeliness_crit = None
-        visual_criteria = []
-        for c in criteria:
-            name_lower = c.get('description', '').lower()
-            if 'timeli' in name_lower or 'submission' in name_lower:
-                timeliness_crit = c
-            else:
-                visual_criteria.append(c)
-
-        # Build prompt with ONLY the visual criteria (not timeliness)
-        criteria_text = build_criteria_block(visual_criteria)
-        crit_lines = []
-        for c in visual_criteria:
-            crit_lines.append(f'  id="{c["id"]}" max_points={c.get("points", 4)}')
-
-        prompt = f"""{voice}
-
-STUDENT NAME: {student_name}
-ASSIGNMENT: 18 - Editing & Final Contact Sheet
-
-WHAT THE STUDENT SUBMITTED:
-Two 6-up contact sheet JPG pages exported from Lightroom at 300 ppi.
-Photos 1 through 6 = Composition focus.
-Photos 7 through 12 = Camera Control focus.
-Each photo should have camera settings (ISO, shutter, aperture) labeled underneath.
-
-RUBRIC CRITERIA (use these EXACT criterion IDs in your response):
-{criteria_text}
-
-Criterion IDs to use:
-{chr(10).join(crit_lines)}
-
-{lang_note}
-
-SCORING PHILOSOPHY:
-Be VERY generous with points. This is a high school art class and photography is subjective.
-Give students the benefit of the doubt. If they made a genuine effort, they deserve top marks.
-Default to "Meets Expectations" (full marks) for each visual criterion unless there is a glaring, obvious problem.
-Only score below full marks if work is clearly incomplete, wrong format, or shows zero effort.
-When in doubt, ALWAYS round UP. Art is subjective. Be kind with points, be helpful with feedback.
-
-FEEDBACK STYLE RULES:
-- For each criterion comment: Write 1 to 2 concise sentences. Do NOT use the student name. Be specific about what you observe, then coach them on one concrete thing to improve next time. Feedback should push them to grow even when the score is high.
-- For overall_comment: Address the student by first name only. Write 3 to 5 sentences. Be encouraging and specific about strengths, then give one clear goal for next time.
-
-CRITICAL RULES:
-- You are scoring ONLY these {len(visual_criteria)} visual criteria. Do NOT mention lateness, due dates, submission timing, or timeliness in ANY comment.
-- Use ONLY the exact criterion IDs provided above. Do NOT invent or guess IDs.
-- Return EXACTLY {len(visual_criteria)} scores, one per visual criterion.
-
-Look carefully at both contact sheet pages. Score each criterion based on what you actually see.
-
-Return a JSON object with a "scores" array and an "overall_comment" string.
-Each item in "scores" must have "id" (criterion ID string), "points" (number), and "comment" (string)."""
-
-        # Build responseSchema
-        response_schema = {
-            "type": "OBJECT",
-            "properties": {
-                "scores": {
-                    "type": "ARRAY",
-                    "items": {
-                        "type": "OBJECT",
-                        "properties": {
-                            "id":      {"type": "STRING"},
-                            "points":  {"type": "NUMBER"},
-                            "comment": {"type": "STRING"}
-                        },
-                        "required": ["id", "points", "comment"]
-                    }
-                },
-                "overall_comment": {"type": "STRING"}
-            },
-            "required": ["scores", "overall_comment"]
-        }
-
-        parts = [{"text": prompt}]
-        for img in images:
-            parts.append({
-                "inline_data": {
-                    "mime_type": img['mime'],
-                    "data": img['b64']
-                }
-            })
-
-        result = self.call_gemini(parts, temperature=0.7, is_json=True,
-                                  response_schema=response_schema)
-        if result is None:
-            return None
-
-        # Convert array-based scores to dict keyed by criterion ID
-        scores_dict = {}
-        for item in result.get('scores', []):
-            scores_dict[item['id']] = {
-                'points': item.get('points', 0),
-                'comment': item.get('comment', '')
-            }
-
-        # Strip any Gemini hallucinated entries that don't match our visual criteria IDs
-        valid_ids = {c['id'] for c in visual_criteria}
-        scores_dict = {k: v for k, v in scores_dict.items() if k in valid_ids}
-
-        # Ensure every visual criterion has a score (default to max if Gemini missed it)
-        for c in visual_criteria:
-            if c['id'] not in scores_dict:
-                scores_dict[c['id']] = {'points': c.get('points', 4), 'comment': ''}
-
-        # Add timeliness score programmatically (never let AI decide this)
-        # Days are rounded DOWN (truncated) to be forgiving at boundaries
-        if timeliness_crit:
-            tid = timeliness_crit['id']
-            if days_late <= 0:
-                t_pts, t_comment = 8, "Submitted on time."
-            elif days_late <= 1:
-                t_pts, t_comment = 6, f"Submitted {days_late} day late."
-            elif days_late <= 3:
-                t_pts, t_comment = 4, f"Submitted {days_late} days late."
-            elif days_late <= 7:
-                t_pts, t_comment = 2, f"Submitted {days_late} days late."
-            else:
-                t_pts, t_comment = 1, f"Submitted {days_late} days late."
-            scores_dict[tid] = {'points': t_pts, 'comment': t_comment}
-            print(f'[grade] Timeliness: {days_late} days late -> {t_pts} pts (criterion {tid})')
-
-        # Calculate total score from all criterion scores
-        total_score = sum(s.get('points', 0) for s in scores_dict.values())
-        print(f'[grade] Scores: {[(k, v.get("points")) for k, v in scores_dict.items()]} = {total_score}')
-
-        result['scores'] = scores_dict
-        result['total_score'] = total_score
-        return result
-
-    # ── Gemini: Missing / No Submission ──────────────────────────────────────
-
-    def generate_missing_comment(self, student_name, student_id, submission, spanish):
-        voice     = VOICE_ES if spanish else VOICE_EN
-        lang_note = (
-            'Write ENTIRELY in Spanish using tú. No English at all.'
-            if spanish else
-            'Write in English.'
-        )
-
-        prompt = f"""{voice}
-
-STUDENT NAME: {student_name}
-ASSIGNMENT: 18 - Editing & Final Contact Sheet
-STATUS: This student has not submitted this assignment. It is past due.
-
-{lang_note}
-
-Write a short, direct comment to the student (2-3 sentences max). Keep it simple:
-- Use their first name
-- Let them know you noticed the assignment is missing
-- Encourage them to get it turned in because you want to see their photography work
-- Firm but caring, like a coach checking in on a player
-
-Do NOT mention points, rubrics, or late policies. Keep it warm and brief.
-Each message should feel unique and personal, not a template.
-Return only the comment text, no JSON."""
-
-        parts = [{"text": prompt}]
-        result_text = self.call_gemini(parts, temperature=0.9, is_json=False)
-        if result_text is None:
-            return None
-        return {
-            'missing': True,
-            'overall_comment': result_text,
-            'scores': {},
-            'total_score': 0
-        }
-
-    # ── Gemini HTTP Call ─────────────────────────────────────────────────────
-
-    def call_gemini(self, parts, temperature=0.7, is_json=False, response_schema=None):
-        gen_config = {
-            "temperature": temperature,
-            "maxOutputTokens": 8192
-        }
-        if is_json:
-            gen_config["responseMimeType"] = "application/json"
-        if response_schema:
-            gen_config["responseSchema"] = response_schema
-        payload = {
-            "contents": [{"parts": parts}],
-            "generationConfig": gen_config
-        }
-        req_body = json.dumps(payload).encode('utf-8')
-
-        # Retry up to 3 times with backoff for 429 rate limit errors
-        for attempt in range(3):
-            try:
-                req = urllib.request.Request(
-                    gemini_url(),
-                    data=req_body,
-                    headers={'Content-Type': 'application/json'},
-                    method='POST'
-                )
-                with urllib.request.urlopen(req, timeout=90) as r:
-                    response = json.loads(r.read())
-
-                text = response['candidates'][0]['content']['parts'][0]['text'].strip()
-
-                if not is_json:
-                    return text
-
-                # Extract and parse JSON robustly
-                parsed = parse_gemini_json(text)
-
-                # Calculate total score -- scores may be list or dict
-                scores = parsed.get('scores', [])
-                if isinstance(scores, list):
-                    total = sum(item.get('points', 0) for item in scores)
-                else:
-                    total = sum(v.get('points', 0) for v in scores.values())
-                parsed['total_score'] = total
-                return parsed
-
-            except urllib.error.HTTPError as e:
-                body = e.read().decode('utf-8', errors='replace')
-                print(f'[gemini] HTTP {e.code} (attempt {attempt+1}): {body[:300]}')
-                if e.code == 429 and attempt < 2:
-                    wait = (attempt + 1) * 20  # 20s, then 40s
-                    print(f'[gemini] Rate limited -- waiting {wait}s before retry')
-                    time.sleep(wait)
-                    continue
-                self._last_gemini_error = f'Gemini HTTP {e.code}: {body[:200]}'
-                return None
-            except Exception as e:
-                print(f'[gemini] Error: {e}')
-                import traceback; traceback.print_exc()
-                self._last_gemini_error = str(e)
-                return None
-
-        self._last_gemini_error = 'Gemini rate limit -- quota exceeded, try again later'
-        return None
-
-    # ── Canvas: Post Grade + Rubric + Comment ─────────────────────────────────
-
-    def post_to_canvas(self, assignment_id, student_id, result, criteria, auth):
-        if result.get('missing'):
-            payload = {
-                'comment': {'text_comment': result['overall_comment']}
-            }
+    def do_POST(self):
+        path = urlparse(self.path).path
+        if not self.require_auth():
+            return
+        if path == '/api/auth/verify':
+            self.handle_auth_verify()
+        elif path == '/api/batch/grades':
+            self.handle_batch_grades()
+        elif path == '/api/batch/comments':
+            self.handle_bulk_comments()
+        elif path.startswith('/api/v1/'):
+            self.proxy_canvas('POST')
         else:
-            rubric_assessment = {}
-            for c in criteria:
-                cid        = c['id']
-                score_data = result.get('scores', {}).get(cid, {})
-                points     = score_data.get('points', 0)
-                comment    = score_data.get('comment', '')
-                rubric_assessment[cid] = {'points': points, 'comments': comment}
+            self.send_error(404)
 
-            payload = {
-                'submission': {
-                    'posted_grade': str(result.get('total_score', 0))
-                },
-                'rubric_assessment': rubric_assessment,
-                'comment': {'text_comment': result.get('overall_comment', '')}
-            }
+    def do_PUT(self):
+        if not self.require_auth():
+            return
+        if urlparse(self.path).path.startswith('/api/v1/'):
+            self.proxy_canvas('PUT')
+        else:
+            self.send_error(404)
 
-        ctx     = ssl.create_default_context()
-        conn    = http.client.HTTPSConnection(CANVAS_HOST, context=ctx)
+    def do_DELETE(self):
+        if not self.require_auth():
+            return
+        if urlparse(self.path).path.startswith('/api/v1/'):
+            self.proxy_canvas('DELETE')
+        else:
+            self.send_error(404)
+
+    # -- Auth verify --------------------------------------------------------
+
+    def handle_auth_verify(self):
+        """Return user info after successful auth check."""
+        auth = self.headers.get('Authorization', '')
+        if not auth.startswith('Bearer '):
+            self.json_response(401, {'error': 'No token'})
+            return
+        claims = verify_firebase_token(auth[7:])
+        if not claims:
+            self.json_response(401, {'error': 'Invalid token'})
+            return
+        email = (claims.get('email') or '').lower()
+        if ALLOWED_EMAILS and email not in ALLOWED_EMAILS:
+            self.json_response(403, {'error': 'Email not authorized'})
+            return
+        self.json_response(200, {
+            'email': email,
+            'name': claims.get('name', ''),
+            'picture': claims.get('picture', ''),
+            'uid': claims.get('sub', ''),
+            'canvas_connected': bool(CANVAS_TOKEN),
+        })
+
+    # -- Status (unauthenticated) -------------------------------------------
+
+    def handle_status(self):
+        self.json_response(200, {
+            'ok': True,
+            'canvas_host': CANVAS_HOST,
+            'canvas_connected': bool(CANVAS_TOKEN),
+        })
+
+    # -- Canvas proxy -------------------------------------------------------
+
+    def proxy_canvas(self, method):
+        """Proxy a request to Canvas, injecting the server-side token."""
+        if not CANVAS_TOKEN:
+            self.json_response(503, {'error': 'Canvas token not configured'})
+            return
+
+        ctx = ssl.create_default_context()
+        conn = http.client.HTTPSConnection(CANVAS_HOST, context=ctx)
         headers = {
-            'Authorization':  auth,
-            'Content-Type':   'application/json',
-            'User-Agent':     'PVHS-Dashboard/1.0'
+            'Authorization': f'Bearer {CANVAS_TOKEN}',
+            'User-Agent': 'PVHS-Dashboard/2.0',
         }
-        path    = (
-            f'/api/v1/courses/{COURSE_ID}/assignments/{assignment_id}'
-            f'/submissions/{student_id}'
-        )
-        body    = json.dumps(payload).encode('utf-8')
+
+        body = None
+        if method in ('POST', 'PUT'):
+            length = int(self.headers.get('Content-Length', 0))
+            if length > 0:
+                body = self.rfile.read(length)
+            ct = self.headers.get('Content-Type', '')
+            if ct:
+                headers['Content-Type'] = ct
+
         try:
-            print(f'[canvas] PUT {path}')
-            print(f'[canvas] Payload: {json.dumps(payload)[:500]}')
+            conn.request(method, self.path, body=body, headers=headers)
+            resp = conn.getresponse()
+            resp_body = resp.read()
+
+            self.send_response(resp.status)
+            ct = resp.getheader('Content-Type', 'application/json')
+            self.send_header('Content-Type', ct)
+
+            link = resp.getheader('Link', '')
+            if link:
+                link = link.replace(f'https://{CANVAS_HOST}', '')
+                self.send_header('Link', link)
+
+            self._cors_headers()
+            self.send_header('Cache-Control', 'no-store')
+            self.send_header('Content-Length', len(resp_body))
+            self.end_headers()
+            self.wfile.write(resp_body)
+        except Exception as e:
+            self.json_response(502, {'error': str(e)})
+        finally:
+            conn.close()
+
+    # -- Batch grade --------------------------------------------------------
+
+    def handle_batch_grades(self):
+        """Apply grades to multiple students for one assignment.
+
+        Expects JSON body:
+        {
+          "course_id": "12345",
+          "assignment_id": "67890",
+          "grades": [
+            {"student_id": "111", "score": 85, "comment": "Good work"},
+            ...
+          ]
+        }
+        """
+        data = self._read_json_body()
+        if data is None:
+            return
+
+        course_id = str(data.get('course_id', ''))
+        assignment_id = str(data.get('assignment_id', ''))
+        grades = data.get('grades', [])
+
+        if not all([course_id, assignment_id, grades]):
+            self.json_response(400, {'error': 'Missing course_id, assignment_id, or grades'})
+            return
+
+        results = []
+        for g in grades:
+            sid = str(g.get('student_id', ''))
+            score = g.get('score')
+            comment = g.get('comment', '')
+
+            payload = {}
+            if score is not None:
+                payload['submission'] = {'posted_grade': str(score)}
+            if comment:
+                payload['comment'] = {'text_comment': comment}
+            if not payload:
+                results.append({'student_id': sid, 'ok': False, 'error': 'No score or comment'})
+                continue
+
+            resp = self._canvas_put(
+                f'/api/v1/courses/{course_id}/assignments/{assignment_id}'
+                f'/submissions/{sid}',
+                payload,
+            )
+            results.append({
+                'student_id': sid,
+                'ok': resp is not None and isinstance(resp, dict),
+                'grade': resp.get('grade') if isinstance(resp, dict) else None,
+            })
+
+        self.json_response(200, {'results': results})
+
+    # -- Bulk comments ------------------------------------------------------
+
+    def handle_bulk_comments(self):
+        """Post the same comment to multiple students for one assignment.
+
+        Expects JSON body:
+        {
+          "course_id": "12345",
+          "assignment_id": "67890",
+          "student_ids": ["111", "222", ...],
+          "comment": "Please turn this in."
+        }
+        """
+        data = self._read_json_body()
+        if data is None:
+            return
+
+        course_id = str(data.get('course_id', ''))
+        assignment_id = str(data.get('assignment_id', ''))
+        student_ids = data.get('student_ids', [])
+        comment = data.get('comment', '')
+
+        if not all([course_id, assignment_id, student_ids, comment]):
+            self.json_response(400, {'error': 'Missing required fields'})
+            return
+
+        results = []
+        for sid in student_ids:
+            sid = str(sid)
+            payload = {'comment': {'text_comment': comment}}
+            resp = self._canvas_put(
+                f'/api/v1/courses/{course_id}/assignments/{assignment_id}'
+                f'/submissions/{sid}',
+                payload,
+            )
+            results.append({
+                'student_id': sid,
+                'ok': resp is not None,
+            })
+
+        self.json_response(200, {
+            'comment': comment,
+            'total': len(student_ids),
+            'succeeded': sum(1 for r in results if r['ok']),
+            'results': results,
+        })
+
+    # -- Canvas helpers -----------------------------------------------------
+
+    def _canvas_put(self, path, payload):
+        ctx = ssl.create_default_context()
+        conn = http.client.HTTPSConnection(CANVAS_HOST, context=ctx)
+        headers = {
+            'Authorization': f'Bearer {CANVAS_TOKEN}',
+            'Content-Type': 'application/json',
+            'User-Agent': 'PVHS-Dashboard/2.0',
+        }
+        body = json.dumps(payload).encode('utf-8')
+        try:
             conn.request('PUT', path, body=body, headers=headers)
             resp = conn.getresponse()
-            raw  = resp.read()
-            print(f'[canvas] PUT submission {student_id} -> {resp.status}')
+            raw = resp.read()
             if resp.status >= 400:
-                print(f'[canvas] Error response: {raw.decode("utf-8", errors="replace")[:500]}')
+                print(f'[canvas] PUT {path} -> {resp.status}: {raw[:300]}')
             return json.loads(raw)
         except Exception as e:
-            print(f'[canvas] POST error: {e}')
-            import traceback; traceback.print_exc()
+            print(f'[canvas] PUT error: {e}')
             return None
         finally:
             conn.close()
 
-    # ── Canvas: Authenticated Image Fetch ────────────────────────────────────
-
-    def fetch_images(self, attachments, auth):
-        images = []
-        for att in attachments:
-            url = att.get('url', '')
-            if not url:
-                continue
-            # Canvas uses content_type (underscore), not content-type (hyphen)
-            mime = (att.get('content_type') or att.get('content-type') or
-                    att.get('mime_class') or 'image/jpeg')
-            if not mime.startswith('image/'):
-                mime = 'image/jpeg'
-            try:
-                # Canvas attachment URLs are pre-signed S3 URLs.
-                # Sending Authorization header to S3 causes a 400 error.
-                # First try without auth (works for pre-signed URLs).
-                # Fall back with auth if that fails (for non-S3 URLs).
-                fetched = False
-                for headers in [
-                    {'User-Agent': 'PVHS-Dashboard/1.0'},
-                    {'Authorization': auth, 'User-Agent': 'PVHS-Dashboard/1.0'}
-                ]:
-                    try:
-                        req = urllib.request.Request(url, headers=headers)
-                        with urllib.request.urlopen(req, timeout=30) as r:
-                            raw = r.read()
-                        b64 = base64.b64encode(raw).decode('utf-8')
-                        images.append({'b64': b64, 'mime': mime})
-                        print(f'[grade] Fetched {att.get("display_name","?")} ({len(raw)} bytes, {mime})')
-                        fetched = True
-                        break
-                    except urllib.error.HTTPError as e:
-                        if e.code in (400, 403) and headers.get('Authorization'):
-                            continue
-                        raise
-                if not fetched:
-                    print(f'[grade] Could not fetch {att.get("display_name","?")}')
-            except Exception as e:
-                print(f'[grade] Image fetch failed: {e}')
-        return images
-
-    # ── Canvas: Generic GET ───────────────────────────────────────────────────
-
-    def canvas_get(self, path, auth):
-        ctx  = ssl.create_default_context()
-        conn = http.client.HTTPSConnection(CANVAS_HOST, context=ctx)
-        headers = {'Authorization': auth, 'User-Agent': 'PVHS-Dashboard/1.0'}
-        if '?' not in path:
-            path += '?per_page=100'
-        else:
-            path += '&per_page=100'
-        try:
-            conn.request('GET', f'/api/v1{path}', headers=headers)
-            resp = conn.getresponse()
-            return json.loads(resp.read())
-        finally:
-            conn.close()
-
-    # ── File Server ───────────────────────────────────────────────────────────
+    # -- File server --------------------------------------------------------
 
     def serve_file(self):
         path = urlparse(self.path).path.lstrip('/')
@@ -667,77 +380,53 @@ Return only the comment text, no JSON."""
             body = f.read()
         self.send_response(200)
         self.send_header('Content-Type', mime)
-        self.send_header('Cache-Control', 'no-store, no-cache, must-revalidate')
+        self.send_header('Cache-Control', 'no-store')
         self.send_header('Content-Length', len(body))
+        self._cors_headers()
         self.end_headers()
         self.wfile.write(body)
 
-    # ── Canvas Proxy (GET /api/*) ─────────────────────────────────────────────
+    # -- Utilities ----------------------------------------------------------
 
-    def proxy_to_canvas(self):
-        auth = self.headers.get('Authorization', '')
-        ctx  = ssl.create_default_context()
-        conn = http.client.HTTPSConnection(CANVAS_HOST, context=ctx)
-        headers = {'User-Agent': 'PVHS-Dashboard/1.0'}
-        if auth:
-            headers['Authorization'] = auth
-
+    def _read_json_body(self):
         try:
-            conn.request('GET', self.path, headers=headers)
-            resp = conn.getresponse()
-            body = resp.read()
-
-            self.send_response(resp.status)
-            ct = resp.getheader('Content-Type', 'application/json')
-            self.send_header('Content-Type', ct)
-
-            link = resp.getheader('Link', '')
-            if link:
-                link = link.replace(f'https://{CANVAS_HOST}', '')
-                self.send_header('Link', link)
-
-            self.send_header('Access-Control-Allow-Origin', '*')
-            self.send_header('Cache-Control', 'no-store, no-cache, must-revalidate')
-            self.send_header('Content-Length', len(body))
-            self.end_headers()
-            self.wfile.write(body)
+            length = int(self.headers.get('Content-Length', 0))
+            return json.loads(self.rfile.read(length))
         except Exception as e:
-            msg = json.dumps({'error': str(e)}).encode()
-            self.send_response(502)
-            self.send_header('Content-Type', 'application/json')
-            self.send_header('Access-Control-Allow-Origin', '*')
-            self.send_header('Content-Length', len(msg))
-            self.end_headers()
-            self.wfile.write(msg)
-        finally:
-            conn.close()
-
-    # ── Helpers ───────────────────────────────────────────────────────────────
+            self.json_response(400, {'error': f'Invalid JSON: {e}'})
+            return None
 
     def json_response(self, status, data):
         body = json.dumps(data).encode('utf-8')
         self.send_response(status)
         self.send_header('Content-Type', 'application/json')
-        self.send_header('Access-Control-Allow-Origin', '*')
+        self._cors_headers()
         self.send_header('Content-Length', len(body))
         self.end_headers()
         self.wfile.write(body)
 
-    def json_error(self, status, message):
-        self.json_response(status, {'error': message})
+    def _cors_headers(self):
+        self.send_header('Access-Control-Allow-Origin', '*')
+        self.send_header('Access-Control-Allow-Methods', 'GET, POST, PUT, DELETE, OPTIONS')
+        self.send_header('Access-Control-Allow-Headers',
+                         'Authorization, Content-Type, X-API-Key')
+        self.send_header('Access-Control-Max-Age', '86400')
 
-    def log_message(self, format, *args):
-        msg = format % args
-        if any(x in msg for x in ('/api/', '/grade', 'gemini', 'canvas')):
+    def log_message(self, fmt, *args):
+        msg = fmt % args
+        if '/api/' in msg or '/batch/' in msg or '/auth/' in msg:
             print(f'  [server] {msg}')
 
 
 class ThreadedHTTPServer(ThreadingMixIn, HTTPServer):
     daemon_threads = True
 
+
 if __name__ == '__main__':
-    print(f'PVHS Dashboard Server running on port {PORT}')
-    if not GEMINI_KEY:
-        print('  WARNING: GEMINI_API_KEY not set -- grading will not work')
+    print(f'PVHS Dashboard Server v2.0 on port {PORT}')
+    print(f'  Canvas host: {CANVAS_HOST}')
+    print(f'  Canvas token: {"configured" if CANVAS_TOKEN else "NOT SET"}')
+    print(f'  Allowed emails: {ALLOWED_EMAILS or "(any authenticated user)"}')
+    print(f'  API key: {"configured" if API_KEY else "not set"}')
     server = ThreadedHTTPServer(('0.0.0.0', PORT), Handler)
     server.serve_forever()

@@ -2,9 +2,15 @@ services:
   - type: web
     name: pvhs-dashboard
     runtime: python
-    buildCommand: echo "No build needed"
+    buildCommand: pip install -r requirements.txt
     startCommand: python server.py
     plan: free
     envVars:
       - key: PYTHON_VERSION
         value: "3.11"
+      - key: CANVAS_TOKEN
+        sync: false
+      - key: ALLOWED_EMAILS
+        sync: false
+      - key: API_KEY
+        sync: false

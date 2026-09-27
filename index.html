@@ -5,11 +5,11 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
-<meta name="apple-mobile-web-app-title" content="PVHS Missing">
+<meta name="apple-mobile-web-app-title" content="PVHS Dashboard">
 <meta name="theme-color" content="#007474">
 <link rel="manifest" href="manifest.json">
 <link rel="apple-touch-icon" href="icon-512.png">
-<title>PVHS Missing Assignments Dashboard</title>
+<title>PVHS Dashboard</title>
 <style>
   *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
 
@@ -27,1429 +27,603 @@
     --text-bright: #f7fbfb;
     --danger: #ff5b5b;
     --warning: #ffac39;
+    --success: #50c864;
     --panel-radius: 22px;
     --btn-radius: 16px;
     --shadow: 0 12px 24px rgba(0,0,0,0.22);
   }
 
   body {
-    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, sans-serif;
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
     background: var(--bg);
     color: var(--text);
     min-height: 100vh;
   }
 
-  /* ── Setup Screen ── */
-  #setup-screen {
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    min-height: 100vh;
-    padding: 2rem;
+  /* -- Login Screen -- */
+  #login-screen {
+    display: flex; align-items: center; justify-content: center;
+    min-height: 100vh; padding: 2rem;
   }
-
-  .setup-card {
-    background: var(--surface);
-    border: 1px solid var(--border-hover);
-    border-radius: var(--panel-radius);
-    padding: 3rem;
-    max-width: 500px;
-    width: 100%;
-    text-align: center;
-    backdrop-filter: blur(10px);
-    -webkit-backdrop-filter: blur(10px);
-    box-shadow: var(--shadow);
+  .login-card {
+    background: var(--surface); border: 1px solid var(--border-hover);
+    border-radius: var(--panel-radius); padding: 3rem;
+    max-width: 440px; width: 100%; text-align: center;
+    backdrop-filter: blur(10px); box-shadow: var(--shadow);
   }
+  .login-card img { width: 120px; margin-bottom: 1.5rem; }
+  .login-card h1 { font-size: 1.5rem; color: var(--text-bright); margin-bottom: 0.5rem; }
+  .login-card p { color: var(--text-muted); margin-bottom: 2rem; font-size: 0.9rem; line-height: 1.5; }
+  .login-error { color: var(--danger); font-size: 0.85rem; margin-bottom: 1rem; display: none; }
 
-  .setup-card img { width: 120px; margin-bottom: 1.5rem; }
-
-  .setup-card h1 {
-    font-size: 1.5rem;
-    color: var(--text-bright);
-    margin-bottom: 0.5rem;
-  }
-
-  .setup-card p {
-    color: var(--text-muted);
-    margin-bottom: 2rem;
-    font-size: 0.9rem;
-    line-height: 1.5;
-  }
-
-  .setup-card input[type="text"] {
-    width: 100%;
-    padding: 0.85rem 1rem;
-    border-radius: var(--btn-radius);
-    border: 1px solid var(--border-hover);
-    background: rgba(0,0,0,0.18);
-    color: var(--text-bright);
-    font-size: 0.95rem;
-    font-family: monospace;
-    margin-bottom: 1rem;
-    outline: none;
-    transition: border-color 0.2s;
-  }
-
-  .setup-card input[type="text"]:focus {
-    border-color: var(--teal-light);
-  }
-
-  .btn {
-    display: inline-block;
-    padding: 0.75rem 2rem;
-    border-radius: 8px;
-    border: none;
-    font-size: 1rem;
-    font-weight: 600;
-    cursor: pointer;
+  .google-btn {
+    display: inline-flex; align-items: center; gap: 12px;
+    padding: 12px 28px; border-radius: 8px; border: 1px solid var(--border-hover);
+    background: rgba(255,255,255,0.05); color: var(--text-bright);
+    font-size: 1rem; font-weight: 600; cursor: pointer;
     transition: all 0.2s;
   }
+  .google-btn:hover { background: rgba(255,255,255,0.1); border-color: var(--teal); }
+  .google-btn:active { transform: scale(0.97); }
+  .google-btn svg { flex-shrink: 0; }
 
-  .btn-primary {
-    background: rgba(0,180,180,0.14);
-    border: 1px solid rgba(0,210,210,0.16);
-    color: var(--teal-light);
-    backdrop-filter: blur(6px);
-    -webkit-backdrop-filter: blur(6px);
-  }
-
-  .btn-primary:hover { background: rgba(0,180,180,0.22); }
-  .btn-primary:active { transform: scale(0.97); }
-
-  .btn-small {
-    padding: 0.4rem 1rem;
-    font-size: 0.8rem;
-    border-radius: 6px;
-  }
-
-  .btn-outline {
-    background: transparent;
-    border: 1px solid var(--border);
-    color: var(--text-muted);
-  }
-
-  .btn-outline:hover {
-    border-color: var(--teal);
-    color: var(--teal-light);
-  }
-
-  .btn-tools {
-    background: rgba(0,116,116,0.15);
-    border: 1px solid rgba(0,116,116,0.4);
-    color: var(--teal-light);
-    display: flex;
-    align-items: center;
-  }
-
-  .btn-tools:hover {
-    background: rgba(0,116,116,0.28);
-    border-color: var(--teal-light);
-  }
-
-  #tools-panel { display: none; }
-  #tools-panel.open { display: flex !important; }
-
-  .btn-install {
-    background: rgba(0,180,180,0.14) !important;
-    border: 1px solid var(--teal-light) !important;
-    color: var(--teal-light) !important;
-    animation: pulse-glow 2s ease-in-out infinite;
-  }
-
-  .btn-install:hover {
-    background: rgba(0,180,180,0.25) !important;
-  }
-
-  @keyframes pulse-glow {
-    0%, 100% { box-shadow: 0 0 0 0 rgba(64,222,222,0); }
-    50% { box-shadow: 0 0 8px 2px rgba(64,222,222,0.3); }
-  }
-
-  .setup-error {
-    color: var(--danger);
-    font-size: 0.85rem;
-    margin-bottom: 1rem;
-    display: none;
-  }
-
-  /* ── Dashboard ── */
+  /* -- Dashboard -- */
   #dashboard { display: none; }
 
   .top-bar {
-    background: rgba(2,20,20,0.85);
-    border-bottom: 1px solid var(--border);
-    padding: 1rem 2rem;
-    display: flex;
-    align-items: center;
-    gap: 1.5rem;
-    position: sticky;
-    top: 0;
-    z-index: 100;
+    background: rgba(2,20,20,0.85); border-bottom: 1px solid var(--border);
+    padding: 0.75rem 2rem; display: flex; align-items: center; gap: 1.25rem;
+    position: sticky; top: 0; z-index: 100;
     backdrop-filter: blur(16px);
-    -webkit-backdrop-filter: blur(16px);
   }
-
-  .top-bar img { height: 48px; }
-
+  .top-bar img { height: 44px; }
   .top-bar-title {
-    font-size: 15px;
-    font-weight: 700;
-    color: var(--text-bright);
-    flex-shrink: 0;
-    text-transform: uppercase;
-    letter-spacing: 0.14em;
+    font-size: 13px; font-weight: 700; color: var(--text-bright);
+    text-transform: uppercase; letter-spacing: 0.14em;
   }
-
   .top-bar-spacer { flex: 1; }
-
-  .status-area {
-    display: flex;
-    align-items: center;
-    gap: 1rem;
-    flex-shrink: 0;
+  .user-info {
+    display: flex; align-items: center; gap: 0.6rem;
+    font-size: 0.8rem; color: var(--text-muted);
   }
-
-  .last-updated {
-    font-size: 0.75rem;
-    color: var(--text-muted);
-    text-align: right;
-    line-height: 1.4;
+  .user-avatar {
+    width: 32px; height: 32px; border-radius: 50%;
+    border: 2px solid var(--teal);
   }
+  .status-area { display: flex; align-items: center; gap: 0.75rem; }
+  .last-updated { font-size: 0.72rem; color: var(--text-muted); text-align: right; line-height: 1.3; }
+
+  .btn {
+    display: inline-block; padding: 0.5rem 1.2rem; border-radius: 8px;
+    border: none; font-size: 0.85rem; font-weight: 600; cursor: pointer;
+    transition: all 0.2s;
+  }
+  .btn-small { padding: 0.35rem 0.85rem; font-size: 0.78rem; }
+  .btn-outline {
+    background: transparent; border: 1px solid var(--border); color: var(--text-muted);
+  }
+  .btn-outline:hover { border-color: var(--teal); color: var(--teal-light); }
+  .btn-primary {
+    background: rgba(0,180,180,0.14); border: 1px solid rgba(0,210,210,0.16);
+    color: var(--teal-light);
+  }
+  .btn-primary:hover { background: rgba(0,180,180,0.22); }
+  .btn-primary:active { transform: scale(0.97); }
+  .btn-danger {
+    background: rgba(255,77,77,0.1); border: 1px solid rgba(255,77,77,0.25);
+    color: var(--danger);
+  }
+  .btn-danger:hover { background: rgba(255,77,77,0.2); }
 
   .refresh-btn {
-    background: none;
-    border: 1px solid var(--border);
-    color: var(--teal-light);
-    width: 36px;
-    height: 36px;
-    border-radius: 8px;
-    cursor: pointer;
-    display: flex;
-    align-items: center;
-    justify-content: center;
+    background: none; border: 1px solid var(--border); color: var(--teal-light);
+    width: 34px; height: 34px; border-radius: 8px; cursor: pointer;
+    display: flex; align-items: center; justify-content: center;
     transition: all 0.2s;
-    font-size: 1.1rem;
   }
-
   .refresh-btn:hover { border-color: var(--teal); background: var(--teal-dim); }
   .refresh-btn.spinning svg { animation: spin-ccw 1s linear infinite; }
+  @keyframes spin-ccw { from { transform: rotate(0); } to { transform: rotate(-360deg); } }
 
-  @keyframes spin { from { transform: rotate(0deg); } to { transform: rotate(360deg); } }
-  @keyframes spin-ccw { from { transform: rotate(0deg); } to { transform: rotate(-360deg); } }
-
-  /* ── Tabs ── */
+  /* -- Tabs -- */
   .tab-bar {
-    display: flex;
-    gap: 0;
-    background: rgba(2,20,20,0.6);
-    border-bottom: 1px solid var(--border);
-    padding: 0 2rem;
+    display: flex; gap: 0; background: rgba(2,20,20,0.6);
+    border-bottom: 1px solid var(--border); padding: 0 2rem;
     backdrop-filter: blur(10px);
-    -webkit-backdrop-filter: blur(10px);
   }
-
   .tab-btn {
-    padding: 0.85rem 1.5rem;
-    border: none;
-    background: none;
-    color: var(--text-muted);
-    font-size: 10px;
-    font-weight: 700;
-    cursor: pointer;
-    border-bottom: 2px solid transparent;
-    transition: all 0.2s;
-    text-transform: uppercase;
-    letter-spacing: 0.12em;
+    padding: 0.8rem 1.5rem; border: none; background: none;
+    color: var(--text-muted); font-size: 10px; font-weight: 700;
+    cursor: pointer; border-bottom: 2px solid transparent;
+    transition: all 0.2s; text-transform: uppercase; letter-spacing: 0.12em;
   }
-
   .tab-btn:hover { color: var(--text); }
   .tab-btn.active { color: var(--teal-light); border-bottom-color: var(--teal); }
-
   .tab-content { display: none; }
   .tab-content.active { display: block; }
 
-  /* ── Main Area ── */
+  /* -- Main Area -- */
   .main-content { padding: 1.5rem 2rem 3rem; }
 
-  /* ── Search Panel ── */
-  .search-panel {
-    margin-bottom: 1.5rem;
-  }
-
-  .search-box {
-    display: flex;
-    gap: 0.75rem;
-    align-items: center;
-    max-width: 600px;
-  }
-
-  .search-box input {
-    flex: 1;
-    padding: 11px 14px;
-    border-radius: var(--btn-radius);
-    border: 1px solid var(--border-hover);
-    background: rgba(0,0,0,0.18);
-    color: var(--text-bright);
-    font-size: 15px;
-    font-weight: 500;
-    outline: none;
-    transition: border-color 0.2s;
-  }
-
-  .search-box input:focus { border-color: var(--teal-light); }
-
-  .search-box input::placeholder { color: var(--text-muted); }
-
-  /* ── Summary Cards ── */
-  .summary-row {
-    display: flex;
-    gap: 1rem;
-    margin-bottom: 1.5rem;
-    flex-wrap: wrap;
-  }
-
+  /* -- Summary Cards -- */
+  .summary-row { display: flex; gap: 1rem; margin-bottom: 1.5rem; flex-wrap: wrap; }
   .summary-card {
-    background: var(--surface);
-    border: 1px solid var(--border);
-    border-radius: var(--panel-radius);
-    padding: 1.25rem 1.5rem;
-    flex: 1;
-    min-width: 200px;
-    backdrop-filter: blur(10px);
-    -webkit-backdrop-filter: blur(10px);
-    box-shadow: var(--shadow);
+    background: var(--surface); border: 1px solid var(--border);
+    border-radius: var(--panel-radius); padding: 1.25rem 1.5rem;
+    flex: 1; min-width: 180px; backdrop-filter: blur(10px); box-shadow: var(--shadow);
   }
-
   .summary-card .label {
-    font-size: 9px;
-    text-transform: uppercase;
-    letter-spacing: 0.12em;
-    color: var(--text-muted);
-    margin-bottom: 0.35rem;
-    font-weight: 700;
+    font-size: 9px; text-transform: uppercase; letter-spacing: 0.12em;
+    color: var(--text-muted); margin-bottom: 0.35rem; font-weight: 700;
   }
+  .summary-card .value { font-size: 2rem; font-weight: 700; color: var(--teal-light); }
+  .summary-card .sub { font-size: 0.8rem; color: var(--text-muted); margin-top: 0.2rem; }
 
-  .summary-card .value {
-    font-size: 2rem;
-    font-weight: 700;
-    color: var(--teal-light);
-  }
-
-  .summary-card .sub {
-    font-size: 0.8rem;
-    color: var(--text-muted);
-    margin-top: 0.2rem;
-  }
-
-  /* ── Course Sections ── */
-  .course-section {
-    margin-bottom: 2rem;
-  }
-
-  .course-header {
-    display: flex;
-    align-items: center;
-    gap: 0.75rem;
-    margin-bottom: 1rem;
-  }
-
-  .course-header h2 {
-    font-size: 1.15rem;
-    color: var(--text-bright);
-    font-weight: 700;
-  }
-
+  /* -- Course Sections -- */
+  .course-section { margin-bottom: 2rem; }
+  .course-header { display: flex; align-items: center; gap: 0.75rem; margin-bottom: 1rem; }
+  .course-header h2 { font-size: 1.15rem; color: var(--text-bright); font-weight: 700; }
   .course-badge {
-    background: var(--teal-dim);
-    color: var(--teal-light);
-    font-size: 0.7rem;
-    font-weight: 600;
-    padding: 0.2rem 0.6rem;
-    border-radius: 20px;
-    text-transform: uppercase;
-    letter-spacing: 0.03em;
+    background: var(--teal-dim); color: var(--teal-light);
+    font-size: 0.7rem; font-weight: 600; padding: 0.2rem 0.6rem;
+    border-radius: 20px; text-transform: uppercase;
   }
 
-  /* ── Period Groups ── */
-  .period-group {
-    margin-bottom: 1rem;
-  }
-
+  /* -- Period Groups -- */
+  .period-group { margin-bottom: 1rem; }
   .period-label {
-    font-size: 10px;
-    font-weight: 700;
-    text-transform: uppercase;
-    letter-spacing: 0.12em;
-    color: var(--teal-light);
-    margin-bottom: 0.5rem;
+    font-size: 10px; font-weight: 700; text-transform: uppercase;
+    letter-spacing: 0.12em; color: var(--teal-light); margin-bottom: 0.5rem;
     padding-left: 0.25rem;
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
   }
 
-  .period-print-btn {
-    background: none;
-    border: 1px solid var(--border);
-    color: var(--text-muted);
-    border-radius: 10px;
-    padding: 3px 8px;
-    font-size: 14px;
-    cursor: pointer;
-    transition: all 0.2s;
-    line-height: 1;
-  }
-
-  .period-print-btn:hover {
-    border-color: var(--teal-light);
-    color: var(--teal-light);
-    background: var(--teal-dim);
-  }
-
-  /* ── Student Rows ── */
+  /* -- Student Rows -- */
   .student-list {
-    background: var(--surface);
-    border: 1px solid var(--border);
-    border-radius: var(--panel-radius);
-    overflow: hidden;
-    backdrop-filter: blur(10px);
-    -webkit-backdrop-filter: blur(10px);
-    box-shadow: var(--shadow);
+    background: var(--surface); border: 1px solid var(--border);
+    border-radius: var(--panel-radius); overflow: hidden;
+    backdrop-filter: blur(10px); box-shadow: var(--shadow);
   }
-
-  .student-row {
-    border-bottom: 1px solid var(--border);
-    cursor: pointer;
-    transition: background 0.15s;
-  }
-
+  .student-row { border-bottom: 1px solid var(--border); cursor: pointer; transition: background 0.15s; }
   .student-row:last-child { border-bottom: none; }
   .student-row:hover { background: var(--surface2); }
-
   .student-row-header {
-    display: flex;
-    align-items: center;
-    padding: 0.7rem 1rem;
-    gap: 0.6rem;
+    display: flex; align-items: center; padding: 0.65rem 1rem; gap: 0.6rem;
   }
-
-  .student-name {
-    font-weight: 600;
-    font-size: 0.95rem;
-    color: var(--text-bright);
-    flex: 1;
-    min-width: 0;
-  }
-
+  .student-name { font-weight: 600; font-size: 0.92rem; color: var(--text-bright); flex: 1; min-width: 0; }
+  .student-num { font-size: 0.75rem; color: var(--text-muted); min-width: 1.5rem; text-align: right; }
   .missing-count {
-    font-size: 0.8rem;
-    font-weight: 700;
-    padding: 0.2rem 0.65rem;
-    border-radius: 20px;
-    background: rgba(255, 77, 77, 0.15);
-    color: var(--danger);
-    min-width: 7rem;
-    text-align: center;
+    font-size: 0.78rem; font-weight: 700; padding: 0.18rem 0.6rem;
+    border-radius: 20px; min-width: 7rem; text-align: center;
   }
-
-  .missing-count.warning {
-    background: rgba(240, 160, 48, 0.15);
-    color: var(--warning);
-  }
-
-  .missing-count.low {
-    background: rgba(0, 116, 116, 0.15);
-    color: var(--teal-light);
-  }
-
-  .expand-icon {
-    color: var(--text-muted);
-    font-size: 0.75rem;
-    transition: transform 0.2s;
-  }
-
-  .student-row.expanded .expand-icon { transform: rotate(90deg); }
-
-  .student-detail {
-    display: none;
-    padding: 0 1rem 0.75rem 1rem;
-  }
-
-  .student-row.expanded .student-detail { display: block; }
-
-  .assignment-list {
-    list-style: none;
-  }
-
-  .assignment-list li {
-    padding: 0.4rem 0.75rem;
-    font-size: 0.85rem;
-    color: var(--text-muted);
-    border-left: 2px solid var(--border);
-    margin-bottom: 0.25rem;
-    display: flex;
-    justify-content: space-between;
-    gap: 1rem;
-  }
-
-  .assignment-list li .asgn-name { flex: 1; }
-
-  .assignment-list li .asgn-due {
-    font-size: 0.75rem;
-    color: var(--text-muted);
-    white-space: nowrap;
-  }
-
-  .assignment-list li .asgn-pts {
-    font-size: 0.75rem;
-    color: var(--teal-light);
-    white-space: nowrap;
-    opacity: 0.8;
-  }
-
-  .student-num {
-    font-size: 0.75rem;
-    color: var(--text-muted);
-    min-width: 1.5rem;
-    text-align: right;
-  }
-
-  .student-id {
-    font-size: 0.75rem;
-    font-weight: 600;
-    color: var(--text-muted);
-    font-family: monospace;
-    min-width: 6rem;
-    text-align: center;
-    letter-spacing: 0.04em;
-    opacity: 0.7;
-  }
-
+  .missing-count.high { background: rgba(255,77,77,0.15); color: var(--danger); }
+  .missing-count.medium { background: rgba(240,160,48,0.15); color: var(--warning); }
+  .missing-count.low { background: rgba(0,116,116,0.15); color: var(--teal-light); }
   .missing-pts {
-    font-size: 0.8rem;
-    font-weight: 700;
-    background: rgba(64, 222, 222, 0.1);
-    color: var(--teal-light);
-    padding: 0.15rem 0.5rem;
-    border-radius: 999px;
-    white-space: nowrap;
-    min-width: 5rem;
-    text-align: center;
+    font-size: 0.78rem; font-weight: 700; background: rgba(64,222,222,0.1);
+    color: var(--teal-light); padding: 0.15rem 0.5rem; border-radius: 999px;
+    white-space: nowrap; min-width: 5rem; text-align: center;
   }
-
-  .station-badge {
-    font-size: 0.75rem;
-    font-weight: 700;
-    background: rgba(255, 200, 60, 0.12);
-    color: #f0c040;
-    border: 1px solid rgba(255, 200, 60, 0.3);
-    padding: 0.12rem 0.45rem;
-    min-width: 5rem;
-    text-align: center;
-    border-radius: 999px;
-    white-space: nowrap;
-    letter-spacing: 0.02em;
+  .expand-icon { color: var(--text-muted); font-size: 0.7rem; transition: transform 0.2s; }
+  .student-row.expanded .expand-icon { transform: rotate(90deg); }
+  .student-detail { display: none; padding: 0 1rem 0.65rem; }
+  .student-row.expanded .student-detail { display: block; }
+  .assignment-list { list-style: none; }
+  .assignment-list li {
+    padding: 0.35rem 0.65rem; font-size: 0.83rem; color: var(--text-muted);
+    border-left: 2px solid var(--border); margin-bottom: 0.2rem;
+    display: flex; justify-content: space-between; gap: 1rem;
   }
+  .assignment-list li .asgn-name { flex: 1; }
+  .assignment-list li .asgn-due { font-size: 0.72rem; color: var(--text-muted); white-space: nowrap; }
+  .assignment-list li .asgn-pts { font-size: 0.72rem; color: var(--teal-light); white-space: nowrap; opacity: 0.8; }
 
-  /* ── Grading Tab ── */
-  .grading-header {
-    margin-bottom: 1.5rem;
-  }
-
-  .grading-controls {
-    display: flex;
-    align-items: center;
-    gap: 1rem;
-    flex-wrap: wrap;
-  }
-
-  .grading-select-row {
-    display: flex;
-    align-items: center;
-    gap: 0.6rem;
-  }
-
-  .grading-label {
-    font-size: 0.82rem;
-    color: var(--text-muted);
-    white-space: nowrap;
-  }
-
-  #grade-assignment-select {
-    background: var(--surface);
-    border: 1px solid var(--border);
-    border-radius: 8px;
-    color: var(--text);
-    font-size: 0.85rem;
-    padding: 0.4rem 0.75rem;
-    cursor: pointer;
-    min-width: 280px;
-  }
-
-  #grade-assignment-select:focus { outline: none; border-color: var(--teal); }
-
-  .grade-all-btn {
-    padding: 0.4rem 1rem;
-    border-radius: 20px;
-    border: 1px solid var(--teal);
-    background: rgba(64, 222, 222, 0.08);
-    color: var(--teal-light);
-    font-size: 0.82rem;
-    font-weight: 600;
-    cursor: pointer;
-    transition: all 0.2s;
-    white-space: nowrap;
-  }
-
-  .grade-all-btn:hover { background: rgba(64, 222, 222, 0.18); }
-  .grade-all-btn:disabled { opacity: 0.4; cursor: not-allowed; }
-
-  .grading-queue {
-    margin-bottom: 2rem;
-  }
-
-  .grade-queue-card {
-    background: var(--surface);
-    border: 1px solid var(--border);
-    border-radius: 10px;
-    margin-bottom: 0.6rem;
-    padding: 0.75rem 1rem;
-    display: flex;
-    align-items: center;
-    gap: 0.75rem;
-    flex-wrap: wrap;
-  }
-
-  .grade-queue-card.is-missing {
-    border-color: rgba(255, 100, 100, 0.25);
-    background: rgba(255, 100, 100, 0.04);
-  }
-
-  .grade-queue-card.is-graded {
-    border-color: rgba(50, 205, 100, 0.2);
-    background: rgba(50, 205, 100, 0.04);
-  }
-
-  .grade-queue-card.is-messaged {
-    border-color: rgba(255, 180, 60, 0.2);
-    background: rgba(255, 180, 60, 0.04);
-  }
-
-  .grade-queue-name {
-    font-size: 0.9rem;
-    font-weight: 600;
-    color: var(--text-bright);
-    flex: 1;
-    min-width: 160px;
-  }
-
-  .grade-queue-period {
-    font-size: 0.75rem;
-    color: var(--teal-light);
-    white-space: nowrap;
-  }
-
-  .grade-queue-status {
-    font-size: 0.75rem;
-    padding: 0.12rem 0.5rem;
-    border-radius: 999px;
-    white-space: nowrap;
-    font-weight: 600;
-  }
-
-  .grade-queue-status.submitted { background: rgba(64,222,222,0.1); color: var(--teal-light); }
-  .grade-queue-status.missing   { background: rgba(255,100,100,0.1); color: #ff7070; }
-  .grade-queue-status.graded    { background: rgba(50,205,100,0.1);  color: #50c864; }
-  .grade-queue-status.messaged  { background: rgba(255,180,60,0.1);  color: #f0b030; }
-  .grade-queue-status.spanish   { background: rgba(255,200,60,0.1);  color: #f0c040; font-size: 0.68rem; }
-
-  .grade-btn {
-    padding: 0.3rem 0.85rem;
-    border-radius: 20px;
-    border: 1px solid var(--border);
-    background: none;
-    color: var(--text-muted);
-    font-size: 0.78rem;
-    font-weight: 600;
-    cursor: pointer;
-    transition: all 0.2s;
-    white-space: nowrap;
-  }
-
-  .grade-btn:hover  { border-color: var(--teal); color: var(--teal-light); }
-  .grade-btn.grading { border-color: var(--teal); color: var(--teal-light); opacity: 0.6; cursor: not-allowed; }
-  .grade-btn.done    { border-color: #50c864; color: #50c864; }
-
-  .grade-card-row1 {
-    display: flex;
-    align-items: center;
-    gap: 0.5rem;
-    width: 100%;
-  }
-
-  .grade-card-row2 {
-    display: flex;
-    align-items: center;
-    gap: 0.75rem;
-    margin-top: 0.35rem;
-    flex-wrap: wrap;
-  }
-
-  .grade-card-comment {
-    width: 100%;
-    font-size: 0.8rem;
-    color: var(--text-muted);
-    margin-top: 0.4rem;
-    padding: 0.5rem 0.75rem;
-    background: rgba(255,255,255,0.03);
-    border-radius: 6px;
-    border-left: 2px solid var(--teal);
-    line-height: 1.5;
-  }
-
-  .grade-card-comment.missing-comment {
-    border-left-color: #f0b030;
-  }
-
-  .grade-card-comment.no-feedback {
-    border-left-color: rgba(255,255,255,0.1);
-    color: var(--text-muted);
-    opacity: 0.5;
-    font-style: italic;
-  }
-
-  .rg-score { font-weight: 700; color: var(--teal-light); white-space: nowrap; font-size: 0.85rem; }
-  .rg-time  { font-size: 0.72rem; color: var(--text-muted); white-space: nowrap; }
-  .rg-link  { font-size: 0.75rem; color: var(--teal-light); text-decoration: none; white-space: nowrap; }
-  .rg-link:hover { text-decoration: underline; }
-
-  .grade-card-files {
-    display: flex;
-    gap: 0.4rem;
-    flex-wrap: wrap;
-    margin-top: 0.35rem;
-  }
-
-  .file-download-btn {
-    display: inline-flex;
-    align-items: center;
-    gap: 0.3rem;
-    padding: 0.25rem 0.6rem;
-    border-radius: 6px;
-    border: 1px solid rgba(64,222,222,0.2);
-    background: rgba(64,222,222,0.06);
-    color: var(--teal-light);
-    font-size: 0.72rem;
-    font-weight: 500;
-    text-decoration: none;
-    cursor: pointer;
-    transition: all 0.2s;
-    max-width: 240px;
-    overflow: hidden;
-  }
-
-  .file-download-btn:hover {
-    background: rgba(64,222,222,0.14);
-    border-color: var(--teal);
-  }
-
-  .file-download-btn .file-icon { font-size: 0.8rem; flex-shrink: 0; }
-  .file-download-btn .file-name {
-    overflow: hidden;
-    text-overflow: ellipsis;
-    white-space: nowrap;
-  }
-  .file-download-btn .file-size {
-    color: var(--text-muted);
-    font-size: 0.65rem;
-    flex-shrink: 0;
-  }
-
-  /* ── Hide IDs toggle ── */
-  body.hide-ids .student-id { display: none !important; }
-
-  /* ── On-Track Section ── */
-  .on-track-section {
-    margin-top: 0.4rem;
-    border: 1px solid rgba(80, 200, 100, 0.2);
-    border-radius: 8px;
-    overflow: hidden;
-  }
-
+  /* -- On-Track Section -- */
+  .on-track-section { margin-top: 0.4rem; border: 1px solid rgba(80,200,100,0.2); border-radius: 8px; overflow: hidden; }
   .on-track-header {
-    display: flex;
-    align-items: center;
-    gap: 0.5rem;
-    padding: 0.45rem 0.85rem;
-    cursor: pointer;
-    user-select: none;
-    font-size: 0.82rem;
-    color: #50c864;
-    background: rgba(50, 205, 100, 0.06);
+    display: flex; align-items: center; gap: 0.5rem; padding: 0.4rem 0.75rem;
+    cursor: pointer; user-select: none; font-size: 0.8rem; color: var(--success);
+    background: rgba(50,205,100,0.06);
   }
-
-  .on-track-header:hover { background: rgba(50, 205, 100, 0.12); }
-
-  .on-track-chevron { transition: transform 0.2s; font-size: 0.6rem; }
+  .on-track-header:hover { background: rgba(50,205,100,0.12); }
+  .on-track-chevron { transition: transform 0.2s; font-size: 0.55rem; }
   .on-track-section.open .on-track-chevron { transform: rotate(90deg); }
-
   .on-track-list { display: none; }
   .on-track-section.open .on-track-list { display: block; }
-
   .on-track-row {
-    display: flex;
-    align-items: center;
-    gap: 0.6rem;
-    padding: 0.4rem 0.85rem;
-    font-size: 0.875rem;
-    border-top: 1px solid var(--border);
+    display: flex; align-items: center; gap: 0.6rem;
+    padding: 0.35rem 0.75rem; font-size: 0.85rem; border-top: 1px solid var(--border);
   }
 
-  .on-track-badge {
-    font-size: 0.75rem;
-    font-weight: 600;
-    background: rgba(50, 205, 100, 0.1);
-    color: #50c864;
-    border: 1px solid rgba(50, 205, 100, 0.25);
-    padding: 0.1rem 0.5rem;
-    border-radius: 999px;
-    white-space: nowrap;
-    min-width: 7rem;
-    text-align: center;
-  }
-
-  /* ── Search Results ── */
-  .search-results {
-    margin-top: 1rem;
-  }
-
-  .search-result-card {
-    background: var(--surface);
-    border: 1px solid var(--border);
-    border-radius: 10px;
-    margin-bottom: 1rem;
-    overflow: hidden;
-  }
-
-  .search-result-header {
-    padding: 0.85rem 1rem;
-    border-bottom: 1px solid var(--border);
-    display: flex;
-    align-items: center;
-    gap: 0.75rem;
-  }
-
-  .search-result-header h3 {
-    font-size: 0.95rem;
-    color: var(--text-bright);
-    flex: 1;
-  }
-
-  /* ── Search period groups ── */
-  .search-period-group {
-    border-bottom: 1px solid var(--border);
-    padding: 0.7rem 1rem;
-  }
-  .search-period-group:last-child { border-bottom: none; }
-
-  .search-period-header {
-    display: flex;
-    align-items: center;
-    gap: 0.6rem;
-    margin-bottom: 0.4rem;
-    flex-wrap: wrap;
-  }
-
-  .search-period-label {
-    font-size: 0.82rem;
-    font-weight: 700;
-    color: var(--teal-light);
-    white-space: nowrap;
-  }
-
-  .turn-in-bar-wrap {
-    flex: 1;
-    min-width: 60px;
-    height: 5px;
-    background: rgba(255,255,255,0.08);
-    border-radius: 999px;
-    overflow: hidden;
-  }
-
-  .turn-in-bar-fill {
-    height: 100%;
-    background: var(--teal);
-    border-radius: 999px;
-    transition: width 0.3s;
-  }
-
-  .turn-in-rate {
-    font-size: 0.76rem;
-    color: var(--text-muted);
-    white-space: nowrap;
-  }
-
-  .show-submitted-btn {
-    font-size: 0.71rem;
-    padding: 0.12rem 0.45rem;
-    background: transparent;
-    border: 1px solid var(--border);
-    border-radius: 6px;
-    color: var(--text-muted);
-    cursor: pointer;
-    white-space: nowrap;
-  }
-  .show-submitted-btn:hover { border-color: var(--teal); color: var(--teal-light); }
-
-  .search-missing-list { list-style: none; margin: 0; padding: 0; }
-  .search-missing-list li {
-    padding: 0.35rem 0;
-    font-size: 0.875rem;
-    color: var(--text);
-    border-bottom: 1px solid rgba(255,255,255,0.04);
-    display: flex;
-    align-items: center;
-    gap: 0.5rem;
-  }
-  .search-missing-list li:last-child { border-bottom: none; }
-
-  .search-submitted-list { display: none; list-style: none; margin: 0.4rem 0 0; padding: 0.4rem 0 0; border-top: 1px solid var(--border); }
-  .search-submitted-list.open { display: block; }
-  .search-submitted-list li {
-    padding: 0.3rem 0;
-    font-size: 0.82rem;
-    color: var(--text-muted);
-    display: flex;
-    align-items: center;
-    gap: 0.5rem;
-    opacity: 0.75;
-  }
-
-  /* ── Loading / Error ── */
-  .loading-overlay {
-    display: none;
-    position: fixed;
-    inset: 0;
-    background: rgba(0,0,0,0.7);
-    z-index: 200;
-    align-items: center;
-    justify-content: center;
-    flex-direction: column;
-    gap: 1rem;
-  }
-
-  .loading-overlay.visible { display: flex; }
-
-  .spinner {
-    width: 48px;
-    height: 48px;
-    border: 4px solid var(--border);
-    border-top-color: var(--teal);
-    border-radius: 50%;
-    animation: spin 0.8s linear infinite;
-  }
-
-  .loading-text {
-    color: var(--text-muted);
-    font-size: 0.9rem;
-  }
-
-  .error-banner {
-    background: rgba(255, 77, 77, 0.1);
-    border: 1px solid rgba(255, 77, 77, 0.3);
-    border-radius: 10px;
-    padding: 1rem 1.25rem;
-    margin-bottom: 1.5rem;
-    color: var(--danger);
-    font-size: 0.9rem;
-    display: none;
-  }
-
-  .empty-state {
-    text-align: center;
-    padding: 3rem;
-    color: var(--text-muted);
-    font-size: 1rem;
-  }
-
-  /* ── Sort Bar ── */
-  .sort-bar {
-    display: flex;
-    align-items: center;
-    gap: 0.5rem;
-    margin-bottom: 1.5rem;
-  }
-
-  .sort-label {
-    font-size: 0.8rem;
-    color: var(--text-muted);
-    margin-right: 0.25rem;
-  }
-
+  /* -- Sort Bar -- */
+  .sort-bar { display: flex; align-items: center; gap: 0.5rem; margin-bottom: 1.5rem; flex-wrap: wrap; }
+  .sort-label { font-size: 0.78rem; color: var(--text-muted); margin-right: 0.25rem; }
   .sort-btn {
-    padding: 0.35rem 0.85rem;
-    border-radius: 20px;
-    border: 1px solid var(--border);
-    background: none;
-    color: var(--text-muted);
-    font-size: 0.8rem;
-    font-weight: 600;
-    cursor: pointer;
-    transition: all 0.2s;
+    padding: 0.3rem 0.8rem; border-radius: 20px; border: 1px solid var(--border);
+    background: none; color: var(--text-muted); font-size: 0.78rem; font-weight: 600;
+    cursor: pointer; transition: all 0.2s;
   }
-
   .sort-btn:hover { border-color: var(--teal); color: var(--text); }
   .sort-btn.active { background: var(--teal-dim); border-color: var(--teal); color: var(--teal-light); }
 
-  /* ── Print Button ── */
-  .print-btn {
-    padding: 0.35rem 0.85rem;
-    border-radius: 20px;
-    border: 1px solid var(--border);
-    background: none;
-    color: var(--text-muted);
-    font-size: 0.8rem;
-    font-weight: 600;
-    cursor: pointer;
-    transition: all 0.2s;
-    margin-left: auto;
+  /* -- Search Tab -- */
+  .search-box { display: flex; gap: 0.75rem; max-width: 600px; margin-bottom: 1rem; }
+  .search-box input {
+    flex: 1; padding: 10px 14px; border-radius: var(--btn-radius);
+    border: 1px solid var(--border-hover); background: rgba(0,0,0,0.18);
+    color: var(--text-bright); font-size: 0.95rem; outline: none;
+    transition: border-color 0.2s;
   }
+  .search-box input:focus { border-color: var(--teal-light); }
+  .search-box input::placeholder { color: var(--text-muted); }
 
-  .print-btn:hover { border-color: var(--teal); color: var(--text); }
+  /* -- Grading Tab -- */
+  .grading-controls { display: flex; align-items: center; gap: 1rem; flex-wrap: wrap; margin-bottom: 1.5rem; }
+  .grading-label { font-size: 0.82rem; color: var(--text-muted); white-space: nowrap; }
+  .select-input {
+    background: var(--surface); border: 1px solid var(--border);
+    border-radius: 8px; color: var(--text); font-size: 0.85rem;
+    padding: 0.4rem 0.75rem; cursor: pointer; min-width: 200px;
+  }
+  .select-input:focus { outline: none; border-color: var(--teal); }
 
-  /* ── Responsive ── */
+  .grade-card {
+    background: var(--surface); border: 1px solid var(--border);
+    border-radius: 10px; margin-bottom: 0.6rem; padding: 0.75rem 1rem;
+    display: flex; align-items: center; gap: 0.75rem; flex-wrap: wrap;
+  }
+  .grade-card-name { font-size: 0.9rem; font-weight: 600; color: var(--text-bright); flex: 1; min-width: 160px; }
+  .grade-card-status {
+    font-size: 0.72rem; padding: 0.1rem 0.45rem; border-radius: 999px;
+    white-space: nowrap; font-weight: 600;
+  }
+  .grade-card-status.submitted { background: rgba(64,222,222,0.1); color: var(--teal-light); }
+  .grade-card-status.missing { background: rgba(255,100,100,0.1); color: #ff7070; }
+  .grade-card-status.graded { background: rgba(80,200,100,0.1); color: var(--success); }
+  .grade-input {
+    width: 60px; padding: 0.3rem 0.5rem; border-radius: 6px;
+    border: 1px solid var(--border); background: rgba(0,0,0,0.2);
+    color: var(--text-bright); font-size: 0.85rem; text-align: center;
+  }
+  .grade-input:focus { outline: none; border-color: var(--teal-light); }
+  .grade-max { font-size: 0.78rem; color: var(--text-muted); }
+  .grade-comment {
+    width: 100%; margin-top: 0.4rem; padding: 0.4rem 0.6rem; border-radius: 6px;
+    border: 1px solid var(--border); background: rgba(0,0,0,0.15);
+    color: var(--text); font-size: 0.82rem; resize: vertical; min-height: 36px;
+    font-family: inherit;
+  }
+  .grade-comment:focus { outline: none; border-color: var(--teal-light); }
+
+  /* -- Bulk Comment Panel -- */
+  .bulk-panel {
+    background: var(--surface); border: 1px solid var(--border);
+    border-radius: var(--panel-radius); padding: 1.25rem; margin-bottom: 1.5rem;
+  }
+  .bulk-panel h3 { font-size: 0.9rem; color: var(--text-bright); margin-bottom: 0.75rem; }
+  .bulk-panel textarea {
+    width: 100%; padding: 0.6rem 0.8rem; border-radius: 8px;
+    border: 1px solid var(--border); background: rgba(0,0,0,0.15);
+    color: var(--text); font-size: 0.85rem; resize: vertical; min-height: 60px;
+    font-family: inherit; margin-bottom: 0.75rem;
+  }
+  .bulk-panel textarea:focus { outline: none; border-color: var(--teal-light); }
+  .bulk-count { font-size: 0.78rem; color: var(--text-muted); margin-bottom: 0.5rem; }
+
+  /* -- Loading / Error -- */
+  .loading-overlay {
+    display: none; position: fixed; inset: 0;
+    background: rgba(0,0,0,0.7); z-index: 200;
+    align-items: center; justify-content: center; flex-direction: column; gap: 1rem;
+  }
+  .loading-overlay.visible { display: flex; }
+  .spinner {
+    width: 48px; height: 48px; border: 4px solid var(--border);
+    border-top-color: var(--teal); border-radius: 50%;
+    animation: spin 0.8s linear infinite;
+  }
+  @keyframes spin { from { transform: rotate(0); } to { transform: rotate(360deg); } }
+  .loading-text { color: var(--text-muted); font-size: 0.9rem; }
+  .error-banner {
+    background: rgba(255,77,77,0.1); border: 1px solid rgba(255,77,77,0.3);
+    border-radius: 10px; padding: 1rem 1.25rem; margin-bottom: 1.5rem;
+    color: var(--danger); font-size: 0.9rem; display: none;
+  }
+  .empty-state { text-align: center; padding: 3rem; color: var(--text-muted); font-size: 1rem; }
+
+  /* -- Responsive -- */
   @media (max-width: 768px) {
-    .top-bar { padding: 0.75rem 1rem; gap: 1rem; }
-    .top-bar-title { font-size: 1rem; }
+    .top-bar { padding: 0.6rem 1rem; gap: 0.75rem; }
+    .top-bar-title { font-size: 11px; }
     .main-content { padding: 1rem; }
-    .tab-btn { padding: 0.65rem 1rem; font-size: 0.8rem; }
+    .tab-btn { padding: 0.6rem 1rem; font-size: 9px; }
     .summary-card .value { font-size: 1.5rem; }
+    .user-info span { display: none; }
   }
-
-  /* ── Print Styles ── */
-  @media print {
-    /* Reset everything */
-    *, *::before, *::after {
-      background: transparent !important;
-      color: #000 !important;
-      box-shadow: none !important;
-      backdrop-filter: none !important;
-      -webkit-backdrop-filter: none !important;
-      text-shadow: none !important;
-    }
-
-    body {
-      background: #fff !important;
-      margin: 0 !important;
-      padding: 0 !important;
-      font-size: 9pt !important;
-      line-height: 1.3 !important;
-    }
-
-    /* Hide ALL non-content elements */
-    #pin-screen, #setup-screen, #loading-overlay,
-    .top-bar, .tab-bar, .summary-row, .sort-bar,
-    #tab-search, .error-banner, .refresh-btn,
-    .btn-outline, .btn-tools, .period-print-btn, .print-btn,
-    #tools-overlay, #tools-panel,
-    .course-badge { display: none !important; }
-
-    /* Force dashboard visible */
-    #dashboard { display: block !important; }
-    #tab-overview { display: block !important; }
-
-    /* Collapse all spacing */
-    .main-content { padding: 0.25in !important; }
-    .course-section { margin-bottom: 6pt !important; }
-    .period-group { margin-bottom: 4pt !important; }
-
-    /* Course header — compact */
-    .course-header { margin-bottom: 4pt !important; }
-    .course-header h2 { font-size: 13pt !important; font-weight: 700 !important; border-bottom: 2px solid #007474 !important; padding-bottom: 2pt !important; }
-
-    /* Period label — compact */
-    .period-label { font-size: 9pt !important; font-weight: 700 !important; color: #007474 !important; margin-bottom: 2pt !important; padding: 0 !important; letter-spacing: 0 !important; }
-
-    /* Student list — no rounded corners, tight borders */
-    .student-list { border: 1px solid #999 !important; border-radius: 0 !important; overflow: visible !important; }
-    .student-row { border-bottom: 1px solid #ccc !important; }
-    .student-row:last-child { border-bottom: none !important; }
-
-    /* Student row — very compact */
-    .student-row-header { padding: 2pt 6pt !important; gap: 4pt !important; }
-    .student-name { font-size: 9pt !important; font-weight: 600 !important; }
-    .missing-count { font-size: 8pt !important; font-weight: 700 !important; padding: 0 !important; min-width: 5rem !important; text-align: center !important; }
-    .missing-pts { font-size: 8pt !important; font-weight: 700 !important; padding: 0 !important; background: none !important; color: #007474 !important; min-width: 3.5rem !important; text-align: right !important; }
-    .student-num { font-size: 8pt !important; color: #666 !important; min-width: 1rem !important; }
-    .student-id { font-size: 7.5pt !important; color: #555 !important; min-width: 4rem !important; text-align: center !important; font-family: monospace !important; opacity: 1 !important; }
-    .station-badge { font-size: 8pt !important; font-weight: 700 !important; background: none !important; border: none !important; color: #7a5f00 !important; padding: 0 !important; min-width: 3.5rem !important; text-align: center !important; }
-    .asgn-pts { font-size: 7pt !important; color: #007474 !important; }
-    .expand-icon { display: none !important; }
-
-    /* Force all details open */
-    .student-detail { display: block !important; padding: 0 6pt 3pt 6pt !important; }
-
-    /* Assignment list — ultra compact */
-    .assignment-list { margin: 0 !important; }
-    .assignment-list li {
-      border-left: 2px solid #007474 !important;
-      font-size: 7.5pt !important;
-      padding: 0 0 0 6pt !important;
-      margin: 0 0 1pt 8pt !important;
-      line-height: 1.4 !important;
-    }
-    .assignment-list li .asgn-due { color: #666 !important; font-size: 7pt !important; }
-
-    /* Print header */
-    .print-header { display: block !important; text-align: center; margin-bottom: 8pt !important; }
-    .print-header h1 { font-size: 14pt !important; margin-bottom: 1pt !important; }
-    .print-header p { font-size: 8pt !important; color: #666 !important; }
-
-    /* Never split a student row across pages */
-    .student-row { break-inside: avoid !important; page-break-inside: avoid !important; }
-    /* Period groups and course sections can break between rows, not within */
-    .course-section, .period-group { break-inside: auto !important; page-break-inside: auto !important; }
-    .course-section { page-break-before: auto !important; }
-    /* Keep student-list from clipping overflow */
-    .student-list { overflow: visible !important; }
-  }
-
-  .print-header { display: none; }
 </style>
 </head>
 <body>
 
-<!-- ── PIN Screen ── -->
-<div id="pin-screen" style="display:flex; align-items:center; justify-content:center; min-height:100vh; padding:2rem;">
-  <div class="setup-card">
+<!-- Login Screen -->
+<div id="login-screen">
+  <div class="login-card">
     <img src="PV_Logo.png" alt="PVHS Panther Logo">
     <h1>PVHS Dashboard</h1>
-    <p>Enter PIN to access the dashboard.</p>
-    <div id="pin-error" class="setup-error"></div>
-    <input type="password" id="pin-input" placeholder="Enter PIN..." style="width:100%;padding:0.85rem 1rem;border-radius:8px;border:1px solid var(--border);background:var(--bg);color:var(--text);font-size:1.5rem;text-align:center;letter-spacing:0.3em;outline:none;" onkeydown="if(event.key==='Enter')checkPin()">
-    <br><br>
-    <button class="btn btn-primary" onclick="checkPin()">Unlock</button>
+    <p>Sign in with your Google account to access the teacher command center.</p>
+    <div id="login-error" class="login-error"></div>
+    <button class="google-btn" onclick="googleSignIn()">
+      <svg width="20" height="20" viewBox="0 0 48 48"><path fill="#EA4335" d="M24 9.5c3.54 0 6.71 1.22 9.21 3.6l6.85-6.85C35.9 2.38 30.47 0 24 0 14.62 0 6.51 5.38 2.56 13.22l7.98 6.19C12.43 13.72 17.74 9.5 24 9.5z"/><path fill="#4285F4" d="M46.98 24.55c0-1.57-.15-3.09-.38-4.55H24v9.02h12.94c-.58 2.96-2.26 5.48-4.78 7.18l7.73 6c4.51-4.18 7.09-10.36 7.09-17.65z"/><path fill="#FBBC05" d="M10.53 28.59c-.48-1.45-.76-2.99-.76-4.59s.27-3.14.76-4.59l-7.98-6.19C.92 16.46 0 20.12 0 24c0 3.88.92 7.54 2.56 10.78l7.97-6.19z"/><path fill="#34A853" d="M24 48c6.48 0 11.93-2.13 15.89-5.81l-7.73-6c-2.15 1.45-4.92 2.3-8.16 2.3-6.26 0-11.57-4.22-13.47-9.91l-7.98 6.19C6.51 42.62 14.62 48 24 48z"/></svg>
+      Sign in with Google
+    </button>
   </div>
 </div>
 
-<!-- ── Setup Screen ── -->
-<div id="setup-screen" style="display:none;">
-  <div class="setup-card">
-    <img src="PV_Logo.png" alt="PVHS Panther Logo">
-    <h1>PVHS Missing Assignments</h1>
-    <p>Enter your Canvas API token to get started. The token is stored only in this browser and never sent anywhere except your Canvas instance.</p>
-    <div id="setup-error" class="setup-error"></div>
-    <input type="text" id="token-input" placeholder="Paste your Canvas API token here...">
-    <br><br>
-    <button class="btn btn-primary" onclick="saveTokenAndLoad()">Connect to Canvas</button>
-  </div>
-</div>
-
-<!-- ── Loading Overlay ── -->
+<!-- Loading Overlay -->
 <div id="loading-overlay" class="loading-overlay">
   <div class="spinner"></div>
-  <div class="loading-text" id="loading-text">Loading missing assignments...</div>
+  <div class="loading-text" id="loading-text">Loading...</div>
 </div>
 
-<!-- ── Dashboard ── -->
+<!-- Dashboard -->
 <div id="dashboard">
-  <!-- Top Bar -->
   <div class="top-bar">
     <img src="PV_Logo.png" alt="PVHS">
-    <div class="top-bar-title">Missing Assignments Dashboard</div>
+    <div class="top-bar-title">PVHS Dashboard</div>
     <div class="top-bar-spacer"></div>
     <div class="status-area">
-      <div class="last-updated" id="last-updated">Loading...</div>
-      <button class="refresh-btn" id="refresh-btn" onclick="manualRefresh()" title="Refresh now">
-        <svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round">
+      <div class="last-updated" id="last-updated"></div>
+      <button class="refresh-btn" id="refresh-btn" onclick="manualRefresh()" title="Refresh data from Canvas">
+        <svg width="15" height="15" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round">
           <path d="M1 1v5h5"/><path d="M2.5 10A5.5 5.5 0 1 0 3 5.5L1 6"/>
         </svg>
       </button>
-      <button class="btn btn-small btn-outline" onclick="resetToken()">Change Token</button>
-      <button class="btn btn-small btn-tools" onclick="openTools()" title="PVHS Tools">
-        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" style="margin-right:5px"><rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/><rect x="3" y="14" width="7" height="7" rx="1"/><rect x="14" y="14" width="7" height="7" rx="1"/></svg>PVHS Tools
-      </button>
-      <button class="btn btn-small btn-install" id="install-btn" onclick="installApp()" style="display:none;">Install App</button>
     </div>
+    <div class="user-info" id="user-info">
+      <span id="user-name"></span>
+      <img class="user-avatar" id="user-avatar" src="" alt="" style="display:none">
+    </div>
+    <button class="btn btn-small btn-outline" onclick="signOut()">Sign Out</button>
   </div>
 
-  <!-- PVHS Tools Panel -->
-  <div id="tools-overlay" onclick="closeTools()" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,0.55);z-index:1000;backdrop-filter:blur(4px);-webkit-backdrop-filter:blur(4px);"></div>
-  <div id="tools-panel" style="display:none;position:fixed;top:0;right:0;width:420px;max-width:95vw;height:100vh;z-index:1001;background:#021414;border-left:1px solid rgba(0,116,116,0.3);box-shadow:-8px 0 40px rgba(0,0,0,0.6);flex-direction:column;">
-    <div style="display:flex;align-items:center;justify-content:space-between;padding:1rem 1.2rem;border-bottom:1px solid rgba(0,116,116,0.25);background:rgba(2,20,20,0.95);">
-      <span style="font-size:0.8rem;font-weight:700;letter-spacing:0.12em;color:#40dede;text-transform:uppercase;">PVHS Tools</span>
-      <div style="display:flex;gap:0.5rem;">
-        <button onclick="popOutTools()" title="Pop out as app window" style="background:transparent;border:1px solid rgba(0,116,116,0.4);color:#8ab;border-radius:6px;padding:0.3rem 0.6rem;font-size:0.75rem;cursor:pointer;display:flex;align-items:center;gap:4px;">
-          <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><rect x="3" y="3" width="18" height="18" rx="2"/><path d="M9 3v18M3 9h6"/></svg>Pop Out
-        </button>
-        <button onclick="closeTools()" style="background:transparent;border:1px solid rgba(0,116,116,0.4);color:#8ab;border-radius:6px;padding:0.3rem 0.7rem;font-size:0.85rem;cursor:pointer;">✕</button>
-      </div>
-    </div>
-    <iframe id="tools-iframe" src="" style="flex:1;border:none;width:100%;height:calc(100vh - 57px);" allow="fullscreen"></iframe>
-  </div>
-
-  <!-- Tabs -->
   <div class="tab-bar">
     <button class="tab-btn active" data-tab="overview" onclick="switchTab('overview')">Overview</button>
-    <button class="tab-btn" data-tab="search" onclick="switchTab('search')">Search Assignment</button>
     <button class="tab-btn" data-tab="grading" onclick="switchTab('grading')">Grading</button>
+    <button class="tab-btn" data-tab="search" onclick="switchTab('search')">Search</button>
+    <button class="tab-btn" data-tab="bulk" onclick="switchTab('bulk')">Bulk Comment</button>
   </div>
 
-  <!-- Main Content -->
   <div class="main-content">
-    <div class="print-header" id="print-header">
-      <h1>PVHS Missing Assignments Report</h1>
-      <p id="print-date"></p>
-    </div>
     <div id="error-banner" class="error-banner"></div>
 
     <!-- Overview Tab -->
     <div id="tab-overview" class="tab-content active">
       <div class="summary-row" id="summary-row"></div>
       <div class="sort-bar">
-        <span class="sort-label">Sort by:</span>
+        <span class="sort-label">Sort:</span>
         <button class="sort-btn active" data-sort="last" onclick="changeSort('last')">Last Name</button>
         <button class="sort-btn" data-sort="first" onclick="changeSort('first')">First Name</button>
         <button class="sort-btn" data-sort="most" onclick="changeSort('most')">Most Missing</button>
         <button class="sort-btn" data-sort="pts" onclick="changeSort('pts')">Most Points</button>
-        <button class="sort-btn" data-sort="desk" onclick="changeSort('desk')">By Desk</button>
-        <button class="sort-btn btn-toggle-ids" id="toggle-ids-btn" onclick="toggleStudentIds()">Hide IDs</button>
-        <button class="print-btn" onclick="printReport()"><svg xmlns="http://www.w3.org/2000/svg" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:-1px;margin-right:4px"><polyline points="6 9 6 2 18 2 18 9"/><path d="M6 18H4a2 2 0 0 1-2-2v-5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2h-2"/><rect x="6" y="14" width="12" height="8"/></svg>Print Report</button>
       </div>
       <div id="courses-container"></div>
     </div>
 
     <!-- Grading Tab -->
     <div id="tab-grading" class="tab-content">
-      <div class="grading-header">
-        <div class="grading-controls">
-          <div class="grading-select-row">
-            <label class="grading-label">Assignment</label>
-            <select id="grade-assignment-select" onchange="loadGradingQueue()">
-              <option value="">-- Select an assignment --</option>
-              <option value="948145|19591">18 - Editing &amp; Final Contact Sheet</option>
-            </select>
-          </div>
-          <button class="grade-all-btn" onclick="gradeAllUngraded()">Grade All Ungraded</button>
-        </div>
+      <div class="grading-controls">
+        <label class="grading-label">Course</label>
+        <select id="grade-course-select" class="select-input" onchange="loadAssignmentsForGrading()">
+          <option value="">Select course</option>
+        </select>
+        <label class="grading-label">Assignment</label>
+        <select id="grade-assignment-select" class="select-input" onchange="loadGradingQueue()">
+          <option value="">Select assignment</option>
+        </select>
       </div>
-      <div id="grading-queue" class="grading-queue">
-        <div class="empty-state">Select an assignment above to load the grading queue.</div>
+      <div id="grading-queue">
+        <div class="empty-state">Select a course and assignment to load the grading queue.</div>
+      </div>
+      <div id="grading-actions" style="display:none; margin-top:1rem;">
+        <button class="btn btn-primary" onclick="submitAllGrades()">Apply All Grades to Canvas</button>
       </div>
     </div>
 
     <!-- Search Tab -->
     <div id="tab-search" class="tab-content">
-      <div class="search-panel">
-        <div class="search-box">
-          <input type="text" id="assignment-search" placeholder="Type an assignment name to find students who haven't submitted it..." oninput="handleAssignmentSearch()">
+      <div class="search-box">
+        <input type="text" id="assignment-search" placeholder="Type an assignment name to find who hasn't submitted..." oninput="handleAssignmentSearch()">
+      </div>
+      <div id="search-results">
+        <div class="empty-state">Start typing an assignment name to search across all courses.</div>
+      </div>
+    </div>
+
+    <!-- Bulk Comment Tab -->
+    <div id="tab-bulk" class="tab-content">
+      <div class="bulk-panel">
+        <h3>Bulk Comment on Missing Assignments</h3>
+        <div class="grading-controls" style="margin-bottom:1rem;">
+          <label class="grading-label">Course</label>
+          <select id="bulk-course-select" class="select-input" onchange="loadAssignmentsForBulk()">
+            <option value="">Select course</option>
+          </select>
+          <label class="grading-label">Assignment</label>
+          <select id="bulk-assignment-select" class="select-input" onchange="loadBulkTargets()">
+            <option value="">Select assignment</option>
+          </select>
         </div>
+        <div class="bulk-count" id="bulk-count"></div>
+        <textarea id="bulk-comment" placeholder="Write a comment that will be sent to all students who haven't turned in this assignment..."></textarea>
+        <button class="btn btn-primary" id="bulk-send-btn" onclick="sendBulkComments()" disabled>Send Comment to All Missing Students</button>
       </div>
-      <div id="search-results" class="search-results">
-        <div class="empty-state">Start typing an assignment name above to search.</div>
-      </div>
+      <div id="bulk-results"></div>
     </div>
   </div>
 </div>
 
+<!-- Firebase SDK -->
+<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-auth-compat.js"></script>
+
 <script>
-// ── Configuration ──
-// API calls go through the local proxy server (canvas_server.py) to avoid CORS
-const CANVAS_BASE = '/api/v1';
-const COURSES = [
-  { id: 111811, name: 'CTE Photo 1B' },
-  { id: 111829, name: 'Digital Arts 1B' },
-  { id: 111831, name: 'Digital Arts 2B' }
-];
-const REFRESH_INTERVAL = 60 * 60 * 1000; // 1 hour
+// ───────────────────────────────────────────────────────
+// Firebase Config
+// ───────────────────────────────────────────────────────
+firebase.initializeApp({
+  apiKey:            'AIzaSyCXVzzAeh3U-RwYaKzCXOTBiNAarHWNqVo',
+  authDomain:        'girl-scouts-silva.firebaseapp.com',
+  projectId:         'girl-scouts-silva',
+  storageBucket:     'girl-scouts-silva.firebasestorage.app',
+  messagingSenderId: '662350541127',
+  appId:             '1:662350541127:web:174dd8e1114695d8dadc62',
+});
 
-// ── PIN Protection ──
-const PIN_HASH = '483029d526219f816e8e8f6a9de07b422633dba180ffc26faac22862a017519f';
+const auth = firebase.auth();
 
-async function hashPin(pin) {
-  const data = new TextEncoder().encode(pin);
-  const buf = await crypto.subtle.digest('SHA-256', data);
-  return Array.from(new Uint8Array(buf)).map(b => b.toString(16).padStart(2, '0')).join('');
-}
+// ───────────────────────────────────────────────────────
+// State
+// ───────────────────────────────────────────────────────
+let currentUser   = null;
+let idToken       = null;
+let dashboardData = [];
+let currentSort   = 'last';
+let coursesCache  = [];
+let bulkTargets   = [];
 
-async function checkPin() {
-  const pin = document.getElementById('pin-input').value.trim();
-  if (!pin) return;
-  const hash = await hashPin(pin);
-  if (hash === PIN_HASH) {
-    sessionStorage.setItem('pvhs_unlocked', '1');
-    document.getElementById('pin-screen').style.display = 'none';
-    initAfterPin();
-  } else {
-    const err = document.getElementById('pin-error');
-    err.textContent = 'Incorrect PIN.';
-    err.style.display = 'block';
-    document.getElementById('pin-input').value = '';
-    document.getElementById('pin-input').focus();
-  }
-}
-
-function initAfterPin() {
-  TOKEN = getToken();
-  initIdToggle();
-  if (TOKEN) {
+// ───────────────────────────────────────────────────────
+// Auth
+// ───────────────────────────────────────────────────────
+auth.onAuthStateChanged(async user => {
+  if (user) {
+    currentUser = user;
+    idToken = await user.getIdToken();
+    document.getElementById('login-screen').style.display = 'none';
     document.getElementById('dashboard').style.display = 'block';
+    document.getElementById('user-name').textContent = user.displayName || user.email;
+    if (user.photoURL) {
+      const av = document.getElementById('user-avatar');
+      av.src = user.photoURL;
+      av.style.display = 'block';
+    }
     loadDashboard();
   } else {
-    document.getElementById('setup-screen').style.display = 'flex';
+    currentUser = null;
+    idToken = null;
+    document.getElementById('login-screen').style.display = 'flex';
+    document.getElementById('dashboard').style.display = 'none';
   }
+});
+
+function googleSignIn() {
+  const provider = new firebase.auth.GoogleAuthProvider();
+  auth.signInWithPopup(provider).catch(err => {
+    const el = document.getElementById('login-error');
+    el.textContent = err.message;
+    el.style.display = 'block';
+  });
 }
 
-// ── State ──
-let TOKEN = '';
-let dashboardData = []; // [{ course, students: [{ name, sortable_name, period, missing: [{name, due}] }] }]
-let refreshTimer = null;
-let currentSort = 'last'; // 'last', 'first', 'most'
+function signOut() { auth.signOut(); }
 
-// ── Token Management ──
-function getToken() {
-  const raw = localStorage.getItem('canvas_api_token') || '';
-  return sanitizeToken(raw);
-}
-
-function sanitizeToken(raw) {
-  // Map Cyrillic lookalikes to their Latin equivalents (common copy-paste corruption)
-  const cyrillicToLatin = {
-    '\u0410': 'A', '\u0412': 'B', '\u0421': 'C', '\u0415': 'E',
-    '\u041D': 'H', '\u041A': 'K', '\u041C': 'M', '\u041E': 'O',
-    '\u0420': 'P', '\u0422': 'T', '\u0425': 'X', '\u0423': 'Y',
-    '\u0417': 'Z', '\u0430': 'a', '\u0435': 'e', '\u043E': 'o',
-    '\u0440': 'p', '\u0441': 'c', '\u0443': 'y', '\u0445': 'x',
-    '\u043A': 'k', '\u0437': 'z', '\u0433': 'r',
-    // Also handle common Unicode dash/quote replacements
-    '\u2013': '-', '\u2014': '-', '\u2018': "'", '\u2019': "'",
-    '\u201C': '"', '\u201D': '"', '\u007E': '~'
-  };
-  let cleaned = '';
-  for (const ch of raw) {
-    cleaned += cyrillicToLatin[ch] || ch;
+// ───────────────────────────────────────────────────────
+// API Helper (injects Firebase token, retries on 401)
+// ───────────────────────────────────────────────────────
+async function api(path, opts = {}) {
+  if (!idToken) idToken = await currentUser.getIdToken(true);
+  const headers = { 'Authorization': 'Bearer ' + idToken, ...(opts.headers || {}) };
+  let resp = await fetch(path, { ...opts, headers, cache: 'no-store' });
+  if (resp.status === 401) {
+    idToken = await currentUser.getIdToken(true);
+    headers['Authorization'] = 'Bearer ' + idToken;
+    resp = await fetch(path, { ...opts, headers, cache: 'no-store' });
   }
-  // Strip any remaining non-ASCII / non-printable characters
-  return cleaned.replace(/[^\x20-\x7E]/g, '').trim();
+  return resp;
 }
 
-function saveTokenAndLoad() {
-  const input = document.getElementById('token-input');
-  const val = sanitizeToken(input.value);
-  if (!val) {
-    showSetupError('Please enter a valid API token.');
-    return;
-  }
-  localStorage.setItem('canvas_api_token', val);
-  TOKEN = val;
-  document.getElementById('setup-screen').style.display = 'none';
-  document.getElementById('dashboard').style.display = 'block';
-  loadDashboard();
-}
-
-function resetToken() {
-  localStorage.removeItem('canvas_api_token');
-  TOKEN = '';
-  document.getElementById('dashboard').style.display = 'none';
-  document.getElementById('setup-screen').style.display = 'flex';
-  document.getElementById('token-input').value = '';
-  if (refreshTimer) clearInterval(refreshTimer);
-}
-
-function showSetupError(msg) {
-  const el = document.getElementById('setup-error');
-  el.textContent = msg;
-  el.style.display = 'block';
-}
-
-// ── Canvas API Helpers ──
 async function canvasFetch(path) {
-  let allResults = [];
-  let url = `${CANVAS_BASE}${path}`;
-  if (!url.includes('?')) url += '?per_page=100';
-  else url += '&per_page=100';
+  let all = [];
+  let url = '/api/v1' + path;
+  url += (url.includes('?') ? '&' : '?') + 'per_page=100';
 
   while (url) {
-    const resp = await fetch(url, {
-      headers: { 'Authorization': `Bearer ${TOKEN}` },
-      cache: 'no-store'
-    });
-    if (!resp.ok) {
-      throw new Error(`Canvas API error ${resp.status}: ${resp.statusText} for ${path}`);
-    }
+    const resp = await api(url);
+    if (!resp.ok) throw new Error('Canvas ' + resp.status + ': ' + resp.statusText);
     const data = await resp.json();
-    allResults = allResults.concat(data);
-
-    // Handle pagination via Link header
-    const linkHeader = resp.headers.get('Link');
+    all = all.concat(data);
     url = null;
-    if (linkHeader) {
-      const next = linkHeader.split(',').find(s => s.includes('rel="next"'));
+    const link = resp.headers.get('Link');
+    if (link) {
+      const next = link.split(',').find(s => s.includes('rel="next"'));
       if (next) {
-        const match = next.match(/<([^>]+)>/);
-        if (match) url = match[1];
+        const m = next.match(/<([^>]+)>/);
+        if (m) url = m[1];
       }
     }
   }
-  return allResults;
+  return all;
 }
 
-// ── Data Loading ──
+// ───────────────────────────────────────────────────────
+// Dashboard Loading
+// ───────────────────────────────────────────────────────
 async function loadDashboard() {
-  showLoading(true, 'Loading missing assignments...');
+  showLoading(true, 'Loading courses...');
   hideError();
   try {
-    const settled = await Promise.allSettled(COURSES.map(c => loadCourse(c)));
-    dashboardData = settled
-      .filter(r => r.status === 'fulfilled')
-      .map(r => r.value);
-    const failed = settled.filter(r => r.status === 'rejected');
-    if (failed.length > 0) {
-      console.warn('Some courses failed to load:', failed.map(r => r.reason.message));
-      if (dashboardData.length === 0) throw failed[0].reason;
-    }
+    coursesCache = await canvasFetch('/courses?enrollment_type=teacher&state[]=available');
+    coursesCache = coursesCache.filter(c =>
+      c.enrollments && c.enrollments.some(e => e.type === 'teacher')
+    );
+    populateCourseSelects();
+
+    showLoading(true, 'Loading missing assignments...');
+    const settled = await Promise.allSettled(coursesCache.map(c => loadCourse(c)));
+    dashboardData = settled.filter(r => r.status === 'fulfilled').map(r => r.value);
     renderDashboard();
     updateTimestamp();
-    scheduleAutoRefresh();
   } catch (err) {
-    showError('Failed to load data: ' + err.message);
+    showError('Failed to load: ' + err.message);
     console.error(err);
   } finally {
     showLoading(false);
   }
 }
 
+function populateCourseSelects() {
+  ['grade-course-select', 'bulk-course-select'].forEach(id => {
+    const el = document.getElementById(id);
+    el.innerHTML = '<option value="">Select course</option>';
+    coursesCache.forEach(c => {
+      el.innerHTML += '<option value="' + c.id + '">' + esc(c.name) + '</option>';
+    });
+  });
+}
+
 async function loadCourse(course) {
-  // Step 1: Get enrollments and sections in parallel
   const [enrollments, sections] = await Promise.all([
-    canvasFetch(`/courses/${course.id}/enrollments?type[]=StudentEnrollment&state[]=active&include[]=user`),
-    canvasFetch(`/courses/${course.id}/sections`)
+    canvasFetch('/courses/' + course.id + '/enrollments?type[]=StudentEnrollment&state[]=active&include[]=user'),
+    canvasFetch('/courses/' + course.id + '/sections'),
   ]);
 
   const sectionMap = {};
   sections.forEach(s => { sectionMap[s.id] = s.name; });
 
-  // Step 2: Build student list
   const studentMap = {};
   enrollments.forEach(e => {
     if (!e.user) return;
     const uid = e.user.id;
     if (!studentMap[uid]) {
-      const sectionName = sectionMap[e.course_section_id] || 'Unknown';
       studentMap[uid] = {
         id: uid,
-        studentId: e.user.sis_user_id || e.user.login_id || '',
         name: e.user.name,
         sortable_name: e.user.sortable_name || e.user.name,
-        section: sectionName,
-        period: extractPeriod(sectionName),
-        missing: []
+        section: sectionMap[e.course_section_id] || 'Unknown',
+        period: extractPeriod(sectionMap[e.course_section_id] || ''),
+        missing: [],
       };
     }
   });
 
-  // Step 3: Get assignments and check submissions in batches of 6
-  const assignments = await canvasFetch(`/courses/${course.id}/assignments?order_by=due_at`);
+  const assignments = await canvasFetch('/courses/' + course.id + '/assignments?order_by=due_at');
   const published = assignments.filter(a => a.published && a.submission_types && !a.submission_types.includes('not_graded'));
 
   const BATCH = 6;
@@ -1457,1079 +631,430 @@ async function loadCourse(course) {
     const batch = published.slice(i, i + BATCH);
     await Promise.all(batch.map(async asgn => {
       try {
-        const submissions = await canvasFetch(`/courses/${course.id}/assignments/${asgn.id}/submissions`);
-        submissions.forEach(sub => {
-          const isMissing = sub.missing === true || sub.late_policy_status === 'missing';
-          if (isMissing && studentMap[sub.user_id]) {
+        const subs = await canvasFetch('/courses/' + course.id + '/assignments/' + asgn.id + '/submissions');
+        subs.forEach(sub => {
+          if ((sub.missing || sub.late_policy_status === 'missing') && studentMap[sub.user_id]) {
             studentMap[sub.user_id].missing.push({
+              id: asgn.id,
               name: asgn.name,
-              due: asgn.due_at ? formatDate(asgn.due_at) : 'No due date',
-              due_raw: asgn.due_at || '',
-              points: asgn.points_possible || 0
+              due: asgn.due_at ? fmtDate(asgn.due_at) : 'No due date',
+              points: asgn.points_possible || 0,
             });
           }
         });
-      } catch (e) {
-        console.warn(`Skipping assignment ${asgn.id}: ${e.message}`);
-      }
+      } catch (err) { console.warn('Skip assignment ' + asgn.id + ': ' + err.message); }
     }));
   }
 
-  // Keep ALL enrolled students (including those with 0 missing)
-  const students = Object.values(studentMap)
-    .sort((a, b) => a.sortable_name.localeCompare(b.sortable_name));
-
-  return { course, students };
+  return {
+    course,
+    students: Object.values(studentMap).sort((a, b) => a.sortable_name.localeCompare(b.sortable_name)),
+  };
 }
 
-function extractPeriod(sectionName) {
-  // Strip time ranges like "(1:05 PM - 1:55 PM)" first
-  const cleaned = sectionName.replace(/\s*\([^)]*\)/g, '').trim();
+function extractPeriod(name) {
+  const cleaned = name.replace(/\s*\([^)]*\)/g, '').trim();
   const m = cleaned.match(/(?:per(?:iod)?\.?\s*)(\d+)/i) ||
             cleaned.match(/\bp\s*(\d+)\b/i) ||
-            cleaned.match(/[-\s](\d+)$/) ||   // e.g. "SILVA - 5" at end
+            cleaned.match(/[-\s](\d+)$/) ||
             cleaned.match(/^(\d+)/);
-  return m ? `Period ${m[1]}` : cleaned;
+  return m ? 'Period ' + m[1] : cleaned;
 }
 
-function formatDate(iso) {
-  if (!iso) return '';
-  const d = new Date(iso);
-  return d.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
+function fmtDate(iso) {
+  return iso ? new Date(iso).toLocaleDateString('en-US', { month: 'short', day: 'numeric' }) : '';
 }
 
-// ── Seating Chart Data ──
-// Keyed by period number. Names are from seating charts; matching is fuzzy.
-const SEATING_DATA = {
-  1: [ // Period 1 — Room 322
-    { n: "Samara Villa",            s: "30" },  // TA seat
-    { n: "Sophia Gonzales",         s: "14" },
-    { n: "Janessa Guzman",          s: "13" },
-    { n: "Bryan Escobar-Meza",      s: "05" },
-    { n: "Nancy Galvez Hernandez",  s: "25" },
-    { n: "Ray Rivera Vasquez",      s: "15" },
-    { n: "Axel Santos",             s: "12" },
-    { n: "Gage Villalobos",         s: "06" },
-    { n: "Miranda Lopez Diaz",      s: "21" },
-    { n: "Alondra Martinez",        s: "16" },
-    { n: "Jasmin Tena-Guzman",      s: "11" },
-    { n: "Cristian Nieto Barriga",  s: "07" },
-    { n: "Cristian Santos Ramirez", s: "02" },
-    { n: "Azulen Dorantes",         s: "27" },
-    { n: "Miguel Chavez Velasco",   s: "20" },
-    { n: "Isabella Castro Guzman",  s: "17" },
-    { n: "Yadirah Cipriano",        s: "10" },
-    { n: "Adad Santos Lopez",       s: "29" },
-    { n: "Julyssa Olea Vargas",     s: "28" },
-    { n: "Maxx Aguilar",            s: "19" },
-    { n: "Rosaelia Sanchez Quiroz", s: "18" },
-    { n: "Melanie Cardoso",         s: "09" }
-  ],
-  2: [ // Period 2 — Room 331 (first name + last initial only)
-    { n: "Natalia B",    s: "01", fi: true },
-    { n: "Maria C",      s: "02", fi: true },
-    { n: "Kayla O",      s: "03", fi: true },
-    { n: "Gabriela M",   s: "04", fi: true },
-    { n: "Meridi P",     s: "05", fi: true },
-    { n: "Rey R",        s: "06", fi: true },
-    { n: "Matthew H",    s: "07", fi: true },
-    { n: "Kevin G",      s: "08", fi: true },
-    { n: "Catalina C",   s: "09", fi: true },
-    { n: "Jonathan A",   s: "10", fi: true },
-    { n: "Armando A",    s: "11", fi: true },
-    { n: "Natalie C",    s: "12", fi: true },
-    { n: "Fatima R",     s: "13", fi: true },
-    { n: "Valentines B", s: "14", fi: true },
-    { n: "Pedro C",      s: "15", fi: true },
-    { n: "Angel P",      s: "16", fi: true },
-    { n: "Santos Neftali", s: "17" },
-    { n: "Darian V",     s: "18", fi: true },
-    { n: "Jesus H",      s: "19", fi: true },
-    { n: "Lupe G",       s: "20", fi: true },
-    { n: "Jessica D",    s: "21", fi: true },
-    { n: "Jazmin S",     s: "22", fi: true },
-    { n: "Charlie D",    s: "23", fi: true },
-    { n: "Eberardo S",   s: "25", fi: true },
-    { n: "Rafael B",     s: "26", fi: true },
-    { n: "Ricardo G",    s: "27", fi: true },
-    { n: "Enrique R",    s: "28", fi: true },
-    { n: "Delilah R",    s: "29", fi: true },
-    { n: "Maritza O",    s: "30", fi: true }
-  ],
-  3: [ // Period 3 — Room 331 (first name + last initial only)
-    { n: "Paul P",      s: "05", fi: true },
-    { n: "Allison F",   s: "04", fi: true },
-    { n: "Anthony G",   s: "03", fi: true },
-    { n: "Elena G",     s: "02", fi: true },
-    { n: "Jesus A",     s: "01", fi: true },
-    { n: "Pryce P",     s: "06", fi: true },
-    { n: "Jocelyn S",   s: "07", fi: true },
-    { n: "Salud Alfredo", s: "22" },
-    { n: "Justus M",    s: "23", fi: true },
-    { n: "Anthony L",   s: "08", fi: true },
-    { n: "Daniel G",    s: "21", fi: true },
-    { n: "Jayden R",    s: "24", fi: true },
-    { n: "Isbeth B",    s: "20", fi: true },
-    { n: "Junior T",    s: "25", fi: true },
-    { n: "Michael G",   s: "19", fi: true },
-    { n: "Aimar G",     s: "26", fi: true },
-    { n: "Araceli M",   s: "11", fi: true },
-    { n: "Andres G",    s: "18", fi: true },
-    { n: "Samara V",    s: "27", fi: true },
-    { n: "MacKenzie P", s: "12", fi: true },
-    { n: "Adrian A",    s: "17", fi: true },
-    { n: "Nicolas F",   s: "28", fi: true },
-    { n: "Andrik C",    s: "13", fi: true },
-    { n: "Alonso C",    s: "16", fi: true },
-    { n: "Yoselin E",   s: "29", fi: true },
-    { n: "Santino V",   s: "14", fi: true },
-    { n: "Roberto A",   s: "15", fi: true },
-    { n: "Yareth Odulia", s: "30" }
-  ],
-  5: [ // Period 5 — Room 322 — CTE Photo 1B
-    { n: "Matthew Delabra",           s: "23" },
-    { n: "Ayda Zeferino",             s: "14" },
-    { n: "Matthew Reyes",             s: "13" },
-    { n: "Jazmyn Bolusan",            s: "05" },
-    { n: "Joara Cisneros",            s: "04" },
-    { n: "Alex Mata Ramirez",         s: "25" },
-    { n: "Andrea Perez Guijosa",      s: "24" },
-    { n: "Hannah Aguilar Perez",      s: "22" },
-    { n: "Nathaniel Arredondo",       s: "15" },
-    { n: "Cesar Aguilar",             s: "12" },
-    { n: "Jocelyn Clerie",            s: "06" },
-    { n: "Sara Lopez Gonzalez",       s: "03" },
-    { n: "Isabel Gonzalez-Aquino",    s: "21" },
-    { n: "Ivan Delacruz-Valenzuela",  s: "16" },
-    { n: "Ricardo Molina Ramos",      s: "11" },
-    { n: "Rosalia Basurto Solano",    s: "07" },
-    { n: "Mya Bobadilla",             s: "02" },
-    { n: "Daniel Aguilar",            s: "27" },
-    { n: "Gael Garcia Mendez",        s: "26" },
-    { n: "Jaslene Gaytan",            s: "20" },
-    { n: "Michael Hernandez",         s: "17" },
-    { n: "Jazmin Gonzalez Vazquez",   s: "10" },
-    { n: "Ethan Resendez",            s: "08" },
-    { n: "Yovani Antonio",            s: "01" },
-    { n: "Sonia Garcia Emiliano",     s: "29" },
-    { n: "Ana Infante Abarca",        s: "28" },
-    { n: "Diego Robles",              s: "19" },
-    { n: "Ines Perea Vasquez",        s: "18" },
-    { n: "Dominik Garcia-Valencia",   s: "09" },
-    { n: "Keshawn Bolden",            s: "30" }
-  ],
-  6: [ // Period 6 — Room 322
-    { n: "Karina Dehorta",            s: "13" },
-    { n: "Veniece Archuleta",         s: "05" },
-    { n: "Katie Castro",              s: "04" },
-    { n: "Elizabeth Farfan Baron",    s: "25" },
-    { n: "Diego Banderas",            s: "24" },
-    { n: "Juan Maus",                 s: "22" },
-    { n: "Brianna Cisneros",          s: "15" },
-    { n: "Jessica Valadez",           s: "12" },
-    { n: "Daniel Ayala",              s: "03" },
-    { n: "Carlos Santiago Rojas",     s: "21" },
-    { n: "Anahi Melgar Galindo",      s: "16" },
-    { n: "Elizabeth Vazquez-Galvez",  s: "11" },
-    { n: "Julio Marquez",             s: "07" },
-    { n: "Arianna Ramirez",           s: "02" },
-    { n: "Grady Courtright",          s: "27" },
-    { n: "Gloria Ramirez-Santiago",   s: "26" },
-    { n: "Caleb Pineda",              s: "20" },
-    { n: "Tristan Nogales",           s: "17" },
-    { n: "Alondra Medrano",           s: "10" },
-    { n: "Davina Royall",             s: "08" },
-    { n: "Dennis Petersen",           s: "01" },
-    { n: "Marlen Lorenzo",            s: "29" },
-    { n: "Ella Naoe",                 s: "19" },
-    { n: "Jennifer Bonal Diaz",       s: "18" },
-    { n: "Allan Andrade Juarez",      s: "09" }
-  ],
-  7: [ // Period 7 — Room 322
-    { n: "Gregorio Calleja",          s: "14" },
-    { n: "Mariah Acosta",             s: "13" },
-    { n: "Ebelin Huerta",             s: "04" },
-    { n: "Azul Lopez",                s: "22" },
-    { n: "Jacob Beltran",             s: "15" },
-    { n: "Manuel Camacho",            s: "12" },
-    { n: "RayVaughn Rodriguez",       s: "06" },
-    { n: "Brian Rojas Camacho",       s: "21" },
-    { n: "Destiny Lopez",             s: "16" },
-    { n: "Diego Espinoza",            s: "11" },
-    { n: "Omar Espinosa",             s: "07" },
-    { n: "Emiliano Jimenez",          s: "02" },
-    { n: "Noah Garcia",               s: "26" },
-    { n: "Adrian Valenzuela",         s: "20" },
-    { n: "Natalie Garza",             s: "17" },
-    { n: "Isabella Weddle",           s: "10" },
-    { n: "Darey Mendez Bravo",        s: "01" },
-    { n: "Liliana Cruz Juarez",       s: "29" },
-    { n: "Yaritza Gonzalez",          s: "28" },
-    { n: "Yahir Alejandro",           s: "19" },
-    { n: "Gladys Aguirre Lopez",      s: "18" },
-    { n: "Rosio Leon-Lopez",          s: "09" }
-  ]
-};
-
-function norm(str) {
-  return str.toLowerCase().replace(/[^a-z\s]/g, ' ').replace(/\s+/g, ' ').trim();
+function esc(s) {
+  const d = document.createElement('div');
+  d.textContent = s;
+  return d.innerHTML;
 }
 
-function findStation(sortableName, periodStr) {
-  const periodNum = parseInt((periodStr || '').replace(/\D/g, ''));
-  const entries = SEATING_DATA[periodNum];
-  if (!entries) return null;
-
-  const ci = sortableName.indexOf(',');
-  if (ci === -1) return null;
-  const last  = norm(sortableName.slice(0, ci));
-  const first = norm(sortableName.slice(ci + 1));
-  const firstName = first.split(' ')[0];
-  const fullNorm = (first + ' ' + last);
-
-  for (const e of entries) {
-    if (e.fi) {
-      // First name + last initial only
-      const parts = norm(e.n).split(' ');
-      const eFN = parts[0];
-      const eLI = (parts[1] || '').charAt(0);
-      if (firstName === eFN && last.charAt(0) === eLI) return e.s;
-    } else {
-      const eNorm = norm(e.n);
-      const eWords = eNorm.split(' ').filter(w => w.length > 1);
-      // All seating-chart words appear somewhere in the canvas full name
-      if (eWords.every(w => fullNorm.includes(w))) return e.s;
-      // Fallback: last name match + first name match
-      if (fullNorm.includes(last) && eNorm.includes(firstName)) return e.s;
-    }
-  }
-  return null;
-}
-
-// ── Rendering ──
+// ───────────────────────────────────────────────────────
+// Rendering: Overview
+// ───────────────────────────────────────────────────────
 function renderDashboard() {
   renderSummary();
   renderCourses();
 }
 
 function renderSummary() {
-  let totalEnrolled = 0;
-  let totalWithMissing = 0;
-  let totalMissing = 0;
-  let maxMissing = 0;
-
+  let enrolled = 0, withMissing = 0, totalMissing = 0, maxMissing = 0;
   dashboardData.forEach(cd => {
-    totalEnrolled += cd.students.length;
+    enrolled += cd.students.length;
     cd.students.forEach(s => {
       if (s.missing.length > 0) {
-        totalWithMissing++;
+        withMissing++;
         totalMissing += s.missing.length;
         if (s.missing.length > maxMissing) maxMissing = s.missing.length;
       }
     });
   });
-
-  document.getElementById('summary-row').innerHTML = `
-    <div class="summary-card">
-      <div class="label">Students with Missing Work</div>
-      <div class="value">${totalWithMissing}</div>
-      <div class="sub">${totalEnrolled} total enrolled across ${COURSES.length} courses</div>
-    </div>
-    <div class="summary-card">
-      <div class="label">Total Missing Assignments</div>
-      <div class="value">${totalMissing}</div>
-    </div>
-    <div class="summary-card">
-      <div class="label">Most Missing (Single Student)</div>
-      <div class="value">${maxMissing}</div>
-    </div>
-  `;
+  document.getElementById('summary-row').innerHTML =
+    '<div class="summary-card">' +
+      '<div class="label">Students with Missing Work</div>' +
+      '<div class="value">' + withMissing + '</div>' +
+      '<div class="sub">' + enrolled + ' enrolled across ' + coursesCache.length + ' courses</div>' +
+    '</div>' +
+    '<div class="summary-card">' +
+      '<div class="label">Total Missing Assignments</div>' +
+      '<div class="value">' + totalMissing + '</div>' +
+    '</div>' +
+    '<div class="summary-card">' +
+      '<div class="label">Most Missing (Single Student)</div>' +
+      '<div class="value">' + maxMissing + '</div>' +
+    '</div>';
 }
 
 function renderCourses() {
   const container = document.getElementById('courses-container');
-  if (dashboardData.every(cd => cd.students.every(s => s.missing.length === 0))) {
-    container.innerHTML = '<div class="empty-state">No missing assignments found. Nice!</div>';
-    return;
-  }
+  const sorted = [...dashboardData].sort((a, b) => {
+    const mp = cd => Math.min(...cd.students.map(s => parseInt((s.period || '').replace(/\D/g, '')) || 999));
+    return mp(a) - mp(b);
+  });
+  container.innerHTML = sorted.map(cd => renderCourseSection(cd)).join('');
+}
 
-  // Sort courses by their lowest period number so display reads 1,2,3,5,6,7
-  const sortedData = [...dashboardData].sort((a, b) => {
-    const minPeriod = cd => Math.min(...cd.students.map(s => parseInt((s.period || '').replace(/\D/g, '')) || 999));
-    return minPeriod(a) - minPeriod(b);
+function renderCourseSection(cd) {
+  const periods = {};
+  cd.students.forEach(s => {
+    const p = s.period || 'Unknown';
+    if (!periods[p]) periods[p] = { missing: [], onTrack: [] };
+    if (s.missing.length > 0) periods[p].missing.push(s);
+    else periods[p].onTrack.push(s);
   });
 
-  container.innerHTML = sortedData.map(cd => {
-    if (cd.students.length === 0) return '';
+  const periodKeys = Object.keys(periods).sort((a, b) => {
+    const na = parseInt(a.replace(/\D/g, '')) || 999;
+    const nb = parseInt(b.replace(/\D/g, '')) || 999;
+    return na - nb;
+  });
 
-    // Group students by period
-    const periods = {};
-    cd.students.forEach(s => {
-      const p = s.period;
-      if (!periods[p]) periods[p] = [];
-      periods[p].push(s);
-    });
+  return '<div class="course-section">' +
+    '<div class="course-header">' +
+      '<h2>' + esc(cd.course.name) + '</h2>' +
+      '<span class="course-badge">' + cd.students.length + ' students</span>' +
+    '</div>' +
+    periodKeys.map(p => renderPeriod(p, periods[p])).join('') +
+  '</div>';
+}
 
-    // Sort periods
-    const sortedPeriods = Object.keys(periods).sort((a, b) => {
-      const na = parseInt(a.replace(/\D/g, '')) || 999;
-      const nb = parseInt(b.replace(/\D/g, '')) || 999;
-      return na - nb;
-    });
+function renderPeriod(period, data) {
+  const students = sortStudents(data.missing);
 
-    const totalEnrolled = cd.students.length;
-    const totalMissing = cd.students.filter(s => s.missing.length > 0).length;
-
-    const periodHTML = sortedPeriods.map(p => {
-      const allInPeriod = periods[p];
-      const missingStudents = sortStudents(allInPeriod.filter(s => s.missing.length > 0));
-      const onTrackStudents = allInPeriod
-        .filter(s => s.missing.length === 0)
-        .sort((a, b) => a.sortable_name.localeCompare(b.sortable_name));
-
-      const cname = cd.course.name.replace(/'/g, "\\'");
-      const pname = p.replace(/'/g, "\\'");
-      const otId = `ot-${cd.course.id}-${p.replace(/\W/g, '')}`;
-
-      const onTrackHTML = onTrackStudents.length > 0 ? `
-        <div class="on-track-section" id="${otId}">
-          <div class="on-track-header" onclick="this.parentElement.classList.toggle('open')">
-            <span class="on-track-chevron">&#9654;</span>
-            <span>${onTrackStudents.length} student${onTrackStudents.length !== 1 ? 's' : ''} on track ✓</span>
-          </div>
-          <div class="on-track-list">
-            ${onTrackStudents.map(s => {
-              const desk = findStation(s.sortable_name, s.period);
-              return `
-                <div class="on-track-row">
-                  <span class="student-name">${escHtml(s.sortable_name)}</span>
-                  ${s.studentId ? `<span class="student-id">${escHtml(s.studentId)}</span>` : '<span class="student-id"></span>'}
-                  ${desk ? `<span class="station-badge">Desk&nbsp;${desk}</span>` : '<span class="station-badge" style="visibility:hidden">Desk&nbsp;00</span>'}
-                  <span class="on-track-badge">0 missing · 0 pts</span>
-                </div>`;
-            }).join('')}
-          </div>
-        </div>` : '';
-
-      const periodMissingCount = missingStudents.length;
-      const periodTotal = allInPeriod.length;
-
-      return `
-        <div class="period-group">
-          <div class="period-label">
-            <span>${escHtml(p)} &middot; ${periodMissingCount} of ${periodTotal} have missing work</span>
-            <button class="period-print-btn" onclick="event.stopPropagation(); printPeriod('${cname}', '${pname}')" title="Print this period"><svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:-1px"><polyline points="6 9 6 2 18 2 18 9"/><path d="M6 18H4a2 2 0 0 1-2-2v-5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2h-2"/><rect x="6" y="14" width="12" height="8"/></svg></button>
-          </div>
-          <div class="student-list">
-            ${missingStudents.map((s, i) => renderStudentRow(s, i + 1)).join('')}
-            ${onTrackHTML}
-          </div>
-        </div>
-      `;
-    }).join('');
-
-    return `
-      <div class="course-section">
-        <div class="course-header">
-          <h2>${escHtml(cd.course.name)}</h2>
-          <span class="course-badge">${totalMissing} of ${totalEnrolled} have missing work</span>
-        </div>
-        ${periodHTML}
-      </div>
-    `;
+  const rows = students.map((s, i) => {
+    const count = s.missing.length;
+    const pts = s.missing.reduce((t, a) => t + (a.points || 0), 0);
+    const cls = count >= 5 ? 'high' : count >= 3 ? 'medium' : 'low';
+    const details = s.missing.map(a =>
+      '<li>' +
+        '<span class="asgn-name">' + esc(a.name) + '</span>' +
+        '<span class="asgn-pts">' + a.points + 'pts</span>' +
+        '<span class="asgn-due">' + a.due + '</span>' +
+      '</li>'
+    ).join('');
+    return '<div class="student-row" onclick="this.classList.toggle(\'expanded\')">' +
+      '<div class="student-row-header">' +
+        '<span class="student-num">' + (i + 1) + '</span>' +
+        '<span class="student-name">' + esc(s.name) + '</span>' +
+        '<span class="missing-pts">' + pts + ' pts</span>' +
+        '<span class="missing-count ' + cls + '">' + count + ' missing</span>' +
+        '<span class="expand-icon">&#9654;</span>' +
+      '</div>' +
+      '<div class="student-detail">' +
+        '<ul class="assignment-list">' + details + '</ul>' +
+      '</div>' +
+    '</div>';
   }).join('');
-}
 
-function renderStudentRow(s, index) {
-  const countClass = s.missing.length >= 5 ? '' : (s.missing.length >= 3 ? 'warning' : 'low');
-  const totalPoints = s.missing.reduce((sum, a) => sum + (a.points || 0), 0);
-  const station = findStation(s.sortable_name, s.period);
-  const assignmentItems = s.missing
-    .sort((a, b) => (a.due_raw || '').localeCompare(b.due_raw || ''))
-    .map(a => `<li><span class="asgn-name">${escHtml(a.name)}</span><span class="asgn-due">${escHtml(a.due)}</span>${a.points ? `<span class="asgn-pts">${a.points} pts</span>` : ''}</li>`)
-    .join('');
-
-  return `
-    <div class="student-row" onclick="this.classList.toggle('expanded')">
-      <div class="student-row-header">
-        <span class="expand-icon">&#9654;</span>
-        ${index != null ? `<span class="student-num">${index}</span>` : ''}
-        <span class="student-name">${escHtml(s.sortable_name)}</span>
-        ${s.studentId ? `<span class="student-id">${escHtml(s.studentId)}</span>` : '<span class="student-id"></span>'}
-        ${station ? `<span class="station-badge" title="Desk number">Desk&nbsp;${station}</span>` : '<span class="station-badge" style="visibility:hidden">Desk&nbsp;00</span>'}
-        <span class="missing-count ${countClass}">${s.missing.length} missing</span>
-        ${totalPoints > 0 ? `<span class="missing-pts">${totalPoints} pts</span>` : ''}
-      </div>
-      <div class="student-detail">
-        <ul class="assignment-list">${assignmentItems}</ul>
-      </div>
-    </div>
-  `;
-}
-
-// ── Grading ──
-
-// English Learner flags -- add student Canvas IDs here when identified
-// Format: { "student_canvas_id": true }
-const SPANISH_SPEAKERS = {
-};
-
-// Known rubric IDs per assignment
-const RUBRIC_MAP = {
-  '948145': '19347'  // 18 - Editing & Final Contact Sheet
-};
-
-let gradingQueue = []; // current queue loaded
-
-async function loadGradingQueue() {
-  const select = document.getElementById('grade-assignment-select');
-  const val = select.value;
-  const container = document.getElementById('grading-queue');
-
-  if (!val) {
-    container.innerHTML = '<div class="empty-state">Select an assignment above to load the grading queue.</div>';
-    return;
+  let onTrackHTML = '';
+  if (data.onTrack.length > 0) {
+    onTrackHTML = '<div class="on-track-section" onclick="this.classList.toggle(\'open\')">' +
+      '<div class="on-track-header">' +
+        '<span class="on-track-chevron">&#9654;</span> ' +
+        data.onTrack.length + ' students on track' +
+      '</div>' +
+      '<div class="on-track-list">' +
+        data.onTrack.map(s => '<div class="on-track-row"><span class="student-name">' + esc(s.name) + '</span></div>').join('') +
+      '</div>' +
+    '</div>';
   }
 
-  const [assignmentId] = val.split('|');
-  container.innerHTML = '<div class="empty-state">Loading submissions...</div>';
-
-  try {
-    const submissions = await canvasFetch(
-      `/courses/111811/assignments/${assignmentId}/submissions?include[]=user&include[]=submission_comments&include[]=rubric_assessment`
-    );
-
-    // Match with enrolled students to get period info
-    const studentLookup = {};
-    dashboardData.forEach(cd => {
-      cd.students.forEach(s => {
-        studentLookup[s.id] = s;
-      });
-    });
-
-    gradingQueue = submissions
-      .filter(sub => sub.user && sub.workflow_state !== 'deleted')
-      .map(sub => {
-        const student = studentLookup[sub.user_id] || {};
-
-        // Get overall comment: prefer submission_comments, fall back to rubric assessment
-        const comments = sub.submission_comments || [];
-        let overallComment = '';
-
-        // 1. Check submission comments (left by RIVA or teacher)
-        if (comments.length > 0) {
-          overallComment = comments[comments.length - 1].comment || '';
-        }
-
-        // 2. If no submission comment but has rubric assessment, build summary from rubric
-        if (!overallComment && sub.rubric_assessment) {
-          const rubricComments = Object.values(sub.rubric_assessment)
-            .map(r => r.comments)
-            .filter(c => c && c.trim());
-          if (rubricComments.length > 0) {
-            overallComment = rubricComments.join(' | ');
-          }
-        }
-
-        // Build attachments list
-        const attachments = (sub.attachments || []).map(a => ({
-          filename:    a.filename || a.display_name || 'file',
-          url:         a.url,
-          size:        a.size || 0,
-          contentType: a.content_type || ''
-        }));
-
-        return {
-          submissionId: sub.id,
-          studentId:    String(sub.user_id),
-          studentName:  sub.user ? sub.user.sortable_name : String(sub.user_id),
-          period:       student.period || '',
-          state:        sub.workflow_state,
-          hasFiles:     attachments.length > 0,
-          graded:       sub.workflow_state === 'graded',
-          gradedAt:     sub.graded_at || '',
-          score:        sub.score,
-          lastComment:  overallComment,
-          attachments:  attachments,
-          spanish:      !!SPANISH_SPEAKERS[String(sub.user_id)]
-        };
-      })
-      .sort((a, b) => {
-        const pa = parseInt((a.period || '').replace(/\D/g, '')) || 999;
-        const pb = parseInt((b.period || '').replace(/\D/g, '')) || 999;
-        return pa !== pb ? pa - pb : a.studentName.localeCompare(b.studentName);
-      });
-
-    renderGradingQueue(assignmentId);
-
-  } catch (e) {
-    container.innerHTML = `<div class="empty-state">Failed to load submissions: ${escHtml(e.message)}</div>`;
-  }
-}
-
-function renderGradingQueue(assignmentId) {
-  const container = document.getElementById('grading-queue');
-
-  if (gradingQueue.length === 0) {
-    container.innerHTML = '<div class="empty-state">No submissions found.</div>';
-    return;
-  }
-
-  const graded   = gradingQueue.filter(s => s.graded);
-  const messaged = gradingQueue.filter(s => !s.hasFiles && !s.graded && s.lastComment);
-  const ungraded = gradingQueue.filter(s => !s.graded && !(messaged.includes(s)));
-
-  container.innerHTML = `
-    <div style="font-size:0.8rem;color:var(--text-muted);margin-bottom:1rem;">
-      ${ungraded.length} ungraded &nbsp;·&nbsp; ${graded.length} graded &nbsp;·&nbsp; ${messaged.length} messaged &nbsp;·&nbsp; ${gradingQueue.length} total
-    </div>
-    ${gradingQueue.map(s => renderQueueCard(s, assignmentId)).join('')}
-  `;
-}
-
-function renderQueueCard(s, assignmentId) {
-  const btnId       = `grade-btn-${s.studentId}`;
-  const previewId   = `grade-preview-${s.studentId}`;
-  const sgUrl       = `https://smjuhsd.instructure.com/courses/111811/gradebook/speed_grader?assignment_id=${assignmentId}&student_id=${s.studentId}`;
-  const gradedTime  = s.gradedAt ? new Date(s.gradedAt).toLocaleString('en-US', { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' }) : '';
-  const hasMissingMsg = !s.hasFiles && !s.graded && s.lastComment;
-
-  let statusClass, statusLabel, cardClass, btnLabel;
-
-  if (s.graded) {
-    statusClass = 'graded';
-    statusLabel = 'Graded';
-    cardClass   = 'is-graded';
-    btnLabel    = 'Re-Grade';
-  } else if (hasMissingMsg) {
-    statusClass = 'messaged';
-    statusLabel = 'Message Sent';
-    cardClass   = 'is-messaged';
-    btnLabel    = 'Re-Send';
-  } else if (s.hasFiles) {
-    statusClass = 'submitted';
-    statusLabel = 'Submitted';
-    cardClass   = '';
-    btnLabel    = 'Grade';
-  } else {
-    statusClass = 'missing';
-    statusLabel = 'Not Submitted';
-    cardClass   = 'is-missing';
-    btnLabel    = 'Send Message';
-  }
-
-  // Row 2: score, time, SpeedGrader link (for graded or messaged)
-  let row2 = '';
-  if (s.graded) {
-    row2 = `<div class="grade-card-row2" id="row2-${s.studentId}">
-      <span class="rg-score" id="score-${s.studentId}">${s.score != null ? s.score + ' / 20 pts' : ''}</span>
-      ${gradedTime ? `<span class="rg-time" id="time-${s.studentId}">${gradedTime}</span>` : ''}
-      <a class="rg-link" href="${sgUrl}" target="_blank">View in SpeedGrader</a>
-    </div>`;
-  } else if (hasMissingMsg) {
-    row2 = `<div class="grade-card-row2" id="row2-${s.studentId}">
-      <span class="rg-time" id="time-${s.studentId}">${gradedTime || ''}</span>
-      <a class="rg-link" href="${sgUrl}" target="_blank">View in SpeedGrader</a>
-    </div>`;
-  }
-
-  // Comment section
-  let commentHtml = '';
-  if (s.graded && s.lastComment) {
-    commentHtml = `<div class="grade-card-comment" id="${previewId}">${escHtml(s.lastComment)}</div>`;
-  } else if (s.graded && !s.lastComment) {
-    commentHtml = `<div class="grade-card-comment no-feedback" id="${previewId}">No feedback on file. Use Re-Grade to generate AI feedback.</div>`;
-  } else if (hasMissingMsg) {
-    commentHtml = `<div class="grade-card-comment missing-comment" id="${previewId}">${escHtml(s.lastComment)}</div>`;
-  } else {
-    commentHtml = `<div class="grade-card-comment" id="${previewId}" style="display:none"></div>`;
-  }
-
-  // File downloads row
-  let filesHtml = '';
-  if (s.attachments && s.attachments.length > 0) {
-    const fileButtons = s.attachments.map(a => {
-      const icon = fileIcon(a.contentType);
-      const size = formatFileSize(a.size);
-      const safeUrl = escHtml(a.url);
-      const safeName = escHtml(a.filename);
-      return `<a class="file-download-btn" href="${safeUrl}" target="_blank" title="${safeName}">
-        <span class="file-icon">${icon}</span>
-        <span class="file-name">${safeName}</span>
-        <span class="file-size">${size}</span>
-      </a>`;
-    }).join('');
-    filesHtml = `<div class="grade-card-files">${fileButtons}</div>`;
-  }
-
-  return `
-    <div class="grade-queue-card ${cardClass}" id="card-${s.studentId}">
-      <div class="grade-card-row1">
-        <span class="grade-queue-name">${escHtml(s.studentName)}</span>
-        ${s.period ? `<span class="grade-queue-period">${escHtml(s.period)}</span>` : ''}
-        ${s.spanish ? `<span class="grade-queue-status spanish">EL</span>` : ''}
-        <span class="grade-queue-status ${statusClass}" id="status-${s.studentId}">${statusLabel}</span>
-        <button class="grade-btn ${s.graded || hasMissingMsg ? 'done' : ''}"
-          id="${btnId}"
-          onclick="gradeOne('${assignmentId}', '${s.studentId}', '${btnId}', '${previewId}')">
-          ${btnLabel}
-        </button>
-      </div>
-      ${filesHtml}
-      ${row2}
-      ${commentHtml}
-    </div>
-  `;
-}
-
-async function gradeOne(assignmentId, studentId, btnId, previewId) {
-  const btn     = document.getElementById(btnId);
-  const preview = document.getElementById(previewId);
-  const select  = document.getElementById('grade-assignment-select');
-  const rubricId = RUBRIC_MAP[assignmentId] || '';
-
-  if (!rubricId) { alert('No rubric mapped for this assignment.'); return; }
-
-  const student = gradingQueue.find(s => s.studentId === studentId);
-  if (!student) return;
-
-  btn.textContent = 'Grading...';
-  btn.classList.add('grading');
-  btn.disabled = true;
-
-  try {
-    const resp = await fetch('/grade', {
-      method: 'POST',
-      headers: {
-        'Content-Type':  'application/json',
-        'Authorization': `Bearer ${TOKEN}`
-      },
-      body: JSON.stringify({
-        assignment_id: assignmentId,
-        student_id:    studentId,
-        student_name:  student.studentName,
-        rubric_id:     rubricId,
-        spanish:       student.spanish
-      })
-    });
-
-    const result = await resp.json();
-
-    if (!resp.ok || result.error) {
-      throw new Error(result.error || `Server error ${resp.status}`);
-    }
-
-    btn.classList.remove('grading');
-    btn.classList.add('done');
-    btn.disabled = false;
-
-    const isMissing = result.missing;
-    const card = document.getElementById(`card-${studentId}`);
-    const sgUrl = `https://smjuhsd.instructure.com/courses/111811/gradebook/speed_grader?assignment_id=${assignmentId}&student_id=${studentId}`;
-    const timeStr = new Date().toLocaleString('en-US', { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' });
-
-    // Update student data
-    student.lastComment = result.overall_comment || '';
-
-    if (isMissing) {
-      // Missing student - message was sent
-      btn.textContent = 'Re-Send';
-      student.graded = false;
-
-      if (card) {
-        card.classList.remove('is-missing');
-        card.classList.add('is-messaged');
-      }
-
-      const statusEl = document.getElementById(`status-${studentId}`);
-      if (statusEl) {
-        statusEl.className = 'grade-queue-status messaged';
-        statusEl.textContent = 'Message Sent';
-      }
-
-      // Add row2 with time + SpeedGrader
-      let row2 = document.getElementById(`row2-${studentId}`);
-      if (!row2) {
-        row2 = document.createElement('div');
-        row2.className = 'grade-card-row2';
-        row2.id = `row2-${studentId}`;
-        const row1 = card.querySelector('.grade-card-row1');
-        row1.after(row2);
-      }
-      row2.innerHTML = `
-        <span class="rg-time">${timeStr}</span>
-        <a class="rg-link" href="${sgUrl}" target="_blank">View in SpeedGrader</a>
-      `;
-    } else {
-      // Graded student
-      btn.textContent = 'Re-Grade';
-      student.graded = true;
-      student.score  = result.total_score;
-
-      if (card) {
-        card.classList.remove('is-missing');
-        card.classList.add('is-graded');
-      }
-
-      const statusEl = document.getElementById(`status-${studentId}`);
-      if (statusEl) {
-        statusEl.className = 'grade-queue-status graded';
-        statusEl.textContent = 'Graded';
-      }
-
-      // Add row2 with score + time + SpeedGrader
-      let row2 = document.getElementById(`row2-${studentId}`);
-      if (!row2) {
-        row2 = document.createElement('div');
-        row2.className = 'grade-card-row2';
-        row2.id = `row2-${studentId}`;
-        const row1 = card.querySelector('.grade-card-row1');
-        row1.after(row2);
-      }
-      row2.innerHTML = `
-        <span class="rg-score">${result.total_score} / 20 pts</span>
-        <span class="rg-time">${timeStr}</span>
-        <a class="rg-link" href="${sgUrl}" target="_blank">View in SpeedGrader</a>
-      `;
-    }
-
-    // Show the comment
-    preview.textContent = result.overall_comment || '';
-    preview.style.display = 'block';
-    preview.className = isMissing ? 'grade-card-comment missing-comment' : 'grade-card-comment';
-
-  } catch (e) {
-    btn.textContent = 'Error -- Retry';
-    btn.classList.remove('grading');
-    btn.disabled = false;
-    preview.textContent = 'Grading failed: ' + e.message;
-    preview.classList.add('visible');
-    console.error('[grade]', e);
-  }
-}
-
-async function gradeAllUngraded() {
-  const select = document.getElementById('grade-assignment-select');
-  const val = select.value;
-  if (!val) { alert('Select an assignment first.'); return; }
-
-  const [assignmentId] = val.split('|');
-  const ungraded = gradingQueue.filter(s => !s.graded);
-
-  if (ungraded.length === 0) { alert('All submissions are already graded.'); return; }
-
-  const btn = document.querySelector('.grade-all-btn');
-  btn.disabled = true;
-  btn.textContent = `Grading 0 of ${ungraded.length}...`;
-
-  for (let i = 0; i < ungraded.length; i++) {
-    const s = ungraded[i];
-    btn.textContent = `Grading ${i + 1} of ${ungraded.length}...`;
-    const btnId     = `grade-btn-${s.studentId}`;
-    const previewId = `grade-preview-${s.studentId}`;
-    await gradeOne(assignmentId, s.studentId, btnId, previewId);
-    // Small pause to avoid hitting Gemini rate limits
-    if (i < ungraded.length - 1) await new Promise(r => setTimeout(r, 1500));
-  }
-
-  btn.disabled = false;
-  btn.textContent = 'Grade All Ungraded';
-}
-
-
-// ── Assignment Search ──
-let searchTimeout = null;
-
-function handleAssignmentSearch() {
-  clearTimeout(searchTimeout);
-  searchTimeout = setTimeout(doAssignmentSearch, 250);
-}
-
-function doAssignmentSearch() {
-  const query = document.getElementById('assignment-search').value.trim().toLowerCase();
-  const container = document.getElementById('search-results');
-
-  if (!query || query.length < 2) {
-    container.innerHTML = '<div class="empty-state">Start typing an assignment name above to search.</div>';
-    return;
-  }
-
-  // Collect all matching assignment names across all courses
-  const results = [];
-
-  dashboardData.forEach(cd => {
-    // Find all unique assignment names that match the query (from any student's missing list)
-    const matchedNames = new Set();
-    cd.students.forEach(s => {
-      s.missing.forEach(a => {
-        if (a.name.toLowerCase().includes(query)) matchedNames.add(a.name);
-      });
-    });
-
-    matchedNames.forEach(asgnName => {
-      // Group all enrolled students by period, split into missing vs submitted
-      const periodMap = {};
-      cd.students.forEach(s => {
-        const p = s.period || 'Unknown';
-        if (!periodMap[p]) periodMap[p] = { missing: [], submitted: [] };
-        const hasMissing = s.missing.some(a => a.name === asgnName);
-        if (hasMissing) periodMap[p].missing.push(s);
-        else periodMap[p].submitted.push(s);
-      });
-
-      // Sort periods numerically
-      const periods = Object.entries(periodMap)
-        .sort(([a], [b]) => {
-          const na = parseInt(a.replace(/\D/g, '')) || 999;
-          const nb = parseInt(b.replace(/\D/g, '')) || 999;
-          return na - nb;
-        })
-        .map(([period, data]) => ({
-          period,
-          total: data.missing.length + data.submitted.length,
-          missing: data.missing.sort((a, b) => a.sortable_name.localeCompare(b.sortable_name)),
-          submitted: data.submitted.sort((a, b) => a.sortable_name.localeCompare(b.sortable_name))
-        }));
-
-      const totalMissing = periods.reduce((sum, p) => sum + p.missing.length, 0);
-      const totalStudents = periods.reduce((sum, p) => sum + p.total, 0);
-      results.push({ courseName: cd.course.name, assignmentName: asgnName, periods, totalMissing, totalStudents });
-    });
-  });
-
-  if (results.length === 0) {
-    container.innerHTML = `<div class="empty-state">No missing submissions found matching "${escHtml(query)}".</div>`;
-    return;
-  }
-
-  container.innerHTML = results.map((r, ri) => `
-    <div class="search-result-card">
-      <div class="search-result-header">
-        <h3>${escHtml(r.assignmentName)}</h3>
-        <span class="course-badge">${escHtml(r.courseName)}</span>
-        <span class="missing-count">${r.totalMissing} of ${r.totalStudents} not submitted</span>
-      </div>
-      ${r.periods.map((pg, pi) => {
-        const submitted = pg.total - pg.missing.length;
-        const rate = pg.total > 0 ? Math.round((submitted / pg.total) * 100) : 100;
-        const uid = `sr-${ri}-${pi}`;
-        return `
-          <div class="search-period-group">
-            <div class="search-period-header">
-              <span class="search-period-label">${escHtml(pg.period)}</span>
-              <div class="turn-in-bar-wrap" title="${rate}% submitted">
-                <div class="turn-in-bar-fill" style="width:${rate}%"></div>
-              </div>
-              <span class="turn-in-rate">${submitted}/${pg.total} submitted (${rate}%)</span>
-              ${pg.submitted.length > 0 ? `<button class="show-submitted-btn" id="btn-${uid}" onclick="toggleSubmitted('${uid}')">+${pg.submitted.length} submitted</button>` : ''}
-            </div>
-            ${pg.missing.length > 0 ? `
-              <ul class="search-missing-list">
-                ${pg.missing.map(s => {
-                  const desk = findStation(s.sortable_name, s.period);
-                  return `<li>
-                    <span class="student-name">${escHtml(s.sortable_name)}</span>
-                    ${desk ? `<span class="station-badge" style="font-size:0.72rem;min-width:auto">Desk&nbsp;${desk}</span>` : ''}
-                  </li>`;
-                }).join('')}
-              </ul>
-            ` : `<div style="padding:0.2rem 0;font-size:0.82rem;color:#50c864;">All submitted ✓</div>`}
-            ${pg.submitted.length > 0 ? `
-              <ul class="search-submitted-list" id="${uid}">
-                ${pg.submitted.map(s => `<li>
-                  <span style="color:#50c864;font-size:0.72rem;">✓</span>
-                  <span>${escHtml(s.sortable_name)}</span>
-                </li>`).join('')}
-              </ul>` : ''}
-          </div>`;
-      }).join('')}
-    </div>
-  `).join('');
-}
-
-function toggleSubmitted(uid) {
-  const el = document.getElementById(uid);
-  const btn = document.getElementById('btn-' + uid);
-  if (!el || !btn) return;
-  el.classList.toggle('open');
-  const count = el.querySelectorAll('li').length;
-  btn.textContent = el.classList.contains('open') ? `− ${count} submitted` : `+${count} submitted`;
-}
-
-// ── Student ID Toggle ──
-function toggleStudentIds() {
-  const hidden = document.body.classList.toggle('hide-ids');
-  localStorage.setItem('hideStudentIds', hidden ? '1' : '0');
-  document.getElementById('toggle-ids-btn').textContent = hidden ? 'Show IDs' : 'Hide IDs';
-}
-
-function initIdToggle() {
-  if (localStorage.getItem('hideStudentIds') === '1') {
-    document.body.classList.add('hide-ids');
-    const btn = document.getElementById('toggle-ids-btn');
-    if (btn) btn.textContent = 'Show IDs';
-  }
-}
-
-// ── Sorting ──
-function changeSort(mode) {
-  currentSort = mode;
-  document.querySelectorAll('.sort-btn').forEach(b => b.classList.toggle('active', b.dataset.sort === mode));
-  renderCourses();
+  return '<div class="period-group">' +
+    '<div class="period-label">' + esc(period) + '</div>' +
+    (students.length > 0 ? '<div class="student-list">' + rows + '</div>' : '') +
+    onTrackHTML +
+  '</div>';
 }
 
 function sortStudents(students) {
-  return [...students].sort((a, b) => {
-    if (currentSort === 'most') return b.missing.length - a.missing.length;
-    if (currentSort === 'pts') {
-      const aPts = a.missing.reduce((sum, x) => sum + (x.points || 0), 0);
-      const bPts = b.missing.reduce((sum, x) => sum + (x.points || 0), 0);
-      return bPts - aPts;
-    }
-    if (currentSort === 'desk') {
-      const aDesk = parseInt(findStation(a.sortable_name, a.period) || '999');
-      const bDesk = parseInt(findStation(b.sortable_name, b.period) || '999');
-      return aDesk - bDesk;
-    }
-    if (currentSort === 'first') {
-      const aFirst = (a.sortable_name.split(',')[1] || a.name).trim();
-      const bFirst = (b.sortable_name.split(',')[1] || b.name).trim();
-      return aFirst.localeCompare(bFirst);
-    }
-    // default: last name
-    return a.sortable_name.localeCompare(b.sortable_name);
-  });
+  const s = [...students];
+  switch (currentSort) {
+    case 'first':
+      return s.sort((a, b) => a.name.split(' ')[0].localeCompare(b.name.split(' ')[0]));
+    case 'most':
+      return s.sort((a, b) => b.missing.length - a.missing.length);
+    case 'pts':
+      return s.sort((a, b) => {
+        const pa = a.missing.reduce((t, m) => t + m.points, 0);
+        const pb = b.missing.reduce((t, m) => t + m.points, 0);
+        return pb - pa;
+      });
+    default:
+      return s.sort((a, b) => a.sortable_name.localeCompare(b.sortable_name));
+  }
 }
 
-// ── Print Report ──
-function printPeriod(courseName, periodName) {
-  const now = new Date();
-  document.getElementById('print-date').textContent =
-    `${courseName} — ${periodName} | Printed ${now.toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric' })} | All students with missing assignments`;
-
-  const container = document.getElementById('courses-container');
-  const originalHTML = container.innerHTML;
-
-  // Find the matching course and period
-  const cd = dashboardData.find(c => c.course.name === courseName);
-  if (!cd) return;
-
-  const filtered = cd.students.filter(s => s.period === periodName && s.missing.length >= 1);
-  if (filtered.length === 0) { alert('No students with missing assignments in this period.'); return; }
-
-  const students = sortStudents(filtered);
-  container.innerHTML = `
-    <div class="course-section">
-      <div class="course-header"><h2>${escHtml(courseName)}</h2></div>
-      <div class="period-group">
-        <div class="period-label"><span>${escHtml(periodName)} &middot; ${students.length} students</span></div>
-        <div class="student-list">
-          ${students.map((s, i) => renderStudentRow(s, i + 1)).join('')}
-        </div>
-      </div>
-    </div>
-  `;
-
-  container.querySelectorAll('.student-row').forEach(r => r.classList.add('expanded'));
-  container.querySelectorAll('.period-print-btn').forEach(b => b.style.display = 'none');
-  window.print();
-  container.innerHTML = originalHTML;
+function changeSort(sort) {
+  currentSort = sort;
+  document.querySelectorAll('.sort-btn').forEach(b => b.classList.toggle('active', b.dataset.sort === sort));
+  renderCourses();
 }
 
-function printReport() {
-  // Set print date
-  const now = new Date();
-  document.getElementById('print-date').textContent =
-    `Printed ${now.toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric', year: 'numeric' })} at ${now.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' })} — All students with missing assignments`;
-
-  // Temporarily re-render with only 3+ missing, all expanded
-  const container = document.getElementById('courses-container');
-  const originalHTML = container.innerHTML;
-
-  // Build print-specific HTML
-  const printSortedData = [...dashboardData].sort((a, b) => {
-    const minP = cd => Math.min(...cd.students.map(s => parseInt((s.period || '').replace(/\D/g, '')) || 999));
-    return minP(a) - minP(b);
-  });
-
-  container.innerHTML = printSortedData.map(cd => {
-    const filtered = cd.students.filter(s => s.missing.length >= 1);
-    if (filtered.length === 0) return '';
-
-    const periods = {};
-    filtered.forEach(s => {
-      const p = s.period;
-      if (!periods[p]) periods[p] = [];
-      periods[p].push(s);
+// ───────────────────────────────────────────────────────
+// Grading Tab
+// ───────────────────────────────────────────────────────
+async function loadAssignmentsForGrading() {
+  const courseId = document.getElementById('grade-course-select').value;
+  const sel = document.getElementById('grade-assignment-select');
+  sel.innerHTML = '<option value="">Select assignment</option>';
+  document.getElementById('grading-queue').innerHTML = '<div class="empty-state">Select an assignment.</div>';
+  document.getElementById('grading-actions').style.display = 'none';
+  if (!courseId) return;
+  try {
+    const assignments = await canvasFetch('/courses/' + courseId + '/assignments?order_by=due_at');
+    assignments.filter(a => a.published).forEach(a => {
+      sel.innerHTML += '<option value="' + a.id + '" data-pts="' + (a.points_possible || 0) + '">' +
+        esc(a.name) + ' (' + (a.points_possible || 0) + ' pts)</option>';
     });
-
-    const sortedPeriods = Object.keys(periods).sort((a, b) => {
-      const na = parseInt(a.replace(/\D/g, '')) || 999;
-      const nb = parseInt(b.replace(/\D/g, '')) || 999;
-      return na - nb;
-    });
-
-    return `
-      <div class="course-section">
-        <div class="course-header">
-          <h2>${escHtml(cd.course.name)}</h2>
-          <span class="course-badge">${filtered.length} students</span>
-        </div>
-        ${sortedPeriods.map(p => {
-          const students = sortStudents(periods[p]);
-          return `
-            <div class="period-group">
-              <div class="period-label">${escHtml(p)} &middot; ${students.length} student${students.length !== 1 ? 's' : ''}</div>
-              <div class="student-list">
-                ${students.map((s, i) => renderStudentRow(s, i + 1)).join('')}
-              </div>
-            </div>
-          `;
-        }).join('')}
-      </div>
-    `;
-  }).join('');
-
-  // Expand all student details for print
-  container.querySelectorAll('.student-row').forEach(r => r.classList.add('expanded'));
-
-  // Print
-  window.print();
-
-  // Restore original view
-  container.innerHTML = originalHTML;
+  } catch (e) { showError('Failed to load assignments: ' + e.message); }
 }
 
-// ── Tab Switching ──
+async function loadGradingQueue() {
+  const courseId = document.getElementById('grade-course-select').value;
+  const assignmentId = document.getElementById('grade-assignment-select').value;
+  const container = document.getElementById('grading-queue');
+  document.getElementById('grading-actions').style.display = 'none';
+  if (!courseId || !assignmentId) {
+    container.innerHTML = '<div class="empty-state">Select an assignment.</div>';
+    return;
+  }
+
+  const selOpt = document.getElementById('grade-assignment-select').selectedOptions[0];
+  const maxPts = selOpt ? selOpt.dataset.pts : '0';
+
+  showLoading(true, 'Loading submissions...');
+  try {
+    const [submissions, sections] = await Promise.all([
+      canvasFetch('/courses/' + courseId + '/assignments/' + assignmentId + '/submissions?include[]=user'),
+      canvasFetch('/courses/' + courseId + '/sections'),
+    ]);
+
+    const cards = submissions.filter(s => s.user).map(sub => {
+      const user = sub.user;
+      let status, statusLabel, statusCls;
+      if (sub.missing) {
+        status = 'missing'; statusLabel = 'Missing'; statusCls = 'missing';
+      } else if (sub.workflow_state === 'graded') {
+        status = 'graded'; statusLabel = 'Graded'; statusCls = 'graded';
+      } else {
+        status = 'submitted'; statusLabel = 'Submitted'; statusCls = 'submitted';
+      }
+      const currentGrade = sub.grade || '';
+      return '<div class="grade-card" data-student-id="' + user.id + '">' +
+        '<span class="grade-card-name">' + esc(user.sortable_name || user.name) + '</span>' +
+        '<span class="grade-card-status ' + statusCls + '">' + statusLabel + '</span>' +
+        '<input class="grade-input" type="number" min="0" max="' + maxPts + '" placeholder="Score" value="' + currentGrade + '" data-field="score">' +
+        '<span class="grade-max">/ ' + maxPts + '</span>' +
+        '<div style="width:100%">' +
+          '<textarea class="grade-comment" placeholder="Comment (optional)" data-field="comment"></textarea>' +
+        '</div>' +
+      '</div>';
+    }).join('');
+
+    container.innerHTML = cards || '<div class="empty-state">No submissions found.</div>';
+    if (cards) document.getElementById('grading-actions').style.display = 'block';
+  } catch (e) {
+    container.innerHTML = '<div class="empty-state">Error: ' + esc(e.message) + '</div>';
+  } finally { showLoading(false); }
+}
+
+async function submitAllGrades() {
+  const courseId = document.getElementById('grade-course-select').value;
+  const assignmentId = document.getElementById('grade-assignment-select').value;
+  if (!courseId || !assignmentId) return;
+
+  const cards = document.querySelectorAll('#grading-queue .grade-card');
+  const grades = [];
+  cards.forEach(card => {
+    const sid = card.dataset.studentId;
+    const score = card.querySelector('[data-field="score"]').value;
+    const comment = card.querySelector('[data-field="comment"]').value.trim();
+    if (score !== '' || comment) {
+      grades.push({ student_id: sid, score: score !== '' ? Number(score) : null, comment });
+    }
+  });
+
+  if (grades.length === 0) { alert('No grades to submit. Enter scores or comments first.'); return; }
+  if (!confirm('Apply ' + grades.length + ' grade(s) to Canvas? This will update student records.')) return;
+
+  showLoading(true, 'Applying ' + grades.length + ' grades...');
+  try {
+    const resp = await api('/api/batch/grades', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ course_id: courseId, assignment_id: assignmentId, grades }),
+    });
+    const result = await resp.json();
+    const ok = result.results.filter(r => r.ok).length;
+    const failed = grades.length - ok;
+    alert('Done! ' + ok + '/' + grades.length + ' grades applied.' + (failed > 0 ? ' ' + failed + ' failed.' : ''));
+    loadGradingQueue();
+  } catch (e) {
+    showError('Grade submission failed: ' + e.message);
+  } finally { showLoading(false); }
+}
+
+// ───────────────────────────────────────────────────────
+// Search Tab
+// ───────────────────────────────────────────────────────
+function handleAssignmentSearch() {
+  const q = document.getElementById('assignment-search').value.trim().toLowerCase();
+  const container = document.getElementById('search-results');
+  if (q.length < 2) {
+    container.innerHTML = '<div class="empty-state">Type at least 2 characters to search.</div>';
+    return;
+  }
+  const results = [];
+  dashboardData.forEach(cd => {
+    const assignmentMap = {};
+    cd.students.forEach(s => {
+      s.missing.forEach(a => {
+        if (a.name.toLowerCase().includes(q)) {
+          if (!assignmentMap[a.name]) assignmentMap[a.name] = { name: a.name, students: [] };
+          assignmentMap[a.name].students.push(s);
+        }
+      });
+    });
+    Object.values(assignmentMap).forEach(a => results.push({ ...a, course: cd.course.name }));
+  });
+
+  if (results.length === 0) {
+    container.innerHTML = '<div class="empty-state">No matching missing assignments found.</div>';
+    return;
+  }
+  container.innerHTML = results.map(r =>
+    '<div style="background:var(--surface);border:1px solid var(--border);border-radius:10px;padding:1rem;margin-bottom:1rem;">' +
+      '<h3 style="font-size:0.95rem;color:var(--text-bright);margin-bottom:0.25rem;">' + esc(r.name) + '</h3>' +
+      '<div style="font-size:0.78rem;color:var(--text-muted);margin-bottom:0.5rem;">' +
+        esc(r.course) + ' &middot; ' + r.students.length + ' students missing' +
+      '</div>' +
+      '<ul style="list-style:none;">' +
+        r.students.map(s =>
+          '<li style="padding:0.2rem 0;font-size:0.85rem;color:var(--text);">' +
+            esc(s.name) +
+            ' <span style="color:var(--text-muted);font-size:0.75rem;">' + esc(s.period) + '</span>' +
+          '</li>'
+        ).join('') +
+      '</ul>' +
+    '</div>'
+  ).join('');
+}
+
+// ───────────────────────────────────────────────────────
+// Bulk Comment Tab
+// ───────────────────────────────────────────────────────
+async function loadAssignmentsForBulk() {
+  const courseId = document.getElementById('bulk-course-select').value;
+  const sel = document.getElementById('bulk-assignment-select');
+  sel.innerHTML = '<option value="">Select assignment</option>';
+  document.getElementById('bulk-count').textContent = '';
+  document.getElementById('bulk-send-btn').disabled = true;
+  bulkTargets = [];
+  if (!courseId) return;
+  try {
+    const assignments = await canvasFetch('/courses/' + courseId + '/assignments?order_by=due_at');
+    assignments.filter(a => a.published).forEach(a => {
+      sel.innerHTML += '<option value="' + a.id + '">' + esc(a.name) + '</option>';
+    });
+  } catch (e) { showError(e.message); }
+}
+
+async function loadBulkTargets() {
+  const courseId = document.getElementById('bulk-course-select').value;
+  const assignmentId = document.getElementById('bulk-assignment-select').value;
+  bulkTargets = [];
+  document.getElementById('bulk-count').textContent = '';
+  document.getElementById('bulk-send-btn').disabled = true;
+  if (!courseId || !assignmentId) return;
+
+  showLoading(true, 'Finding missing students...');
+  try {
+    const subs = await canvasFetch('/courses/' + courseId + '/assignments/' + assignmentId + '/submissions?include[]=user');
+    bulkTargets = subs
+      .filter(s => s.missing && s.user)
+      .map(s => ({ student_id: s.user_id, name: s.user.name }));
+    document.getElementById('bulk-count').textContent =
+      bulkTargets.length + ' students have not submitted this assignment.';
+    document.getElementById('bulk-send-btn').disabled = bulkTargets.length === 0;
+  } catch (e) { showError(e.message); }
+  finally { showLoading(false); }
+}
+
+async function sendBulkComments() {
+  const courseId = document.getElementById('bulk-course-select').value;
+  const assignmentId = document.getElementById('bulk-assignment-select').value;
+  const comment = document.getElementById('bulk-comment').value.trim();
+  if (!comment) { alert('Please write a comment first.'); return; }
+  if (bulkTargets.length === 0) return;
+  if (!confirm('Send this comment to ' + bulkTargets.length + ' students?')) return;
+
+  showLoading(true, 'Sending to ' + bulkTargets.length + ' students...');
+  try {
+    const resp = await api('/api/batch/comments', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        course_id: courseId,
+        assignment_id: assignmentId,
+        student_ids: bulkTargets.map(t => t.student_id),
+        comment,
+      }),
+    });
+    const result = await resp.json();
+    document.getElementById('bulk-results').innerHTML =
+      '<div style="background:rgba(50,205,100,0.08);border:1px solid rgba(50,205,100,0.2);border-radius:10px;padding:1rem;color:var(--success);font-size:0.9rem;">' +
+        'Sent ' + result.succeeded + '/' + result.total + ' comments successfully.' +
+      '</div>';
+    document.getElementById('bulk-comment').value = '';
+  } catch (e) { showError(e.message); }
+  finally { showLoading(false); }
+}
+
+// ───────────────────────────────────────────────────────
+// Tab Switching
+// ───────────────────────────────────────────────────────
 function switchTab(tab) {
   document.querySelectorAll('.tab-btn').forEach(b => b.classList.toggle('active', b.dataset.tab === tab));
-  document.querySelectorAll('.tab-content').forEach(t => t.classList.toggle('active', t.id === `tab-${tab}`));
+  document.querySelectorAll('.tab-content').forEach(t => t.classList.toggle('active', t.id === 'tab-' + tab));
 }
 
-// ── Auto Refresh ──
-function scheduleAutoRefresh() {
-  if (refreshTimer) clearInterval(refreshTimer);
-  refreshTimer = setInterval(() => {
-    loadDashboard();
-  }, REFRESH_INTERVAL);
-}
-
+// ───────────────────────────────────────────────────────
+// Utilities
+// ───────────────────────────────────────────────────────
 function manualRefresh() {
   const btn = document.getElementById('refresh-btn');
   btn.classList.add('spinning');
-  loadDashboard().finally(() => {
-    setTimeout(() => btn.classList.remove('spinning'), 500);
-  });
+  loadDashboard().finally(() => btn.classList.remove('spinning'));
 }
 
 function updateTimestamp() {
   const now = new Date();
-  const time = now.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' });
-  const date = now.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
-  document.getElementById('last-updated').innerHTML = `Last updated<br><strong>${time}</strong> &middot; ${date}`;
+  document.getElementById('last-updated').innerHTML =
+    'Last updated<br>' + now.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' });
 }
 
-// ── UI Helpers ──
 function showLoading(show, text) {
   const el = document.getElementById('loading-overlay');
   if (text) document.getElementById('loading-text').textContent = text;
@@ -2544,117 +1069,6 @@ function showError(msg) {
 
 function hideError() {
   document.getElementById('error-banner').style.display = 'none';
-}
-
-function escHtml(str) {
-  const div = document.createElement('div');
-  div.textContent = str;
-  return div.innerHTML;
-}
-
-function formatFileSize(bytes) {
-  if (!bytes || bytes === 0) return '';
-  if (bytes < 1024) return bytes + ' B';
-  if (bytes < 1048576) return (bytes / 1024).toFixed(0) + ' KB';
-  return (bytes / 1048576).toFixed(1) + ' MB';
-}
-
-function fileIcon(contentType) {
-  if (!contentType) return '\u{1F4CE}';
-  if (contentType.startsWith('image/')) return '\u{1F5BC}';
-  if (contentType === 'application/pdf') return '\u{1F4C4}';
-  if (contentType.includes('video')) return '\u{1F3AC}';
-  if (contentType.includes('zip') || contentType.includes('compressed')) return '\u{1F4E6}';
-  return '\u{1F4CE}';
-}
-
-// ── Init ──
-window.addEventListener('DOMContentLoaded', () => {
-  // Clear any corrupted token from localStorage
-  const raw = localStorage.getItem('canvas_api_token') || '';
-  const clean = sanitizeToken(raw);
-  if (raw !== clean) {
-    if (clean) localStorage.setItem('canvas_api_token', clean);
-    else localStorage.removeItem('canvas_api_token');
-  }
-
-  // If already unlocked this session, skip PIN screen
-  if (sessionStorage.getItem('pvhs_unlocked') === '1') {
-    document.getElementById('pin-screen').style.display = 'none';
-    initAfterPin();
-  } else {
-    // Show PIN screen (default state)
-    document.getElementById('pin-input').focus();
-  }
-});
-
-// ── PWA Install ──
-let deferredInstallPrompt = null;
-
-window.addEventListener('beforeinstallprompt', (e) => {
-  e.preventDefault();
-  deferredInstallPrompt = e;
-  document.getElementById('install-btn').style.display = 'inline-block';
-});
-
-window.addEventListener('appinstalled', () => {
-  document.getElementById('install-btn').style.display = 'none';
-  deferredInstallPrompt = null;
-});
-
-async function installApp() {
-  if (!deferredInstallPrompt) return;
-  deferredInstallPrompt.prompt();
-  const result = await deferredInstallPrompt.userChoice;
-  if (result.outcome === 'accepted') {
-    document.getElementById('install-btn').style.display = 'none';
-  }
-  deferredInstallPrompt = null;
-}
-
-// Hide install button if already in standalone mode
-if (window.matchMedia('(display-mode: standalone)').matches || window.navigator.standalone) {
-  const ib = document.getElementById('install-btn');
-  if (ib) ib.style.display = 'none';
-}
-
-// ── PVHS Tools Panel ──
-function openTools() {
-  const panel = document.getElementById('tools-panel');
-  const overlay = document.getElementById('tools-overlay');
-  const iframe = document.getElementById('tools-iframe');
-  if (!iframe.src || iframe.src === window.location.href) {
-    iframe.src = 'https://creativesilva.github.io/pvhs_tools/';
-  }
-  panel.classList.add('open');
-  overlay.style.display = 'block';
-  document.body.style.overflow = 'hidden';
-}
-
-function closeTools() {
-  document.getElementById('tools-panel').classList.remove('open');
-  document.getElementById('tools-overlay').style.display = 'none';
-  document.body.style.overflow = '';
-}
-
-function popOutTools() {
-  // Opens PVHS Tools in a standalone app-style window (no toolbar, no tabs)
-  const url = 'https://creativesilva.github.io/pvhs_tools/';
-  const w = 430, h = 820;
-  const left = Math.round((screen.width - w) / 2);
-  const top  = Math.round((screen.height - h) / 2);
-  window.open(url, 'pvhs_tools',
-    `width=${w},height=${h},left=${left},top=${top},` +
-    `resizable=yes,scrollbars=yes,toolbar=no,menubar=no,location=no,status=no`
-  );
-}
-
-// Close on Escape key
-document.addEventListener('keydown', e => { if (e.key === 'Escape') closeTools(); });
-
-// ── PWA Service Worker ──
-if ('serviceWorker' in navigator) {
-  navigator.serviceWorker.register('/sw.js').catch(() => {});
 }
 </script>
 </body>

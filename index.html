@@ -692,8 +692,8 @@ function renderStatCards(){
   });
 }
 
-// ---- Missing work overview (auto-loads) ----
-let missingOverviewData=[];
+// ---- Missing work overview (auto-loads, bulk fetch) ----
+let missingOverviewData=[], canvasLoaded=false;
 async function loadMissingOverview(){
   const tbody=document.getElementById('missingOverviewRows'), status=document.getElementById('missing-overview-status');
   tbody.innerHTML='<tr><td colspan="5" class="empty">Scanning Canvas courses...</td></tr>';
@@ -701,23 +701,26 @@ async function loadMissingOverview(){
   missingOverviewData=[];
   for(const course of coursesCache){
     try {
-      const enrollments=await canvasFetch(`/courses/${course.id}/enrollments?type[]=StudentEnrollment&state[]=active&per_page=100`);
-      const assignments=await canvasFetch(`/courses/${course.id}/assignments?per_page=100`);
-      for(let i=0;i<enrollments.length;i+=6){
-        const batch=enrollments.slice(i,i+6);
-        const results=await Promise.allSettled(batch.map(async enr=>{
-          const subs=await canvasFetch(`/courses/${course.id}/students/submissions?student_ids[]=${enr.user_id}&per_page=100`);
-          const missing=subs.filter(s=>s.missing||s.late_policy_status==='missing');
-          if(missing.length>0){
-            const pts=missing.reduce((sum,s)=>sum+(assignments.find(a=>a.id===s.assignment_id)?.points_possible||0),0);
-            return {name:enr.user?.sortable_name||enr.user?.name||'Unknown',userId:enr.user_id,course:course.name,courseId:course.id,count:missing.length,pts};
-          }
-          return null;
-        }));
-        results.forEach(r=>{ if(r.status==='fulfilled'&&r.value) missingOverviewData.push(r.value); });
-      }
+      status.textContent=`Scanning ${course.name}...`;
+      const [enrollments, assignments, allSubs] = await Promise.all([
+        canvasFetch(`/courses/${course.id}/enrollments?type[]=StudentEnrollment&state[]=active&per_page=100`),
+        canvasFetch(`/courses/${course.id}/assignments?per_page=100`),
+        canvasFetch(`/courses/${course.id}/students/submissions?student_ids[]=all&per_page=100`),
+      ]);
+      const nameMap={}; enrollments.forEach(e=>{ nameMap[e.user_id]=e.user?.sortable_name||e.user?.name||'Unknown'; });
+      const missingSubs=allSubs.filter(s=>s.missing||s.late_policy_status==='missing');
+      const byStudent={};
+      missingSubs.forEach(s=>{
+        if(!byStudent[s.user_id]) byStudent[s.user_id]={count:0,pts:0};
+        byStudent[s.user_id].count++;
+        byStudent[s.user_id].pts+=(assignments.find(a=>a.id===s.assignment_id)?.points_possible||0);
+      });
+      Object.entries(byStudent).forEach(([uid,d])=>{
+        missingOverviewData.push({name:nameMap[uid]||'Unknown',userId:+uid,course:course.name,courseId:course.id,count:d.count,pts:d.pts});
+      });
     } catch(e){ console.error(`Missing overview error for ${course.name}:`,e); }
   }
+  canvasLoaded=true;
   missingOverviewData.sort((a,b)=>b.count-a.count||b.pts-a.pts);
   const top=missingOverviewData.slice(0,30);
   if(top.length===0){
@@ -751,8 +754,8 @@ function renderRoster(){
       if(q){ const h=`${s.last_name} ${s.first_name} ${s.student_id} ${s.preferred_name||''}`.toLowerCase(); if(!h.includes(q)) return false; }
       if(cf&&!CLASS_DEF[cf]?.test(s)) return false;
       if(sf==='flagged'&&flaggedFields(s).length===0) return false;
-      if(sf==='missing'&&getStudentMissingCount(s)===0) return false;
-      if(sf==='clean'&&getStudentMissingCount(s)>0) return false;
+      if(canvasLoaded&&sf==='missing'&&getStudentMissingCount(s)===0) return false;
+      if(canvasLoaded&&sf==='clean'&&getStudentMissingCount(s)>0) return false;
       return true;
     });
     if(sortKey==='name') rows.sort((a,b)=>`${a.last_name} ${a.first_name}`.localeCompare(`${b.last_name} ${b.first_name}`));
@@ -766,7 +769,7 @@ function renderRoster(){
       const nFlags=flaggedFields(s).length;
       const notesText=firstNote(s['Form Notes']);
       const mc=getStudentMissingCount(s);
-      const mBadge=mc>0?`<span class="pill ${mc>=5?'absent':mc>=3?'flag':'info'}">${mc}</span>`:NONE;
+      const mBadge=!canvasLoaded?'<span class="muted" style="font-size:0.7rem;">loading</span>':mc>0?`<span class="pill ${mc>=5?'absent':mc>=3?'flag':'info'}">${mc}</span>`:NONE;
       return `<tr class="rowclick" data-idx="${i}">
         <td class="num">${s.Seat||NONE}</td>
         <td>P${s.period}</td>
@@ -871,30 +874,30 @@ document.getElementById('modalClose').addEventListener('click',()=>document.getE
 document.getElementById('modalBackdrop').addEventListener('click',e=>{ if(e.target===document.getElementById('modalBackdrop')) document.getElementById('modalBackdrop').classList.remove('open'); });
 document.addEventListener('keydown',e=>{ if(e.key==='Escape') document.getElementById('modalBackdrop').classList.remove('open'); });
 
-// ---- Canvas: Missing Work ----
+// ---- Canvas: Missing Work (bulk fetch) ----
 async function loadCanvasData(){
   const container=document.getElementById('canvas-courses');
   const statusEl=document.getElementById('canvas-status');
   statusEl.textContent='Loading missing assignments...'; container.innerHTML='';
-  const BATCH=6; let totalMissing=0, totalStudents=0;
+  let totalMissing=0, totalStudents=0;
   for(const course of coursesCache){
     try {
-      const enrollments=await canvasFetch(`/courses/${course.id}/enrollments?type[]=StudentEnrollment&state[]=active&per_page=100`);
-      const assignments=await canvasFetch(`/courses/${course.id}/assignments?per_page=100`);
-      let studentsWithMissing=[];
-      for(let i=0;i<enrollments.length;i+=BATCH){
-        const batch=enrollments.slice(i,i+BATCH);
-        const results=await Promise.allSettled(batch.map(async enr=>{
-          const subs=await canvasFetch(`/courses/${course.id}/students/submissions?student_ids[]=${enr.user_id}&per_page=100`);
-          const missing=subs.filter(s=>s.missing||s.late_policy_status==='missing');
-          if(missing.length>0){
-            const pts=missing.reduce((sum,s)=>sum+(assignments.find(a=>a.id===s.assignment_id)?.points_possible||0),0);
-            return {name:enr.user?.sortable_name||enr.user?.name||'Unknown',userId:enr.user_id,missing:missing.map(m=>{const a=assignments.find(x=>x.id===m.assignment_id);return{name:a?.name||'Unknown',pts:a?.points_possible||0};}),totalPts:pts};
-          }
-          return null;
-        }));
-        results.forEach(r=>{ if(r.status==='fulfilled'&&r.value) studentsWithMissing.push(r.value); });
-      }
+      statusEl.textContent=`Loading ${course.name}...`;
+      const [enrollments, assignments, allSubs] = await Promise.all([
+        canvasFetch(`/courses/${course.id}/enrollments?type[]=StudentEnrollment&state[]=active&per_page=100`),
+        canvasFetch(`/courses/${course.id}/assignments?per_page=100`),
+        canvasFetch(`/courses/${course.id}/students/submissions?student_ids[]=all&per_page=100`),
+      ]);
+      const nameMap={}; enrollments.forEach(e=>{ nameMap[e.user_id]=e.user?.sortable_name||e.user?.name||'Unknown'; });
+      const missingSubs=allSubs.filter(s=>s.missing||s.late_policy_status==='missing');
+      const byStudent={};
+      missingSubs.forEach(s=>{
+        if(!byStudent[s.user_id]) byStudent[s.user_id]={items:[],totalPts:0};
+        const a=assignments.find(x=>x.id===s.assignment_id);
+        byStudent[s.user_id].items.push({name:a?.name||'Unknown',pts:a?.points_possible||0});
+        byStudent[s.user_id].totalPts+=(a?.points_possible||0);
+      });
+      let studentsWithMissing=Object.entries(byStudent).map(([uid,d])=>({name:nameMap[uid]||'Unknown',userId:+uid,missing:d.items,totalPts:d.totalPts}));
       if(studentsWithMissing.length>0){
         if(canvasSort==='most') studentsWithMissing.sort((a,b)=>b.missing.length-a.missing.length);
         else if(canvasSort==='pts') studentsWithMissing.sort((a,b)=>b.totalPts-a.totalPts);

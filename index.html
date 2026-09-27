@@ -144,7 +144,8 @@ h1 { font-size: 1.5rem; } h2 { font-size: 1.05rem; }
 
 /* ---- Data table ---- */
 .tbl { width: 100%; border-collapse: collapse; font-size: 0.86rem; }
-.tbl thead th { text-align: left; font-family: var(--font-head); font-size: 0.6rem; letter-spacing: 0.14em; text-transform: uppercase; color: var(--teal-light); background: var(--th-bg); border-bottom: 2px solid var(--teal); padding: 10px 12px; position: sticky; top: 0; }
+.tbl thead th { text-align: left; font-family: var(--font-head); font-size: 0.6rem; letter-spacing: 0.14em; text-transform: uppercase; color: var(--teal-light); background: rgba(6,20,20,0.72); backdrop-filter: blur(14px) saturate(1.4); -webkit-backdrop-filter: blur(14px) saturate(1.4); border-bottom: 2px solid var(--teal); padding: 10px 12px; position: sticky; top: 0; z-index: 2; }
+:root[data-theme="light"] .tbl thead th { background: rgba(230,242,242,0.78); }
 .tbl tbody td { padding: 9px 12px; border-bottom: 1px solid var(--line); color: var(--text-dim); vertical-align: top; }
 .tbl tbody tr:hover td { background: var(--row-hover); color: var(--text); }
 .tbl tbody td.name { color: var(--text); font-weight: 600; }

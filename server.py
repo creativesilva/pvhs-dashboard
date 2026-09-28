@@ -143,6 +143,33 @@ def _save_overrides():
     with open(OVERRIDES_PATH, 'w') as f:
         json.dump(_ROSTER_OVERRIDES, f)
 
+def _clean_phone(v):
+    return ''.join(ch for ch in str(v or '') if ch in '0123456789 ()+-.').strip()[:20]
+
+def _clean_name(v):
+    return ' '.join(str(v or '').split())[:60]
+
+def _write_override(sid, data, ip=''):
+    """Merge contact corrections into the persistent overrides store for ONE student, so a fix
+    sticks on the student's profile across redeploys and is fully reversible. Only contact fields
+    are written; base rosters are never touched. Returns True if anything was written."""
+    sid = str(sid).strip()
+    fields = {}
+    if 'student_cell' in data:    fields['student_cell'] = _clean_phone(data.get('student_cell'))
+    if 'parent_guardian' in data: fields['parent_guardian'] = _clean_name(data.get('parent_guardian'))
+    if 'parent_cell' in data:     fields['parent_cell'] = _clean_phone(data.get('parent_cell'))
+    if not fields:
+        return False
+    with _overrides_lock:
+        cur = _ROSTER_OVERRIDES.get(sid, {})
+        cur.update(fields)
+        cur['updated'] = time.strftime('%Y-%m-%dT%H:%M:%SZ', time.gmtime())
+        if ip:
+            cur['_ip'] = ip
+        _ROSTER_OVERRIDES[sid] = cur
+        _save_overrides()
+    return True
+
 _load_overrides()
 
 def load_checkouts():
@@ -551,7 +578,7 @@ class Handler(BaseHTTPRequestHandler):
             self.handle_camera_student_update()# PUBLIC: a student corrects their own contact -> overrides store
             return
         # Camera management: full login OR the shared camera password (scoped to cameras only)
-        if path in ('/api/camera/return', '/api/camera/status', '/api/camera/update', '/api/camera/delete', '/api/camera/asset', '/api/camera/garcia_roster', '/api/camera/card_hold', '/api/camera/card_return'):
+        if path in ('/api/camera/return', '/api/camera/status', '/api/camera/update', '/api/camera/delete', '/api/camera/asset', '/api/camera/garcia_roster', '/api/camera/card_hold', '/api/camera/card_return', '/api/camera/student_override'):
             if not self.require_camera_auth():
                 return
             if path == '/api/camera/return':   self.handle_camera_return()   # mark returned
@@ -562,6 +589,7 @@ class Handler(BaseHTTPRequestHandler):
             elif path == '/api/camera/garcia_roster': self.handle_camera_garcia_roster()  # load Garcia's camera-only roster
             elif path == '/api/camera/card_hold':   self.handle_camera_card_hold()    # student left card -> wallet slot + flag camera
             elif path == '/api/camera/card_return': self.handle_camera_card_return()  # card returned to student -> free slot
+            elif path == '/api/camera/student_override': self.handle_camera_student_override()  # teacher edits a student's contact -> profile
             return
         if not self.require_auth():
             return
@@ -908,28 +936,28 @@ class Handler(BaseHTTPRequestHandler):
         if len(sid) < 5 or not resolve_student(sid)['found']:
             self.json_response(200, {'ok': False, 'error': 'We could not find that ID.'})
             return
-        def clean_phone(v):
-            v = ''.join(ch for ch in str(v or '') if ch in '0123456789 ()+-.').strip()
-            return v[:20]
-        def clean_name(v):
-            return ' '.join(str(v or '').split())[:60]
-        fields = {}
-        if 'student_cell' in data:
-            fields['student_cell'] = clean_phone(data.get('student_cell'))
-        if 'parent_guardian' in data:
-            fields['parent_guardian'] = clean_name(data.get('parent_guardian'))
-        if 'parent_cell' in data:
-            fields['parent_cell'] = clean_phone(data.get('parent_cell'))
-        if not fields:
+        if not _write_override(sid, data, self._client_ip()):
             self.json_response(200, {'ok': False, 'error': 'Nothing to update.'})
             return
-        with _overrides_lock:
-            cur = _ROSTER_OVERRIDES.get(sid, {})
-            cur.update(fields)
-            cur['updated'] = time.strftime('%Y-%m-%dT%H:%M:%SZ', time.gmtime())
-            cur['_ip'] = self._client_ip()
-            _ROSTER_OVERRIDES[sid] = cur
-            _save_overrides()
+        r = resolve_student(sid)
+        self.json_response(200, {
+            'ok': True,
+            'student_cell': r.get('student_cell', ''),
+            'parent_guardian': r.get('parent_guardian', ''),
+            'parent_cell': r.get('parent_cell', ''),
+        })
+
+    def handle_camera_student_override(self):
+        """CAMERA-SCOPED (teacher): correct a student's contact -> persistent overrides store, so the
+        fix sticks on the student's PROFILE for FUTURE checkouts. Trusted caller, no rate limit."""
+        data = self._read_json_body()
+        if data is None:
+            return
+        sid = ''.join(ch for ch in str(data.get('student_id', '')) if ch.isdigit())
+        if len(sid) < 5 or not resolve_student(sid)['found']:
+            self.json_response(200, {'ok': False, 'error': 'We could not find that ID.'})
+            return
+        _write_override(sid, data, self._client_ip())
         r = resolve_student(sid)
         self.json_response(200, {
             'ok': True,

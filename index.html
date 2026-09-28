@@ -699,6 +699,12 @@ function getStudentMissingCount(s){
   const key=`${s.last_name}, ${s.first_name}`.toLowerCase();
   return missingOverviewData.filter(m=>(m.name||'').toLowerCase()===key).reduce((sum,m)=>sum+m.count,0);
 }
+// Canvas auto-creates a fake "Test Student" (Student View) in every course. It is NOT a real
+// student and must be excluded from every missing-work list / count.
+function isTestStudent(name){
+  const n=String(name||'').trim().toLowerCase();
+  return n==='test student'||n==='student, test'||n.indexOf('test student')>=0;
+}
 function goTo(filter,value){
   switchTab('roster');
   if(filter==='period') document.getElementById('periodFilter').value=value;
@@ -786,10 +792,13 @@ async function loadAllCanvasData(){
   results.forEach(r=>{
     if(r.status!=='fulfilled') return;
     const {course,enrollments,assignments,allSubs}=r.value;
-    const nameMap={}; enrollments.forEach(e=>{nameMap[e.user_id]=e.user?.sortable_name||e.user?.name||'';});
+    const nameMap={}; enrollments.forEach(e=>{ if(isTestStudent(e.user?.sortable_name||e.user?.name)) return; nameMap[e.user_id]=e.user?.sortable_name||e.user?.name||'';});
     const missingSubs=allSubs.filter(s=>s.missing||s.late_policy_status==='missing');
     const byStudent={};
     missingSubs.forEach(s=>{
+      // Canvas auto-creates a "Test Student" (Student View) in every course; it is not a real
+      // student and must never appear in the missing-work lists.
+      if(isTestStudent((s.user&&(s.user.sortable_name||s.user.name))||nameMap[s.user_id])) return;
       // Submissions carry their user (include[]=user), which covers students not in the
       // active-enrollment list (concluded/inactive) that otherwise showed as "Unknown".
       if(s.user && !nameMap[s.user_id]) nameMap[s.user_id]=s.user.sortable_name||s.user.name||'';

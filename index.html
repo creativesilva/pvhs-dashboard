@@ -735,6 +735,11 @@ async function loadDashboard(){
     coursesCache=await canvasFetch('/courses?enrollment_type=teacher&state[]=available&include[]=term&include[]=total_students');
     coursesCache=coursesCache.filter(c=>c.enrollments&&c.enrollments.some(e=>e.type==='teacher'));
     coursesCache=coursesCache.filter(c=>(c.total_students||0)>0);
+    // Only the CURRENT term (its end date is today or later). The teacher stays enrolled
+    // in dozens of past-term courses that otherwise slow the load and pollute missing work.
+    const _now=Date.now();
+    const _current=coursesCache.filter(c=>{ const e=c.term&&c.term.end_at; return e && new Date(e).getTime()>=_now; });
+    if(_current.length) coursesCache=_current;   // fall back to all if term end dates are missing
     populateCourseSelects();
     renderStatCards();
     await loadAllCanvasData();

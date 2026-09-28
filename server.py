@@ -82,6 +82,34 @@ def save_checkouts(items):
         json.dump(items, f)
     os.replace(tmp, CHECKOUTS_PATH)
 
+# Lifecycle: reserved -> out (picked up) -> returned. Records saved before this
+# field existed have no 'status', so derive it: returned => returned, else out
+# (they were migrated from the calendar as cameras already in students' hands).
+def status_of(c):
+    s = (c.get('status') or '').strip().lower()
+    if s in ('reserved', 'out', 'returned'):
+        return s
+    return 'returned' if c.get('returned') else 'out'
+
+# Set a checkout's status and keep the pickup/return date stamps consistent.
+def stamp_status(c, new):
+    new = (new or '').strip().lower()
+    if new not in ('reserved', 'out', 'returned'):
+        new = 'reserved'
+    c['status'] = new
+    if new == 'reserved':
+        c['picked_up_date'] = ''
+        c['returned'] = False
+        c['returned_date'] = ''
+    elif new == 'out':
+        c['picked_up_date'] = c.get('picked_up_date') or time.strftime('%Y-%m-%d')
+        c['returned'] = False
+        c['returned_date'] = ''
+    elif new == 'returned':
+        c['returned'] = True
+        c['returned_date'] = c.get('returned_date') or time.strftime('%Y-%m-%d')
+    return new
+
 def _roster_students():
     try:
         with open(os.path.join(SERVE_DIR, 'roster_data.json')) as f:
@@ -234,6 +262,8 @@ class Handler(BaseHTTPRequestHandler):
             self.handle_bulk_comments()
         elif path == '/api/camera/return':
             self.handle_camera_return()            # AUTH: mark returned
+        elif path == '/api/camera/status':
+            self.handle_camera_status()            # AUTH: reserved -> out -> returned
         elif path == '/api/camera/update':
             self.handle_camera_update()            # AUTH: edit a checkout
         elif path == '/api/camera/delete':
@@ -341,14 +371,16 @@ class Handler(BaseHTTPRequestHandler):
         """PUBLIC: sanitized checkouts. NO names, IDs, or phone numbers, ever."""
         out = []
         for c in load_checkouts():
+            st = status_of(c)
             out.append({
                 'id': c.get('id'),
                 'camera': c.get('camera', ''),
                 'out': c.get('out', ''),
                 'due': c.get('due', ''),
-                'returned': bool(c.get('returned')),
+                'picked_up_date': c.get('picked_up_date', ''),
+                'returned': (st == 'returned'),
                 'returned_date': c.get('returned_date', ''),
-                'status': 'returned' if c.get('returned') else 'out',
+                'status': st,
             })
         self.json_response(200, {'cameras': CAMERAS, 'checkouts': out})
 
@@ -388,17 +420,20 @@ class Handler(BaseHTTPRequestHandler):
             'camera': camera,
             'out': out,
             'due': due,
+            'status': 'reserved',   # student reserved it; teacher toggles to picked up on collection
+            'picked_up_date': '',
             'returned': False,
             'returned_date': '',
             'created': time.strftime('%Y-%m-%dT%H:%M:%SZ', time.gmtime()),
             'flag': '; '.join(flags),
             '_ip': self._client_ip(),
         }
+        stamp_status(rec, data.get('status'))   # public form sends no status -> reserved
         with _checkouts_lock:
             items = load_checkouts()
             items.append(rec)
             save_checkouts(items)
-        self.json_response(200, {'ok': True, 'message': 'Checked out. See Mr. Silva if anything looks off.'})
+        self.json_response(200, {'ok': True, 'message': 'Reserved. See Mr. Silva to pick up your camera.'})
 
     def _find_checkout(self, items, cid):
         for x in items:
@@ -423,6 +458,27 @@ class Handler(BaseHTTPRequestHandler):
             save_checkouts(items)
         self.json_response(200, {'ok': True})
 
+    def handle_camera_status(self):
+        """AUTH: move a checkout through reserved -> out (picked up) -> returned.
+        Returned records are kept as history (grayed in the UI), never deleted."""
+        data = self._read_json_body()
+        if data is None:
+            return
+        cid = str(data.get('id', ''))
+        new = str(data.get('status', '')).strip().lower()
+        if new not in ('reserved', 'out', 'returned'):
+            self.json_response(400, {'error': 'status must be reserved, out, or returned'})
+            return
+        with _checkouts_lock:
+            items = load_checkouts()
+            c = self._find_checkout(items, cid)
+            if not c:
+                self.json_response(404, {'error': 'Checkout not found'})
+                return
+            stamp_status(c, new)
+            save_checkouts(items)
+        self.json_response(200, {'ok': True, 'status': new})
+
     def handle_camera_update(self):
         data = self._read_json_body()
         if data is None:
@@ -434,9 +490,11 @@ class Handler(BaseHTTPRequestHandler):
             if not c:
                 self.json_response(404, {'error': 'Checkout not found'})
                 return
-            for k in ('camera', 'out', 'due', 'returned', 'returned_date'):
+            for k in ('camera', 'out', 'due', 'status', 'picked_up_date', 'returned', 'returned_date'):
                 if k in data:
                     c[k] = data[k]
+            if 'status' in data:
+                stamp_status(c, c.get('status'))   # normalize pickup/return dates to the new status
             if 'student_id' in data and str(data['student_id']).strip() != c.get('student_id'):
                 c['student_id'] = str(data['student_id']).strip()
                 r = resolve_student(c['student_id'])

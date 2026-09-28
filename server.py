@@ -851,6 +851,12 @@ class Handler(BaseHTTPRequestHandler):
         data = self._read_json_body()
         if data is None:
             return
+        # The teacher console sends the camera key and is trusted to override (rapid legit writes,
+        # deliberate double-books). Public student submissions are rate limited + validated below.
+        is_teacher = self.check_camera_auth()
+        if not is_teacher and not _rate_ok(self._client_ip()):
+            self.json_response(429, {'error': 'Too many tries, slow down.'})
+            return
         sid = str(data.get('student_id', '')).strip()
         kind = (str(data.get('kind', 'camera')).strip().lower() or 'camera')
         due = str(data.get('due', '')).strip()
@@ -869,6 +875,29 @@ class Handler(BaseHTTPRequestHandler):
         if not sid or not camera or not due:
             self.json_response(400, {'error': 'Please enter your student ID, a camera, and a due date.'})
             return
+        if due < out:
+            self.json_response(400, {'error': 'The due date is before the pickup date.'})
+            return
+        # Student-facing guards (the teacher console is trusted to override these).
+        if not is_teacher:
+            if camera not in CAMERAS:
+                self.json_response(400, {'error': 'Unknown camera.'})
+                return
+            a = load_assets().get(camera) or {}
+            if a.get('oos'):
+                self.json_response(409, {'error': 'That camera is out of service right now. Please pick another.'})
+                return
+            if a.get('no_card'):
+                self.json_response(409, {'error': 'That camera is missing its memory card right now. Please pick another.'})
+                return
+            if camera in ('Cam 16', 'Cam 17', 'Cam 18'):
+                per = str(resolve_student(sid).get('period', '')).lstrip('0')
+                if per != '4':
+                    self.json_response(403, {'error': 'That camera is for Photography 2 only.'})
+                    return
+            if self._camera_busy(camera, out, due):
+                self.json_response(409, {'error': 'That camera is already booked for those days. Please pick another.'})
+                return
         rec = self._new_checkout_rec(data, 'camera', '', camera, out, due)
         extras = data.get('extras') or []
         extra_recs = []
@@ -883,6 +912,19 @@ class Handler(BaseHTTPRequestHandler):
             items.extend(extra_recs)
             save_checkouts(items)
         self.json_response(200, {'ok': True, 'id': rec['id'], 'message': 'Reserved. See Mr. Silva to pick up your camera.'})
+
+    def _camera_busy(self, camera, out, due):
+        """True if a non-returned checkout for this camera overlaps [out, due) (half-open, so a
+        same-day handoff where one returns on the day the next picks up is allowed)."""
+        for c in load_checkouts():
+            if c.get('kind') == 'equipment' or c.get('camera') != camera:
+                continue
+            if status_of(c) == 'returned':
+                continue
+            eo = str(c.get('out', '')); ed = str(c.get('due', '')) or eo
+            if eo and ed and eo < due and out < ed:
+                return True
+        return False
 
     def _find_checkout(self, items, cid):
         for x in items:

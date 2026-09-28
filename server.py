@@ -110,6 +110,20 @@ def stamp_status(c, new):
         c['returned_date'] = c.get('returned_date') or time.strftime('%Y-%m-%d')
     return new
 
+# Light per-IP rate limit for the public ID-confirm lookup (deters roster harvesting).
+_lookup_hits = {}
+_lookup_lock = threading.Lock()
+def _rate_ok(ip, limit=40, window=60):
+    now = time.time()
+    with _lookup_lock:
+        hits = [t for t in _lookup_hits.get(ip, []) if now - t < window]
+        if len(hits) >= limit:
+            _lookup_hits[ip] = hits
+            return False
+        hits.append(now)
+        _lookup_hits[ip] = hits
+        return True
+
 def _roster_students():
     try:
         with open(os.path.join(SERVE_DIR, 'roster_data.json')) as f:
@@ -128,13 +142,15 @@ def resolve_student(student_id):
             return {
                 'found': True,
                 'name': (last + ', ' + first).strip().strip(','),
+                'first': first,
+                'last': last,
                 'period': str(s.get('period', '')),
                 'course': s.get('course') or s.get('course_code') or '',
                 'student_cell': s.get('Student Cell') or s.get('student_cell') or '',
                 'parent_guardian': s.get('Parent Guardian') or s.get('parent_guardian') or '',
                 'parent_cell': s.get('Parent Cell') or s.get('parent_cell') or '',
             }
-    return {'found': False, 'name': '', 'period': '', 'course': '',
+    return {'found': False, 'name': '', 'first': '', 'last': '', 'period': '', 'course': '',
             'student_cell': '', 'parent_guardian': '', 'parent_cell': ''}
 
 # ---------------------------------------------------------------------------
@@ -249,6 +265,9 @@ class Handler(BaseHTTPRequestHandler):
         # Validated server-side; resolves the ID to a name without echoing it back.
         if path == '/api/camera/checkout':
             self.handle_camera_checkout()
+            return
+        if path == '/api/camera/lookup':
+            self.handle_camera_lookup()        # PUBLIC: confirm full ID -> "First L." only
             return
         if not self.require_auth():
             return
@@ -387,6 +406,30 @@ class Handler(BaseHTTPRequestHandler):
     def handle_camera_checkouts(self):
         """AUTH: full detail for the teacher (names + emergency phones)."""
         self.json_response(200, {'cameras': CAMERAS, 'checkouts': load_checkouts()})
+
+    def handle_camera_lookup(self):
+        """PUBLIC: confirm a FULL student ID resolves, returning ONLY a first name +
+        last initial so a student can verify themselves before reserving. There is no
+        prefix search, so the public page cannot be used to browse the roster, and no
+        ID, phone, or full last name is ever echoed. Rate limited per IP."""
+        if not _rate_ok(self._client_ip()):
+            self.json_response(429, {'found': False, 'error': 'Too many tries, slow down.'})
+            return
+        data = self._read_json_body()
+        if data is None:
+            return
+        sid = ''.join(ch for ch in str(data.get('student_id', '')) if ch.isdigit())
+        if len(sid) < 5:                    # require a full-length ID; no short prefixes
+            self.json_response(200, {'found': False})
+            return
+        r = resolve_student(sid)
+        if not r['found']:
+            self.json_response(200, {'found': False})
+            return
+        first = (r.get('first') or '').strip()
+        last = (r.get('last') or '').strip()
+        label = (first + ' ' + (last[:1] + '.' if last else '')).strip()
+        self.json_response(200, {'found': True, 'label': label})
 
     def handle_camera_checkout(self):
         """PUBLIC submit. Student enters ID + camera + dates only. We resolve the ID to a

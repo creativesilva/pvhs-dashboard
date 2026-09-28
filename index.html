@@ -642,7 +642,9 @@ async function canvasFetch(canvasPath){
     const data=await r.json(); all=all.concat(data);
     const link=r.headers.get('Link')||'';
     const next=link.match(/<([^>]+)>;\s*rel="next"/);
-    url=next?new URL(next[1]).pathname+new URL(next[1]).search:null;
+    // The server proxy rewrites Canvas' absolute Link header to a relative path,
+    // so parse next[1] against the current origin (works for absolute or relative).
+    if(next){ const u=new URL(next[1], location.origin); url=u.pathname+u.search; } else { url=null; }
   }
   return all;
 }

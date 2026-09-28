@@ -555,7 +555,9 @@ class Handler(BaseHTTPRequestHandler):
             if not c:
                 self.json_response(404, {'error': 'Checkout not found'})
                 return
-            for k in ('camera', 'out', 'due', 'status', 'picked_up_date', 'returned', 'returned_date'):
+            for k in ('camera', 'out', 'due', 'status', 'picked_up_date', 'returned', 'returned_date',
+                      'student_name', 'student_id', 'period', 'course',
+                      'student_cell', 'parent_guardian', 'parent_cell', 'flag'):
                 if k in data:
                     c[k] = data[k]
             if 'status' in data:

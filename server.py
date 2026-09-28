@@ -115,6 +115,31 @@ def _load_garcia():
 
 _load_garcia()
 
+# Persistent student-contact OVERRIDES (student self-edits + teacher edits). Kept on the disk,
+# separate from the base rosters, and merged on top in _student_result so a correction sticks
+# across redeploys and is fully reversible (delete the entry to revert to the roster value).
+OVERRIDES_PATH = os.path.join(_data_dir(), 'roster_overrides.json')
+_overrides_lock = threading.Lock()
+_ROSTER_OVERRIDES = {}
+
+def _load_overrides():
+    global _ROSTER_OVERRIDES
+    d = {}
+    if os.path.exists(OVERRIDES_PATH):
+        try:
+            d = json.load(open(OVERRIDES_PATH))
+        except Exception as e:
+            print(f'[overrides] load failed: {e}')
+    _ROSTER_OVERRIDES = d if isinstance(d, dict) else {}
+    print(f'[overrides] {len(_ROSTER_OVERRIDES)} student contact overrides loaded')
+    return _ROSTER_OVERRIDES
+
+def _save_overrides():
+    with open(OVERRIDES_PATH, 'w') as f:
+        json.dump(_ROSTER_OVERRIDES, f)
+
+_load_overrides()
+
 def load_checkouts():
     try:
         with open(CHECKOUTS_PATH) as f:
@@ -210,7 +235,7 @@ def _camera_students():
 def _student_result(s):
     first = (s.get('first_name') or '').strip()
     last = (s.get('last_name') or '').strip()
-    return {
+    res = {
         'found': True,
         'name': (last + ', ' + first).strip().strip(','),
         'first': first,
@@ -221,6 +246,13 @@ def _student_result(s):
         'parent_guardian': s.get('Parent Guardian') or s.get('parent_guardian') or '',
         'parent_cell': s.get('Parent Cell') or s.get('parent_cell') or '',
     }
+    # A saved contact override (student self-edit or teacher edit) wins over the base roster value.
+    ov = _ROSTER_OVERRIDES.get(str(s.get('student_id', '')).strip())
+    if ov:
+        for k in ('student_cell', 'parent_guardian', 'parent_cell'):
+            if ov.get(k) not in (None, ''):
+                res[k] = ov[k]
+    return res
 
 def resolve_student(student_id):
     """Look a student up for CAMERA CHECKOUT. Resolves photography students only (Silva Photo +
@@ -367,6 +399,12 @@ class Handler(BaseHTTPRequestHandler):
             return
         if path == '/api/camera/lookup':
             self.handle_camera_lookup()        # PUBLIC: confirm full ID -> "First L." only
+            return
+        if path == '/api/camera/student_info':
+            self.handle_camera_student_info()  # PUBLIC: full contact for a full ID, for the self-edit form
+            return
+        if path == '/api/camera/student_update':
+            self.handle_camera_student_update()# PUBLIC: a student corrects their own contact -> overrides store
             return
         # Camera management: full login OR the shared camera password (scoped to cameras only)
         if path in ('/api/camera/return', '/api/camera/status', '/api/camera/update', '/api/camera/delete', '/api/camera/asset', '/api/camera/garcia_roster'):
@@ -602,6 +640,82 @@ class Handler(BaseHTTPRequestHandler):
             'found': True, 'label': label, 'period': str(r.get('period', '')),
             'student_last4': scl, 'parent_last4': pcl,
             'has_student_cell': bool(scl), 'has_parent_cell': bool(pcl),
+        })
+
+    def handle_camera_student_info(self):
+        """PUBLIC: return the FULL contact on file for a full student ID, so a student can
+        review and correct their own info on the reserve page. Requires a complete ID (no
+        prefix browsing) and is rate limited. (Teacher's decision: students see and fix their
+        own info; a full ID is required to see anything.)"""
+        if not _rate_ok(self._client_ip()):
+            self.json_response(429, {'found': False, 'error': 'Too many tries, slow down.'})
+            return
+        data = self._read_json_body()
+        if data is None:
+            return
+        sid = ''.join(ch for ch in str(data.get('student_id', '')) if ch.isdigit())
+        if len(sid) < 5:
+            self.json_response(200, {'found': False})
+            return
+        r = resolve_student(sid)
+        if not r['found']:
+            self.json_response(200, {'found': False})
+            return
+        first = (r.get('first') or '').strip()
+        last = (r.get('last') or '').strip()
+        self.json_response(200, {
+            'found': True,
+            'label': (first + ' ' + (last[:1] + '.' if last else '')).strip(),
+            'name': r.get('name', ''),
+            'period': str(r.get('period', '')),
+            'student_cell': r.get('student_cell', ''),
+            'parent_guardian': r.get('parent_guardian', ''),
+            'parent_cell': r.get('parent_cell', ''),
+        })
+
+    def handle_camera_student_update(self):
+        """PUBLIC: a student corrects their OWN contact info. Writes to the persistent overrides
+        store (never the base roster), so it survives redeploys and is reversible. Only contact
+        fields are accepted, the ID must resolve to a real roster student, and it is rate limited
+        with the client IP recorded for traceability."""
+        if not _rate_ok(self._client_ip()):
+            self.json_response(429, {'ok': False, 'error': 'Too many tries, slow down.'})
+            return
+        data = self._read_json_body()
+        if data is None:
+            return
+        sid = ''.join(ch for ch in str(data.get('student_id', '')) if ch.isdigit())
+        if len(sid) < 5 or not resolve_student(sid)['found']:
+            self.json_response(200, {'ok': False, 'error': 'We could not find that ID.'})
+            return
+        def clean_phone(v):
+            v = ''.join(ch for ch in str(v or '') if ch in '0123456789 ()+-.').strip()
+            return v[:20]
+        def clean_name(v):
+            return ' '.join(str(v or '').split())[:60]
+        fields = {}
+        if 'student_cell' in data:
+            fields['student_cell'] = clean_phone(data.get('student_cell'))
+        if 'parent_guardian' in data:
+            fields['parent_guardian'] = clean_name(data.get('parent_guardian'))
+        if 'parent_cell' in data:
+            fields['parent_cell'] = clean_phone(data.get('parent_cell'))
+        if not fields:
+            self.json_response(200, {'ok': False, 'error': 'Nothing to update.'})
+            return
+        with _overrides_lock:
+            cur = _ROSTER_OVERRIDES.get(sid, {})
+            cur.update(fields)
+            cur['updated'] = time.strftime('%Y-%m-%dT%H:%M:%SZ', time.gmtime())
+            cur['_ip'] = self._client_ip()
+            _ROSTER_OVERRIDES[sid] = cur
+            _save_overrides()
+        r = resolve_student(sid)
+        self.json_response(200, {
+            'ok': True,
+            'student_cell': r.get('student_cell', ''),
+            'parent_guardian': r.get('parent_guardian', ''),
+            'parent_cell': r.get('parent_cell', ''),
         })
 
     def _new_checkout_rec(self, data, kind, item, camera, out, due, group=''):

@@ -369,7 +369,7 @@ class Handler(BaseHTTPRequestHandler):
             self.handle_camera_lookup()        # PUBLIC: confirm full ID -> "First L." only
             return
         # Camera management: full login OR the shared camera password (scoped to cameras only)
-        if path in ('/api/camera/return', '/api/camera/status', '/api/camera/update', '/api/camera/delete', '/api/camera/asset'):
+        if path in ('/api/camera/return', '/api/camera/status', '/api/camera/update', '/api/camera/delete', '/api/camera/asset', '/api/camera/garcia_roster'):
             if not self.require_camera_auth():
                 return
             if path == '/api/camera/return':   self.handle_camera_return()   # mark returned

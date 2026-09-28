@@ -95,6 +95,25 @@ def save_checkouts(items):
         json.dump(items, f)
     os.replace(tmp, CHECKOUTS_PATH)
 
+# Per-camera ASSET store: a standing note that follows the physical camera across checkouts
+# (e.g. "lens cap replaced 9/28", "small scratch") + an out-of-service flag for broken gear.
+# Keyed by camera name (Cam 01..18). Separate from per-checkout notes, which are incident history.
+ASSETS_PATH = os.path.join(_data_dir(), 'camera_assets.json')
+_assets_lock = threading.Lock()
+
+def load_assets():
+    try:
+        with open(ASSETS_PATH) as f:
+            return json.load(f)
+    except Exception:
+        return {}
+
+def save_assets(data):
+    tmp = ASSETS_PATH + '.tmp'
+    with open(tmp, 'w') as f:
+        json.dump(data, f)
+    os.replace(tmp, ASSETS_PATH)
+
 # Lifecycle: reserved -> out (picked up) -> returned. Records saved before this
 # field existed have no 'status', so derive it: returned => returned, else out
 # (they were migrated from the calendar as cameras already in students' hands).
@@ -281,6 +300,10 @@ class Handler(BaseHTTPRequestHandler):
             if not self.require_camera_auth():
                 return
             self.handle_camera_checkouts()         # camera-scoped: full detail for the teacher
+        elif path == '/api/camera/assets':
+            if not self.require_camera_auth():
+                return
+            self.handle_camera_assets()            # per-camera standing notes + out-of-service
         elif path in ('/', ''):
             self.path = '/index.html'
             self.serve_file()
@@ -298,13 +321,14 @@ class Handler(BaseHTTPRequestHandler):
             self.handle_camera_lookup()        # PUBLIC: confirm full ID -> "First L." only
             return
         # Camera management: full login OR the shared camera password (scoped to cameras only)
-        if path in ('/api/camera/return', '/api/camera/status', '/api/camera/update', '/api/camera/delete'):
+        if path in ('/api/camera/return', '/api/camera/status', '/api/camera/update', '/api/camera/delete', '/api/camera/asset'):
             if not self.require_camera_auth():
                 return
             if path == '/api/camera/return':   self.handle_camera_return()   # mark returned
             elif path == '/api/camera/status': self.handle_camera_status()   # reserved -> out -> returned
             elif path == '/api/camera/update': self.handle_camera_update()   # edit a checkout
             elif path == '/api/camera/delete': self.handle_camera_delete()   # remove a checkout
+            elif path == '/api/camera/asset':  self.handle_camera_asset()    # per-camera standing note / out-of-service
             return
         if not self.require_auth():
             return
@@ -433,13 +457,42 @@ class Handler(BaseHTTPRequestHandler):
                 'returned_date': c.get('returned_date', ''),
                 'status': st,
             })
-        self.json_response(200, {'cameras': CAMERAS, 'checkouts': out})
+        # Out-of-service cameras (names only, no PII) so the public reserve flow can block them.
+        assets = load_assets()
+        oos = [cam for cam in CAMERAS if (assets.get(cam) or {}).get('oos')]
+        self.json_response(200, {'cameras': CAMERAS, 'checkouts': out, 'oos': oos})
 
     def handle_camera_checkouts(self):
         """Camera-scoped: full detail for the teacher (names + emergency phones).
-        Strips the internal _ip field before sending."""
+        Strips the internal _ip field before sending. Includes the per-camera asset store."""
         items = [{k: v for k, v in c.items() if k != '_ip'} for c in load_checkouts()]
-        self.json_response(200, {'cameras': CAMERAS, 'checkouts': items})
+        self.json_response(200, {'cameras': CAMERAS, 'checkouts': items, 'assets': load_assets()})
+
+    def handle_camera_assets(self):
+        """Camera-scoped: the per-camera standing notes + out-of-service flags."""
+        self.json_response(200, {'assets': load_assets()})
+
+    def handle_camera_asset(self):
+        """Camera-scoped: set a camera's standing note and/or out-of-service flag.
+        Body: {camera, note?, oos?}. The note follows the physical camera across checkouts."""
+        data = self._read_json_body()
+        if data is None:
+            return
+        cam = str(data.get('camera', '')).strip()
+        if cam not in CAMERAS:
+            self.json_response(400, {'error': 'Unknown camera'})
+            return
+        with _assets_lock:
+            assets = load_assets()
+            rec = assets.get(cam) or {'note': '', 'oos': False}
+            if 'note' in data:
+                rec['note'] = str(data.get('note', ''))
+            if 'oos' in data:
+                rec['oos'] = bool(data.get('oos'))
+            rec['updated'] = time.strftime('%Y-%m-%dT%H:%M:%SZ', time.gmtime())
+            assets[cam] = rec
+            save_assets(assets)
+        self.json_response(200, {'ok': True, 'camera': cam, 'asset': assets[cam]})
 
     def handle_camera_lookup(self):
         """PUBLIC: confirm a FULL student ID resolves, returning ONLY a first name +

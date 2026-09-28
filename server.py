@@ -463,7 +463,18 @@ class Handler(BaseHTTPRequestHandler):
         first = (r.get('first') or '').strip()
         last = (r.get('last') or '').strip()
         label = (first + ' ' + (last[:1] + '.' if last else '')).strip()
-        self.json_response(200, {'found': True, 'label': label})
+        def last4(s):
+            d = ''.join(ch for ch in str(s or '') if ch.isdigit())
+            return d[-4:] if len(d) >= 4 else ''
+        # Masked verification only: a first name + last initial, the class period (for Photo-2 gating),
+        # and the LAST 4 digits of the phones on file so a student can confirm "yes that's my number"
+        # or see it is missing. No full phone, no full last name, no parent name is ever echoed.
+        scl = last4(r.get('student_cell')); pcl = last4(r.get('parent_cell'))
+        self.json_response(200, {
+            'found': True, 'label': label, 'period': str(r.get('period', '')),
+            'student_last4': scl, 'parent_last4': pcl,
+            'has_student_cell': bool(scl), 'has_parent_cell': bool(pcl),
+        })
 
     def _new_checkout_rec(self, data, kind, item, camera, out, due, group=''):
         """Build one checkout record (camera OR equipment), resolving the student server-side."""

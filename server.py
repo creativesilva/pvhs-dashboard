@@ -507,6 +507,9 @@ class Handler(BaseHTTPRequestHandler):
             'returned': False,
             'returned_date': '',
             'note': str(data.get('note', '')),  # condition note (missing cap, lost plate, etc.)
+            # Student self-reservations arrive with pending=true and need teacher approval; teacher-made
+            # reservations (from the console) are approved on creation.
+            'approved': (False if data.get('pending') else True),
             'created': time.strftime('%Y-%m-%dT%H:%M:%SZ', time.gmtime()),
             'flag': '; '.join(flags),
             '_ip': self._client_ip(),
@@ -613,7 +616,7 @@ class Handler(BaseHTTPRequestHandler):
             for k in ('camera', 'out', 'due', 'status', 'picked_up_date', 'returned', 'returned_date',
                       'student_name', 'student_id', 'period', 'course',
                       'student_cell', 'parent_guardian', 'parent_cell', 'flag',
-                      'kind', 'item', 'group', 'note'):
+                      'kind', 'item', 'group', 'note', 'approved'):
                 if k in data:
                     c[k] = data[k]
             if 'status' in data:

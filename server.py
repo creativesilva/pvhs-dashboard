@@ -54,9 +54,10 @@ if _roster_env:
 # Camera checkout: durable storage on the Render disk (/var/data), roster lookup
 # ---------------------------------------------------------------------------
 
-# Camera inventory (matches the labels used in the checkout Google Calendar: "Cam 01".."Cam 21").
-CAMERAS = ["Cam 01","Cam 02","Cam 03","Cam 04","Cam 05","Cam 06","Cam 07","Cam 08","Cam 09","Cam 10",
-           "Cam 11","Cam 12","Cam 13","Cam 14","Cam 15","Cam 16","Cam 17","Cam 18","Cam 19","Cam 20","Cam 21"]
+# Camera inventory. Cam 01..Cam 18 are ours (labels match the checkout Google Calendar).
+# Cam 19/20/21 belong to another teacher and are intentionally NOT in our inventory.
+CAMERAS = ["Cam 01","Cam 02","Cam 03","Cam 04","Cam 05","Cam 06","Cam 07","Cam 08","Cam 09",
+           "Cam 10","Cam 11","Cam 12","Cam 13","Cam 14","Cam 15","Cam 16","Cam 17","Cam 18"]
 
 def _data_dir():
     """The Render persistent disk mount, or the app dir as a local/dev fallback."""

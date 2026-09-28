@@ -54,6 +54,19 @@ if _roster_env:
         except Exception as e:
             print(f'[roster] Failed to load from env: {e}')
 
+# Garcia's CAMERA-ONLY roster (Mrs. Garcia / Solorio, CTE Photo 1A P2+P3). Loaded from the
+# GARCIA_ROSTER env var (base64+gzip). These students exist ONLY for camera-checkout resolution
+# (resolve_student); they are NOT part of Silva's dashboard roster (/api/roster) or any grading view.
+_GARCIA_STUDENTS = []
+_garcia_env = os.environ.get('GARCIA_ROSTER', '')
+if _garcia_env:
+    try:
+        _gd = json.loads(gzip.decompress(base64.b64decode(_garcia_env)))
+        _GARCIA_STUDENTS = _gd.get('students', _gd) if isinstance(_gd, dict) else _gd
+        print(f'[garcia] Loaded {len(_GARCIA_STUDENTS)} camera-only photography students')
+    except Exception as e:
+        print(f'[garcia] Failed to load from env: {e}')
+
 # ---------------------------------------------------------------------------
 # Camera checkout: durable storage on the Render disk (/var/data), roster lookup
 # ---------------------------------------------------------------------------
@@ -163,25 +176,40 @@ def _roster_students():
     except Exception:
         return []
 
+def _is_photo(s):
+    """A photography student (CTE Photo 1 or 2). Digital Arts students are NOT photo."""
+    v = ((s.get('course_code') or '') + ' ' + (s.get('course') or '')).lower()
+    return 'photo' in v
+
+def _camera_students():
+    """Roster the camera checkout resolves against: PHOTOGRAPHY students only.
+    = Silva's Photo classes (Digital Arts EXCLUDED, handled on paper) + Garcia's Photo roster.
+    Garcia is listed first so a student in both (Silva DA + Garcia Photo) resolves as Photo."""
+    return list(_GARCIA_STUDENTS) + [s for s in _roster_students() if _is_photo(s)]
+
+def _student_result(s):
+    first = (s.get('first_name') or '').strip()
+    last = (s.get('last_name') or '').strip()
+    return {
+        'found': True,
+        'name': (last + ', ' + first).strip().strip(','),
+        'first': first,
+        'last': last,
+        'period': str(s.get('period', '')),
+        'course': s.get('course') or s.get('course_code') or '',
+        'student_cell': s.get('Student Cell') or s.get('student_cell') or '',
+        'parent_guardian': s.get('Parent Guardian') or s.get('parent_guardian') or '',
+        'parent_cell': s.get('Parent Cell') or s.get('parent_cell') or '',
+    }
+
 def resolve_student(student_id):
-    """Look a student up by ID in the roster. Returns name + period + emergency phones.
+    """Look a student up for CAMERA CHECKOUT. Resolves photography students only (Silva Photo +
+    Garcia Photo); Silva's Digital Arts students are intentionally not in the camera system.
     Never exposed on public endpoints; used server-side only."""
     sid = str(student_id).strip()
-    for s in _roster_students():
+    for s in _camera_students():
         if str(s.get('student_id', '')).strip() == sid:
-            first = (s.get('first_name') or '').strip()
-            last = (s.get('last_name') or '').strip()
-            return {
-                'found': True,
-                'name': (last + ', ' + first).strip().strip(','),
-                'first': first,
-                'last': last,
-                'period': str(s.get('period', '')),
-                'course': s.get('course') or s.get('course_code') or '',
-                'student_cell': s.get('Student Cell') or s.get('student_cell') or '',
-                'parent_guardian': s.get('Parent Guardian') or s.get('parent_guardian') or '',
-                'parent_cell': s.get('Parent Cell') or s.get('parent_cell') or '',
-            }
+            return _student_result(s)
     return {'found': False, 'name': '', 'first': '', 'last': '', 'period': '', 'course': '',
             'student_cell': '', 'parent_guardian': '', 'parent_cell': ''}
 

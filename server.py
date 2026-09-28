@@ -1031,3 +1031,5 @@ if __name__ == '__main__':
             print(f'  Canvas token test: FAILED ({e})')
     server = ThreadedHTTPServer(('0.0.0.0', PORT), Handler)
     server.serve_forever()
+
+# deploy trigger 2026-09-28: ensure garcia_roster endpoint is live

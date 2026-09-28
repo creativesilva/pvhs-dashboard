@@ -12,7 +12,9 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Oswald:wght@400;600;700&display=swap" rel="stylesheet">
-<title>PVHS Teacher Command Center</title>
+<!-- Shared header chrome + Catalog accordion, same as curriculum.html -->
+<link rel="stylesheet" href="https://www.creativesilva.com/css/silva-module.css?v=d132cef2">
+<title>Teacher Command Center | PVHS</title>
 <style>
 /* ---- PV Teal tokens (dark default) ---- */
 :root {
@@ -282,42 +284,32 @@ footer { text-align: center; color: var(--text-faint); font-size: 0.72rem; paddi
 <body>
 
 <!-- Catalog Header -->
-<div class="catalog-sticky">
-  <div class="catalog-sticky-inner">
-    <div class="catalog-titlebar">
-      <h1 class="page-title">Teacher Command Center</h1>
-      <a class="cal-btn" href="https://www.creativesilva.com/calendar.html">Calendar</a>
-      <iframe class="header-clock" src="https://www.creativesilva.com/assets/embeds/period-clock.html" title="Class period countdown" scrolling="no" loading="lazy"></iframe>
-      <div class="hdr-user" id="hdr-user" style="display:none;">
-        <img class="user-avatar" id="user-avatar" src="Mr.Silva_Profile_Picture.png" alt="">
-        <span class="hdr-user-name" id="user-name">Mr. Silva</span>
-        <button id="themeToggle" class="btn ghost small" onclick="toggleTheme()"><span data-when="dark">Light</span><span data-when="light" hidden>Dark</span></button>
-        <button class="btn ghost small" onclick="signOut()">Sign Out</button>
-      </div>
-    </div>
-    <nav class="cat-bar" aria-label="Quick catalog menu">
-      <div class="cat-bar-inner">
-        <span class="cat-bar-label">
-          <a class="cat-bar-logo-link" href="https://www.creativesilva.com/" aria-label="Back to creativesilva.com">
-            <img class="cat-bar-logo" src="https://www.creativesilva.com/logos/CS_Logo_Only_Teal.svg" alt="Chris Silva">
-          </a>
-        </span>
-        <div class="cat-bar-items">
-          <div class="cat-bar-course cat-bar-catalog" id="catalogDropdown">
-            <button type="button" class="cbc-trigger cbc-trigger-catalog" onclick="this.parentElement.classList.toggle('open')">Catalog <span class="cbc-caret">&#x25BE;</span></button>
-            <div class="cbc-menu">
-              <a href="https://www.creativesilva.com/curriculum.html" class="cbc-mod cbc-main">&larr; Main Catalog</a>
-              <a href="https://www.creativesilva.com/curriculum.html#teacher-resources" class="cbc-mod cbc-teacher">Teacher Resources</a>
-              <a href="https://www.creativesilva.com/build-resources.html" class="cbc-mod">Build Resources</a>
-              <a href="https://www.creativesilva.com/curriculum.html#universal" class="cbc-mod">All Courses</a>
-            </div>
-          </div>
-        </div>
-        <span class="cat-bar-sub" id="topbarSub"></span>
-      </div>
-    </nav>
-  </div>
+<!-- Shared unified header + Catalog accordion, built by silva-nav.js (same as curriculum.html). -->
+<nav class="silva-nav" aria-label="Site navigation"></nav>
+<!-- User controls + school/term, moved into the shared header once it builds. -->
+<div class="hdr-user" id="hdr-user" style="display:none;">
+  <img class="user-avatar" id="user-avatar" src="Mr.Silva_Profile_Picture.png" alt="">
+  <span class="hdr-user-name" id="user-name">Mr. Silva</span>
+  <button id="themeToggle" class="btn ghost small" onclick="toggleTheme()"><span data-when="dark">Light</span><span data-when="light" hidden>Dark</span></button>
+  <button class="btn ghost small" onclick="signOut()">Sign Out</button>
 </div>
+<span class="cat-bar-sub" id="topbarSub" hidden></span>
+<script src="https://www.creativesilva.com/js/silva-nav.js?v=7ea8b872"></script>
+<script>
+(function(){
+  // Move the Command Center's user controls + school/term into the shared header
+  // once silva-nav.js has built it (same retry pattern the calendar uses).
+  function inject(){
+    var tb=document.querySelector('.silva-uni-titlebar'), bar=document.querySelector('.silva-uni-bar');
+    if(!tb) return false;
+    var u=document.getElementById('hdr-user'); if(u && u.parentElement!==tb) tb.appendChild(u);
+    var s=document.getElementById('topbarSub'); if(s && bar && s.parentElement!==bar){ s.hidden=false; bar.appendChild(s); }
+    return true;
+  }
+  function tryI(n){ if(inject()||n<=0) return; setTimeout(function(){ tryI(n-1); },40); }
+  if(document.readyState==='loading') document.addEventListener('DOMContentLoaded',function(){ tryI(80); }); else tryI(80);
+})();
+</script>
 
 <!-- Login Screen -->
 <div id="login-screen">

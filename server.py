@@ -226,6 +226,32 @@ def save_memcards(data):
         json.dump(data, f)
     os.replace(tmp, MEMCARDS_PATH)
 
+# Teacher-declared BLACKOUT days: days the teacher closes to student camera checkouts (e.g. an
+# absence). Keyed by ISO date "YYYY-MM-DD" -> {added}. NO reason is stored or shown to students;
+# a closed day is simply grayed and not reservable. Exposed on both feeds.
+BLACKOUTS_PATH = os.path.join(_data_dir(), 'blackout_days.json')
+_blackouts_lock = threading.Lock()
+
+def _load_blackouts():
+    try:
+        with open(BLACKOUTS_PATH) as f:
+            d = json.load(f)
+            return d if isinstance(d, dict) else {}
+    except Exception:
+        return {}
+
+def _save_blackouts(data):
+    tmp = BLACKOUTS_PATH + '.tmp'
+    with open(tmp, 'w') as f:
+        json.dump(data, f)
+    os.replace(tmp, BLACKOUTS_PATH)
+
+def _blackout_list():
+    return sorted(_load_blackouts().keys())
+
+def _is_blackout(iso):
+    return str(iso or '') in _load_blackouts()
+
 # Lifecycle: reserved -> out (picked up) -> returned. Records saved before this
 # field existed have no 'status', so derive it: returned => returned, else out
 # (they were migrated from the calendar as cameras already in students' hands).
@@ -578,7 +604,7 @@ class Handler(BaseHTTPRequestHandler):
             self.handle_camera_student_update()# PUBLIC: a student corrects their own contact -> overrides store
             return
         # Camera management: full login OR the shared camera password (scoped to cameras only)
-        if path in ('/api/camera/return', '/api/camera/status', '/api/camera/update', '/api/camera/delete', '/api/camera/asset', '/api/camera/garcia_roster', '/api/camera/card_hold', '/api/camera/card_return', '/api/camera/student_override'):
+        if path in ('/api/camera/return', '/api/camera/status', '/api/camera/update', '/api/camera/delete', '/api/camera/asset', '/api/camera/garcia_roster', '/api/camera/card_hold', '/api/camera/card_return', '/api/camera/student_override', '/api/camera/blackout'):
             if not self.require_camera_auth():
                 return
             if path == '/api/camera/return':   self.handle_camera_return()   # mark returned
@@ -590,6 +616,7 @@ class Handler(BaseHTTPRequestHandler):
             elif path == '/api/camera/card_hold':   self.handle_camera_card_hold()    # student left card -> wallet slot + flag camera
             elif path == '/api/camera/card_return': self.handle_camera_card_return()  # card returned to student -> free slot
             elif path == '/api/camera/student_override': self.handle_camera_student_override()  # teacher edits a student's contact -> profile
+            elif path == '/api/camera/blackout': self.handle_camera_blackout()  # teacher closes/opens a day to checkouts
             return
         if not self.require_auth():
             return
@@ -722,7 +749,8 @@ class Handler(BaseHTTPRequestHandler):
         assets = load_assets()
         oos = [cam for cam in CAMERAS if (assets.get(cam) or {}).get('oos')]
         no_card = [cam for cam in CAMERAS if (assets.get(cam) or {}).get('no_card')]
-        self.json_response(200, {'cameras': CAMERAS, 'checkouts': out, 'oos': oos, 'no_card': no_card})
+        self.json_response(200, {'cameras': CAMERAS, 'checkouts': out, 'oos': oos, 'no_card': no_card,
+                                 'blackouts': _blackout_list()})
 
     def handle_camera_checkouts(self):
         """Camera-scoped: full detail for the teacher (names + emergency phones).
@@ -730,7 +758,8 @@ class Handler(BaseHTTPRequestHandler):
         and the memory-card wallet."""
         items = [{k: v for k, v in c.items() if k != '_ip'} for c in load_checkouts()]
         self.json_response(200, {'cameras': CAMERAS, 'checkouts': items,
-                                 'assets': load_assets(), 'cards': load_memcards()})
+                                 'assets': load_assets(), 'cards': load_memcards(),
+                                 'blackouts': _blackout_list()})
 
     def handle_camera_assets(self):
         """Camera-scoped: the per-camera standing notes + out-of-service flags."""
@@ -753,6 +782,27 @@ class Handler(BaseHTTPRequestHandler):
                            'updated': time.strftime('%Y-%m-%dT%H:%M:%SZ', time.gmtime())}, f)
             _load_garcia()
         self.json_response(200, {'ok': True, 'count': len(_GARCIA_STUDENTS)})
+
+    def handle_camera_blackout(self):
+        """Camera-scoped: the teacher closes/opens a day to student checkouts (an absence, etc.).
+        Body {date:'YYYY-MM-DD', on:true|false}. No reason is stored or shown to students."""
+        data = self._read_json_body()
+        if data is None:
+            return
+        date = str(data.get('date', '')).strip()
+        p = date.split('-')
+        if len(date) != 10 or len(p) != 3 or not (p[0].isdigit() and p[1].isdigit() and p[2].isdigit()):
+            self.json_response(400, {'error': 'Provide a date as YYYY-MM-DD.'})
+            return
+        on = bool(data.get('on', True))
+        with _blackouts_lock:
+            b = _load_blackouts()
+            if on:
+                b[date] = {'added': time.strftime('%Y-%m-%dT%H:%M:%SZ', time.gmtime())}
+            else:
+                b.pop(date, None)
+            _save_blackouts(b)
+        self.json_response(200, {'ok': True, 'blackouts': sorted(_load_blackouts().keys())})
 
     def handle_camera_asset(self):
         """Camera-scoped: set a camera's standing note and/or out-of-service flag.
@@ -1048,6 +1098,10 @@ class Handler(BaseHTTPRequestHandler):
             # here so the gate can't be skipped by calling the API directly. Fails open.
             if not camera_eligibility(sid)['eligible']:
                 self.json_response(403, {'error': 'You are not eligible to reserve a camera right now because you have more than %d missing assignments. Please turn in your missing work and try again later.' % MISSING_LIMIT})
+                return
+            # Teacher-closed (blackout) day: not available for student checkouts. No reason shown.
+            if _is_blackout(out):
+                self.json_response(409, {'error': 'That day is not available for checkouts. Please pick another day.'})
                 return
             if camera not in CAMERAS:
                 self.json_response(400, {'error': 'Unknown camera.'})

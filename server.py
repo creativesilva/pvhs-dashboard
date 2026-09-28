@@ -852,10 +852,16 @@ class Handler(BaseHTTPRequestHandler):
             self.json_response(400, {'error': 'Pick a wallet slot 1-%d.' % CARD_SLOTS})
             return
         cam = str(data.get('from_camera', '')).strip()
+        sid = str(data.get('student_id', '')).strip()
+        sname = str(data.get('student_name', '')).strip()
+        if sid and not sname:                            # ad-hoc hold: resolve the name from the ID
+            r = resolve_student(sid)
+            if r.get('found'):
+                sname = r.get('name', '')
         rec = {
             'slot': slot,
-            'student_id': str(data.get('student_id', '')).strip(),
-            'student_name': str(data.get('student_name', '')).strip(),
+            'student_id': sid,
+            'student_name': sname,
             'from_camera': cam,
             'note': str(data.get('note', '')).strip(),
             'checkout_id': str(data.get('checkout_id', '')).strip(),

@@ -27,6 +27,11 @@ PORT         = int(os.environ.get('PORT', 8080))
 CANVAS_HOST  = 'smjuhsd.instructure.com'
 CANVAS_TOKEN = os.environ.get('CANVAS_TOKEN', '').strip()
 API_KEY      = os.environ.get('API_KEY', '')
+# Camera-reservation eligibility: a Silva PHOTO student with MORE THAN this many missing
+# assignments (in Silva's Photo Canvas courses) is blocked from reserving until they turn work in.
+# Garcia's students are never gated (they are not in Silva's courses, and we skip the check for them).
+# The check is LIVE against Canvas at ID entry and FAILS OPEN: any error/undetermined => allowed.
+MISSING_LIMIT = int(os.environ.get('MISSING_LIMIT', '3'))
 # Shared camera-manager password. Unlocks ONLY the camera checkout endpoints
 # (not Canvas, grades, or the full roster) so another teacher (e.g. Ms. Garcia)
 # can run the standalone camera calendar without a Command Center login.
@@ -286,6 +291,123 @@ def resolve_student(student_id):
             return _student_result(s)
     return {'found': False, 'name': '', 'first': '', 'last': '', 'period': '', 'course': '',
             'student_cell': '', 'parent_guardian': '', 'parent_cell': ''}
+
+# ---------------------------------------------------------------------------
+# Camera-reservation eligibility: block a Silva PHOTO student who has MORE THAN
+# MISSING_LIMIT missing assignments in Silva's Photo courses. The check is LIVE
+# against Canvas at ID entry and FAILS OPEN: any error/undetermined result => allowed,
+# so a Canvas hiccup or an unmapped ID never blocks a legitimate student. Garcia's
+# students are exempt (not in Silva's roster, and never in Silva's Canvas courses).
+# ---------------------------------------------------------------------------
+_silva_ids_cache = {'ids': None, 'exp': 0}
+_photo_courses_cache = {'ids': None, 'exp': 0}
+_elig_pass_cache = {}   # sid -> (expiry, result); caches only a DEFINITE pass, so a blocked
+                        # student who turns work in is re-checked live on their next try.
+
+def _silva_photo_ids():
+    """Set of student_id strings for Mr. Silva's PHOTO students (roster_data.json).
+    Only these students are subject to the missing-assignment gate. Cached briefly."""
+    now = time.time()
+    if _silva_ids_cache['ids'] is not None and now < _silva_ids_cache['exp']:
+        return _silva_ids_cache['ids']
+    ids = set()
+    for s in _roster_students():
+        if _is_photo(s):
+            sid = str(s.get('student_id', '')).strip()
+            if sid:
+                ids.add(sid)
+    _silva_ids_cache['ids'] = ids
+    _silva_ids_cache['exp'] = now + 300   # 5 min; the roster rarely changes mid-session
+    return ids
+
+def _canvas_get_json(path, timeout=8):
+    """Server-side GET to Canvas with the shared token. Returns (status, parsed_json, link)
+    or (None, None, None) on failure. Never raises (the gate must fail open)."""
+    if not CANVAS_TOKEN:
+        return (None, None, None)
+    ctx = ssl.create_default_context()
+    conn = http.client.HTTPSConnection(CANVAS_HOST, timeout=timeout, context=ctx)
+    headers = {'Authorization': f'Bearer {CANVAS_TOKEN}', 'User-Agent': 'PVHS-Dashboard/2.0'}
+    try:
+        conn.request('GET', path, headers=headers)
+        resp = conn.getresponse()
+        raw = resp.read()
+        if resp.status >= 400:
+            print(f'[eligibility] canvas GET {path} -> {resp.status}: {raw[:200]}')
+            return (resp.status, None, None)
+        try:
+            parsed = json.loads(raw)
+        except Exception:
+            parsed = None
+        return (resp.status, parsed, resp.getheader('Link', ''))
+    except Exception as e:
+        print(f'[eligibility] canvas GET error {path}: {e}')
+        return (None, None, None)
+    finally:
+        try:
+            conn.close()
+        except Exception:
+            pass
+
+def _silva_photo_course_ids():
+    """Silva's available PHOTO course IDs (the Canvas token is Silva's). Cached 1h.
+    Returns a list of course-id strings, or [] if none/undetermined."""
+    now = time.time()
+    if _photo_courses_cache['ids'] is not None and now < _photo_courses_cache['exp']:
+        return _photo_courses_cache['ids']
+    _status, courses, _link = _canvas_get_json(
+        '/api/v1/courses?enrollment_type=teacher&state[]=available&per_page=100')
+    if isinstance(courses, list):
+        ids = []
+        for c in courses:
+            name = ((c.get('name') or '') + ' ' + (c.get('course_code') or '')).lower()
+            if 'photo' in name and c.get('id') is not None:
+                ids.append(str(c['id']))
+        _photo_courses_cache['ids'] = ids            # cache only a definite answer
+        _photo_courses_cache['exp'] = now + 3600
+        print(f'[eligibility] Silva photo course ids: {ids}')
+        return ids
+    return []   # API failure: leave cache empty so we retry next time
+
+def _missing_count(sid):
+    """Count a student's MISSING assignments across Silva's Photo courses via Canvas.
+    Returns an int, or None if it could not be determined (=> fail open upstream)."""
+    course_ids = _silva_photo_course_ids()
+    if not course_ids:
+        return None
+    total, saw_ok = 0, False
+    for cid in course_ids:
+        # Teacher-scoped submissions for this ONE student; Canvas's 'missing' flag mirrors
+        # exactly what the student sees as missing in that course.
+        path = (f'/api/v1/courses/{cid}/students/submissions'
+                f'?student_ids[]=sis_user_id:{sid}&per_page=100')
+        _status, subs, _link = _canvas_get_json(path)
+        if isinstance(subs, list):
+            saw_ok = True
+            for s in subs:
+                if s.get('missing') is True:
+                    total += 1
+    return total if saw_ok else None
+
+def camera_eligibility(sid):
+    """Eligibility for the camera-reservation gate. Silva PHOTO students only; fail-open.
+    Returns {'gated':bool, 'eligible':bool, 'missing':int|None, 'undetermined':bool}."""
+    sid = str(sid).strip()
+    if sid not in _silva_photo_ids():
+        return {'gated': False, 'eligible': True, 'missing': None, 'undetermined': False}
+    now = time.time()
+    cached = _elig_pass_cache.get(sid)
+    if cached and now < cached[0]:
+        return cached[1]   # a recent clean pass (covers ID-entry -> checkout without re-hitting Canvas)
+    count = _missing_count(sid)
+    if count is None:
+        return {'gated': True, 'eligible': True, 'missing': None, 'undetermined': True}
+    eligible = (count <= MISSING_LIMIT)
+    res = {'gated': True, 'eligible': eligible, 'missing': count, 'undetermined': False}
+    if eligible:
+        _elig_pass_cache[sid] = (now + 300, res)   # cache passes only; blocked students re-check live
+    print(f'[eligibility] sid={sid} missing={count} limit={MISSING_LIMIT} eligible={eligible}')
+    return res
 
 # ---------------------------------------------------------------------------
 # Firebase ID-token verification (lightweight, no Admin SDK needed)
@@ -750,9 +872,20 @@ class Handler(BaseHTTPRequestHandler):
             return
         first = (r.get('first') or '').strip()
         last = (r.get('last') or '').strip()
+        label = (first + ' ' + (last[:1] + '.' if last else '')).strip()
+        # Missing-assignment gate (Silva Photo students only; live Canvas; fails open).
+        # A blocked student gets NO contact info back: they never reach the review screen.
+        elig = camera_eligibility(sid)
+        if not elig['eligible']:
+            self.json_response(200, {
+                'found': True, 'eligible': False, 'label': label,
+                'missing_count': elig.get('missing'), 'missing_limit': MISSING_LIMIT,
+            })
+            return
         self.json_response(200, {
             'found': True,
-            'label': (first + ' ' + (last[:1] + '.' if last else '')).strip(),
+            'eligible': True,
+            'label': label,
             'name': r.get('name', ''),
             'period': str(r.get('period', '')),
             'student_cell': r.get('student_cell', ''),
@@ -883,6 +1016,11 @@ class Handler(BaseHTTPRequestHandler):
             return
         # Student-facing guards (the teacher console is trusted to override these).
         if not is_teacher:
+            # Defense in depth: the client blocks ineligible students at ID entry, but re-check
+            # here so the gate can't be skipped by calling the API directly. Fails open.
+            if not camera_eligibility(sid)['eligible']:
+                self.json_response(403, {'error': 'You are not eligible to reserve a camera right now because you have more than %d missing assignments. Please turn in your missing work and try again later.' % MISSING_LIMIT})
+                return
             if camera not in CAMERAS:
                 self.json_response(400, {'error': 'Unknown camera.'})
                 return

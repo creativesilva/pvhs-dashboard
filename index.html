@@ -635,10 +635,34 @@ async function api(path, opts={}){
   if(res.status===401 && currentUser){ firebaseToken=await currentUser.getIdToken(true); headers['Authorization']=`Bearer ${firebaseToken}`; res=await fetch(path,{...opts,headers}); }
   return res;
 }
+const sleep=ms=>new Promise(r=>setTimeout(r,ms));
+// Retry transient failures: proxy overload from many parallel course loads, or Canvas throttling.
+async function apiOK(url){
+  const TRANSIENT={429:1,500:1,502:1,503:1,504:1};
+  for(let attempt=0;;attempt++){
+    let r;
+    try{ r=await api(url); }
+    catch(e){ if(attempt>=5) throw e; await sleep(500*(attempt+1)+Math.random()*400); continue; }
+    if(r.ok) return r;
+    if(TRANSIENT[r.status] && attempt<5){ await sleep(500*(attempt+1)+Math.random()*400); continue; }
+    throw new Error(`Canvas ${r.status}`);
+  }
+}
+// Run an async fn over items with limited concurrency; returns Promise.allSettled-shaped results.
+async function mapPool(items, limit, fn){
+  const results=new Array(items.length); let i=0;
+  async function worker(){
+    while(i<items.length){ const idx=i++;
+      try{ results[idx]={status:'fulfilled',value:await fn(items[idx],idx)}; }
+      catch(e){ results[idx]={status:'rejected',reason:e}; } }
+  }
+  await Promise.all(Array.from({length:Math.min(limit,items.length||1)},worker));
+  return results;
+}
 async function canvasFetch(canvasPath){
   let all=[], url=`/api/v1${canvasPath}`;
   while(url){
-    const r=await api(url); if(!r.ok) throw new Error(`Canvas ${r.status}`);
+    const r=await apiOK(url);
     const data=await r.json(); all=all.concat(data);
     const link=r.headers.get('Link')||'';
     const next=link.match(/<([^>]+)>;\s*rel="next"/);
@@ -746,14 +770,16 @@ async function loadAllCanvasData(){
   tbody.innerHTML='<tr><td colspan="5" class="empty">Scanning all courses...</td></tr>';
   status.textContent='Loading all courses in parallel...';
 
-  const results=await Promise.allSettled(coursesCache.map(async course=>{
+  // Load at most a few courses at a time. Firing all courses x 3 calls at once
+  // overwhelmed the single proxy instance and returned a storm of 502s.
+  const results=await mapPool(coursesCache, 4, async course=>{
     const [enrollments,assignments,allSubs]=await Promise.all([
       canvasFetch(`/courses/${course.id}/enrollments?type[]=StudentEnrollment&state[]=active&per_page=100`),
       canvasFetch(`/courses/${course.id}/assignments?per_page=100`),
       canvasFetch(`/courses/${course.id}/students/submissions?student_ids[]=all&per_page=100`),
     ]);
     return {course,enrollments,assignments,allSubs};
-  }));
+  });
 
   results.forEach(r=>{
     if(r.status!=='fulfilled') return;

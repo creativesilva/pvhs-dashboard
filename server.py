@@ -54,18 +54,11 @@ if _roster_env:
         except Exception as e:
             print(f'[roster] Failed to load from env: {e}')
 
-# Garcia's CAMERA-ONLY roster (Mrs. Garcia / Solorio, CTE Photo 1A P2+P3). Loaded from the
-# GARCIA_ROSTER env var (base64+gzip). These students exist ONLY for camera-checkout resolution
-# (resolve_student); they are NOT part of Silva's dashboard roster (/api/roster) or any grading view.
+# Garcia's CAMERA-ONLY roster (Mrs. Garcia / Solorio, CTE Photo 1A P2+P3): students that exist ONLY
+# for camera-checkout resolution (resolve_student), never in Silva's dashboard roster/grading. It is
+# loaded from the persistent disk (uploaded via the camera-scoped endpoint), or seeded from the
+# GARCIA_ROSTER env var. Populated by _load_garcia() once the data dir is known (below).
 _GARCIA_STUDENTS = []
-_garcia_env = os.environ.get('GARCIA_ROSTER', '')
-if _garcia_env:
-    try:
-        _gd = json.loads(gzip.decompress(base64.b64decode(_garcia_env)))
-        _GARCIA_STUDENTS = _gd.get('students', _gd) if isinstance(_gd, dict) else _gd
-        print(f'[garcia] Loaded {len(_GARCIA_STUDENTS)} camera-only photography students')
-    except Exception as e:
-        print(f'[garcia] Failed to load from env: {e}')
 
 # ---------------------------------------------------------------------------
 # Camera checkout: durable storage on the Render disk (/var/data), roster lookup
@@ -94,6 +87,33 @@ def _data_dir():
 
 CHECKOUTS_PATH = os.path.join(_data_dir(), 'checkouts.json')
 _checkouts_lock = threading.Lock()
+
+# Garcia camera-only roster: persistent-disk file (uploaded via camera endpoint) wins; else seed
+# from the GARCIA_ROSTER env var and persist it to disk so it survives redeploys.
+GARCIA_PATH = os.path.join(_data_dir(), 'garcia_roster.json')
+_garcia_lock = threading.Lock()
+
+def _load_garcia():
+    global _GARCIA_STUDENTS
+    lst = []
+    if os.path.exists(GARCIA_PATH):
+        try:
+            lst = json.load(open(GARCIA_PATH)).get('students', [])
+        except Exception as e:
+            print(f'[garcia] disk load failed: {e}')
+    elif os.environ.get('GARCIA_ROSTER'):
+        try:
+            gd = json.loads(gzip.decompress(base64.b64decode(os.environ['GARCIA_ROSTER'])))
+            lst = gd.get('students', gd) if isinstance(gd, dict) else gd
+            with open(GARCIA_PATH, 'w') as f:
+                json.dump({'students': lst}, f)
+        except Exception as e:
+            print(f'[garcia] env seed failed: {e}')
+    _GARCIA_STUDENTS = lst
+    print(f'[garcia] {len(lst)} camera-only photography students loaded')
+    return lst
+
+_load_garcia()
 
 def load_checkouts():
     try:
@@ -357,6 +377,7 @@ class Handler(BaseHTTPRequestHandler):
             elif path == '/api/camera/update': self.handle_camera_update()   # edit a checkout
             elif path == '/api/camera/delete': self.handle_camera_delete()   # remove a checkout
             elif path == '/api/camera/asset':  self.handle_camera_asset()    # per-camera standing note / out-of-service
+            elif path == '/api/camera/garcia_roster': self.handle_camera_garcia_roster()  # load Garcia's camera-only roster
             return
         if not self.require_auth():
             return
@@ -499,6 +520,24 @@ class Handler(BaseHTTPRequestHandler):
     def handle_camera_assets(self):
         """Camera-scoped: the per-camera standing notes + out-of-service flags."""
         self.json_response(200, {'assets': load_assets()})
+
+    def handle_camera_garcia_roster(self):
+        """Camera-scoped: replace Garcia's camera-only roster (persisted to disk). Body:
+        {students:[...]}. These are used ONLY for camera resolution, never the dashboard roster."""
+        data = self._read_json_body()
+        if data is None:
+            return
+        students = data.get('students') if isinstance(data, dict) else (data if isinstance(data, list) else None)
+        if not isinstance(students, list) or not students:
+            self.json_response(400, {'error': 'Provide a non-empty students list.'})
+            return
+        with _garcia_lock:
+            os.makedirs(_data_dir(), exist_ok=True)
+            with open(GARCIA_PATH, 'w') as f:
+                json.dump({'students': students,
+                           'updated': time.strftime('%Y-%m-%dT%H:%M:%SZ', time.gmtime())}, f)
+            _load_garcia()
+        self.json_response(200, {'ok': True, 'count': len(_GARCIA_STUDENTS)})
 
     def handle_camera_asset(self):
         """Camera-scoped: set a camera's standing note and/or out-of-service flag.

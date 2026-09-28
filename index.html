@@ -786,7 +786,7 @@ async function loadAllCanvasData(){
     const [enrollments,assignments,allSubs]=await Promise.all([
       canvasFetch(`/courses/${course.id}/enrollments?type[]=StudentEnrollment&state[]=active&per_page=100`),
       canvasFetch(`/courses/${course.id}/assignments?per_page=100`),
-      canvasFetch(`/courses/${course.id}/students/submissions?student_ids[]=all&per_page=100`),
+      canvasFetch(`/courses/${course.id}/students/submissions?student_ids[]=all&include[]=user&per_page=100`),
     ]);
     return {course,enrollments,assignments,allSubs};
   });
@@ -794,10 +794,13 @@ async function loadAllCanvasData(){
   results.forEach(r=>{
     if(r.status!=='fulfilled') return;
     const {course,enrollments,assignments,allSubs}=r.value;
-    const nameMap={}; enrollments.forEach(e=>{nameMap[e.user_id]=e.user?.sortable_name||e.user?.name||'Unknown';});
+    const nameMap={}; enrollments.forEach(e=>{nameMap[e.user_id]=e.user?.sortable_name||e.user?.name||'';});
     const missingSubs=allSubs.filter(s=>s.missing||s.late_policy_status==='missing');
     const byStudent={};
     missingSubs.forEach(s=>{
+      // Submissions carry their user (include[]=user), which covers students not in the
+      // active-enrollment list (concluded/inactive) that otherwise showed as "Unknown".
+      if(s.user && !nameMap[s.user_id]) nameMap[s.user_id]=s.user.sortable_name||s.user.name||'';
       if(!byStudent[s.user_id]) byStudent[s.user_id]={items:[],totalPts:0};
       const a=assignments.find(x=>x.id===s.assignment_id);
       byStudent[s.user_id].items.push({name:a?.name||'Unknown',pts:a?.points_possible||0});

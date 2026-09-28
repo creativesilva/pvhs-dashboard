@@ -63,6 +63,15 @@ if _roster_env:
 CAMERAS = ["Cam 01","Cam 02","Cam 03","Cam 04","Cam 05","Cam 06","Cam 07","Cam 08","Cam 09",
            "Cam 10","Cam 11","Cam 12","Cam 13","Cam 14","Cam 15","Cam 16","Cam 17","Cam 18"]
 
+# Add-on gear, tracked as its OWN checkout records (kind='equipment', item=<key>) so each unit
+# is reserved, picked up, returned, and noted independently of any camera. Totals = pool size.
+EQUIPMENT_ITEMS = {
+    "tripod":    {"label": "K&F Concept Tripod",            "total": 5},
+    "wide":      {"label": "Canon RF-S 10-18mm ultra-wide", "total": 2},
+    "zoom":      {"label": "Canon RF 100-400mm ultra-zoom", "total": 2},
+    "speedlite": {"label": "Canon Speedlite EL-10 flash",   "total": 5},
+}
+
 def _data_dir():
     """The Render persistent disk mount, or the app dir as a local/dev fallback."""
     for d in ('/var/data', '/data'):
@@ -407,9 +416,12 @@ class Handler(BaseHTTPRequestHandler):
         self.json_response(200, {'cameras': CAMERAS})
 
     def handle_camera_calendar(self):
-        """PUBLIC: sanitized checkouts. NO names, IDs, or phone numbers, ever."""
+        """PUBLIC: sanitized CAMERA checkouts. NO names, IDs, or phone numbers, ever.
+        Equipment records are excluded (the public calendar tracks cameras only)."""
         out = []
         for c in load_checkouts():
+            if c.get('kind') == 'equipment':
+                continue
             st = status_of(c)
             out.append({
                 'id': c.get('id'),
@@ -453,28 +465,22 @@ class Handler(BaseHTTPRequestHandler):
         label = (first + ' ' + (last[:1] + '.' if last else '')).strip()
         self.json_response(200, {'found': True, 'label': label})
 
-    def handle_camera_checkout(self):
-        """PUBLIC submit. Student enters ID + camera + dates only. We resolve the ID to a
-        name/phones server-side, store it, and return a generic ack with NO name echoed
-        (so the roster can't be harvested). Unknown IDs are recorded + flagged, not rejected."""
-        data = self._read_json_body()
-        if data is None:
-            return
+    def _new_checkout_rec(self, data, kind, item, camera, out, due, group=''):
+        """Build one checkout record (camera OR equipment), resolving the student server-side."""
         sid = str(data.get('student_id', '')).strip()
-        camera = str(data.get('camera', '')).strip()
-        due = str(data.get('due', '')).strip()
-        out = str(data.get('out', '')).strip() or time.strftime('%Y-%m-%d')
-        if not sid or not camera or not due:
-            self.json_response(400, {'error': 'Please enter your student ID, a camera, and a due date.'})
-            return
         r = resolve_student(sid)
         flags = []
         if not r['found']:
             flags.append('unknown student id')
-        if camera not in CAMERAS:
+        if kind == 'camera' and camera not in CAMERAS:
             flags.append('unknown camera')
+        if kind == 'equipment' and item not in EQUIPMENT_ITEMS:
+            flags.append('unknown item')
         rec = {
-            'id': 'ck_' + str(int(time.time() * 1000)),
+            'id': 'ck_' + str(int(time.time() * 1000)) + ('' if not group else '_' + item),
+            'kind': kind,                      # 'camera' or 'equipment'
+            'item': item,                      # equipment key (tripod/wide/zoom/speedlite); '' for cameras
+            'group': str(group or ''),         # links an accessory to its camera checkout id
             'student_id': sid,
             'student_name': r['name'],
             'period': r['period'],
@@ -485,20 +491,58 @@ class Handler(BaseHTTPRequestHandler):
             'camera': camera,
             'out': out,
             'due': due,
-            'status': 'reserved',   # student reserved it; teacher toggles to picked up on collection
+            'status': 'reserved',
             'picked_up_date': '',
             'returned': False,
             'returned_date': '',
+            'note': str(data.get('note', '')),  # condition note (missing cap, lost plate, etc.)
             'created': time.strftime('%Y-%m-%dT%H:%M:%SZ', time.gmtime()),
             'flag': '; '.join(flags),
             '_ip': self._client_ip(),
         }
-        stamp_status(rec, data.get('status'))   # public form sends no status -> reserved
+        stamp_status(rec, data.get('status'))
+        return rec
+
+    def handle_camera_checkout(self):
+        """PUBLIC submit. Student enters ID + camera + dates (+ optional accessories). We resolve
+        the ID to a name/phones server-side and store it, returning a generic ack with NO name
+        echoed. Accessories in `extras` (list of item keys) become their OWN linked records so each
+        checks in independently. Unknown IDs are recorded + flagged, not rejected."""
+        data = self._read_json_body()
+        if data is None:
+            return
+        sid = str(data.get('student_id', '')).strip()
+        kind = (str(data.get('kind', 'camera')).strip().lower() or 'camera')
+        due = str(data.get('due', '')).strip()
+        out = str(data.get('out', '')).strip() or time.strftime('%Y-%m-%d')
+        if kind == 'equipment':
+            item = str(data.get('item', '')).strip()
+            if not sid or not item or not due:
+                self.json_response(400, {'error': 'Enter a student ID, an item, and a due date.'})
+                return
+            rec = self._new_checkout_rec(data, 'equipment', item, '', out, due, str(data.get('group', '')))
+            with _checkouts_lock:
+                items = load_checkouts(); items.append(rec); save_checkouts(items)
+            self.json_response(200, {'ok': True, 'id': rec['id'], 'message': 'Reserved.'})
+            return
+        camera = str(data.get('camera', '')).strip()
+        if not sid or not camera or not due:
+            self.json_response(400, {'error': 'Please enter your student ID, a camera, and a due date.'})
+            return
+        rec = self._new_checkout_rec(data, 'camera', '', camera, out, due)
+        extras = data.get('extras') or []
+        extra_recs = []
+        if isinstance(extras, list):
+            for key in extras:
+                key = str(key).strip()
+                if key in EQUIPMENT_ITEMS:
+                    extra_recs.append(self._new_checkout_rec(data, 'equipment', key, '', out, due, rec['id']))
         with _checkouts_lock:
             items = load_checkouts()
             items.append(rec)
+            items.extend(extra_recs)
             save_checkouts(items)
-        self.json_response(200, {'ok': True, 'message': 'Reserved. See Mr. Silva to pick up your camera.'})
+        self.json_response(200, {'ok': True, 'id': rec['id'], 'message': 'Reserved. See Mr. Silva to pick up your camera.'})
 
     def _find_checkout(self, items, cid):
         for x in items:
@@ -557,7 +601,8 @@ class Handler(BaseHTTPRequestHandler):
                 return
             for k in ('camera', 'out', 'due', 'status', 'picked_up_date', 'returned', 'returned_date',
                       'student_name', 'student_id', 'period', 'course',
-                      'student_cell', 'parent_guardian', 'parent_cell', 'flag'):
+                      'student_cell', 'parent_guardian', 'parent_cell', 'flag',
+                      'kind', 'item', 'group', 'note'):
                 if k in data:
                     c[k] = data[k]
             if 'status' in data:

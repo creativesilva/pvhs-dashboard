@@ -484,11 +484,19 @@ class Handler(BaseHTTPRequestHandler):
             return
         with _assets_lock:
             assets = load_assets()
-            rec = assets.get(cam) or {'note': '', 'oos': False}
+            rec = assets.get(cam) or {'note': '', 'oos': False, 'issues': [], 'log': []}
             if 'note' in data:
                 rec['note'] = str(data.get('note', ''))
             if 'oos' in data:
                 rec['oos'] = bool(data.get('oos'))
+            # issues = current open condition items (removable); log = permanent dated history.
+            if 'issues' in data and isinstance(data['issues'], list):
+                rec['issues'] = [str(x) for x in data['issues']]
+            if 'log' in data and isinstance(data['log'], list):
+                rec['log'] = [{'date': str(e.get('date', '')), 'text': str(e.get('text', ''))}
+                              for e in data['log'] if isinstance(e, dict)]
+            rec.setdefault('issues', [])
+            rec.setdefault('log', [])
             rec['updated'] = time.strftime('%Y-%m-%dT%H:%M:%SZ', time.gmtime())
             assets[cam] = rec
             save_assets(assets)

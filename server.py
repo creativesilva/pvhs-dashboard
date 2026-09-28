@@ -172,6 +172,28 @@ def save_assets(data):
         json.dump(data, f)
     os.replace(tmp, ASSETS_PATH)
 
+# Memory-card wallet: 18 physical slots. When a student returns a camera in a hurry without
+# offloading, we pull the SD card into a numbered wallet slot (and flag the camera "no card")
+# so it does not go back out until a fresh card is installed. The held card clears once the
+# student comes back, offloads, and we return it. Keyed by slot string "1".."18".
+MEMCARDS_PATH = os.path.join(_data_dir(), 'memory_cards.json')
+_memcards_lock = threading.Lock()
+CARD_SLOTS = 18
+
+def load_memcards():
+    try:
+        with open(MEMCARDS_PATH) as f:
+            d = json.load(f)
+            return d if isinstance(d, dict) else {}
+    except Exception:
+        return {}
+
+def save_memcards(data):
+    tmp = MEMCARDS_PATH + '.tmp'
+    with open(tmp, 'w') as f:
+        json.dump(data, f)
+    os.replace(tmp, MEMCARDS_PATH)
+
 # Lifecycle: reserved -> out (picked up) -> returned. Records saved before this
 # field existed have no 'status', so derive it: returned => returned, else out
 # (they were migrated from the calendar as cameras already in students' hands).
@@ -407,7 +429,7 @@ class Handler(BaseHTTPRequestHandler):
             self.handle_camera_student_update()# PUBLIC: a student corrects their own contact -> overrides store
             return
         # Camera management: full login OR the shared camera password (scoped to cameras only)
-        if path in ('/api/camera/return', '/api/camera/status', '/api/camera/update', '/api/camera/delete', '/api/camera/asset', '/api/camera/garcia_roster'):
+        if path in ('/api/camera/return', '/api/camera/status', '/api/camera/update', '/api/camera/delete', '/api/camera/asset', '/api/camera/garcia_roster', '/api/camera/card_hold', '/api/camera/card_return'):
             if not self.require_camera_auth():
                 return
             if path == '/api/camera/return':   self.handle_camera_return()   # mark returned
@@ -416,6 +438,8 @@ class Handler(BaseHTTPRequestHandler):
             elif path == '/api/camera/delete': self.handle_camera_delete()   # remove a checkout
             elif path == '/api/camera/asset':  self.handle_camera_asset()    # per-camera standing note / out-of-service
             elif path == '/api/camera/garcia_roster': self.handle_camera_garcia_roster()  # load Garcia's camera-only roster
+            elif path == '/api/camera/card_hold':   self.handle_camera_card_hold()    # student left card -> wallet slot + flag camera
+            elif path == '/api/camera/card_return': self.handle_camera_card_return()  # card returned to student -> free slot
             return
         if not self.require_auth():
             return
@@ -544,16 +568,19 @@ class Handler(BaseHTTPRequestHandler):
                 'returned_date': c.get('returned_date', ''),
                 'status': st,
             })
-        # Out-of-service cameras (names only, no PII) so the public reserve flow can block them.
+        # Out-of-service and no-card cameras (names only, no PII) so the public reserve flow can block them.
         assets = load_assets()
         oos = [cam for cam in CAMERAS if (assets.get(cam) or {}).get('oos')]
-        self.json_response(200, {'cameras': CAMERAS, 'checkouts': out, 'oos': oos})
+        no_card = [cam for cam in CAMERAS if (assets.get(cam) or {}).get('no_card')]
+        self.json_response(200, {'cameras': CAMERAS, 'checkouts': out, 'oos': oos, 'no_card': no_card})
 
     def handle_camera_checkouts(self):
         """Camera-scoped: full detail for the teacher (names + emergency phones).
-        Strips the internal _ip field before sending. Includes the per-camera asset store."""
+        Strips the internal _ip field before sending. Includes the per-camera asset store
+        and the memory-card wallet."""
         items = [{k: v for k, v in c.items() if k != '_ip'} for c in load_checkouts()]
-        self.json_response(200, {'cameras': CAMERAS, 'checkouts': items, 'assets': load_assets()})
+        self.json_response(200, {'cameras': CAMERAS, 'checkouts': items,
+                                 'assets': load_assets(), 'cards': load_memcards()})
 
     def handle_camera_assets(self):
         """Camera-scoped: the per-camera standing notes + out-of-service flags."""
@@ -594,6 +621,8 @@ class Handler(BaseHTTPRequestHandler):
                 rec['note'] = str(data.get('note', ''))
             if 'oos' in data:
                 rec['oos'] = bool(data.get('oos'))
+            if 'no_card' in data:                 # memory card missing until a fresh one is installed
+                rec['no_card'] = bool(data.get('no_card'))
             # issues = current open condition items (removable); log = permanent dated history.
             if 'issues' in data and isinstance(data['issues'], list):
                 rec['issues'] = [str(x) for x in data['issues']]
@@ -606,6 +635,61 @@ class Handler(BaseHTTPRequestHandler):
             assets[cam] = rec
             save_assets(assets)
         self.json_response(200, {'ok': True, 'camera': cam, 'asset': assets[cam]})
+
+    def handle_camera_card_hold(self):
+        """Camera-scoped: a student left their memory card to offload later. Drop it into a wallet
+        slot (1-18) with a note, and flag the source camera 'no card' so it does not go back out
+        until a fresh card is installed. Body: {slot, from_camera, student_id?, student_name?,
+        note?, checkout_id?}."""
+        data = self._read_json_body()
+        if data is None:
+            return
+        try:
+            slot = int(str(data.get('slot', '')).strip())
+        except ValueError:
+            slot = 0
+        if slot < 1 or slot > CARD_SLOTS:
+            self.json_response(400, {'error': 'Pick a wallet slot 1-%d.' % CARD_SLOTS})
+            return
+        cam = str(data.get('from_camera', '')).strip()
+        rec = {
+            'slot': slot,
+            'student_id': str(data.get('student_id', '')).strip(),
+            'student_name': str(data.get('student_name', '')).strip(),
+            'from_camera': cam,
+            'note': str(data.get('note', '')).strip(),
+            'checkout_id': str(data.get('checkout_id', '')).strip(),
+            'held_at': time.strftime('%Y-%m-%dT%H:%M:%SZ', time.gmtime()),
+        }
+        with _memcards_lock:
+            cards = load_memcards()
+            cards[str(slot)] = rec
+            save_memcards(cards)
+        # Flag the camera as missing its card (kit incomplete) until a fresh card is installed.
+        if cam in CAMERAS:
+            with _assets_lock:
+                assets = load_assets()
+                a = assets.get(cam) or {'note': '', 'oos': False, 'issues': [], 'log': []}
+                a['no_card'] = True
+                a.setdefault('issues', [])
+                a.setdefault('log', [])
+                a['updated'] = time.strftime('%Y-%m-%dT%H:%M:%SZ', time.gmtime())
+                assets[cam] = a
+                save_assets(assets)
+        self.json_response(200, {'ok': True, 'cards': load_memcards()})
+
+    def handle_camera_card_return(self):
+        """Camera-scoped: the student came back, offloaded, and we returned their card, so the
+        wallet slot is freed and the card info goes away. Body: {slot}."""
+        data = self._read_json_body()
+        if data is None:
+            return
+        slot = str(data.get('slot', '')).strip()
+        with _memcards_lock:
+            cards = load_memcards()
+            cards.pop(slot, None)
+            save_memcards(cards)
+        self.json_response(200, {'ok': True, 'cards': load_memcards()})
 
     def handle_camera_lookup(self):
         """PUBLIC: confirm a FULL student ID resolves, returning ONLY a first name +

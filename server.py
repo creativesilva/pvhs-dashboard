@@ -663,6 +663,9 @@ class Handler(BaseHTTPRequestHandler):
         }
         with _memcards_lock:
             cards = load_memcards()
+            if cards.get(str(slot)):                     # never silently overwrite a card already in this slot
+                self.json_response(409, {'error': 'Slot %d already holds a card. Pick an empty slot or free it first.' % slot})
+                return
             cards[str(slot)] = rec
             save_memcards(cards)
         # Flag the camera as missing its card (kit incomplete) until a fresh card is installed.
@@ -1214,12 +1217,15 @@ class Handler(BaseHTTPRequestHandler):
 
     # -- Utilities ----------------------------------------------------------
 
-    def _read_json_body(self):
+    def _read_json_body(self, max_bytes=6 * 1024 * 1024):
         try:
             length = int(self.headers.get('Content-Length', 0))
+            if length > max_bytes:                       # cap the read so a huge body can't exhaust memory
+                self.json_response(413, {'error': 'Request too large.'})
+                return None
             return json.loads(self.rfile.read(length))
-        except Exception as e:
-            self.json_response(400, {'error': f'Invalid JSON: {e}'})
+        except Exception:
+            self.json_response(400, {'error': 'Invalid request.'})   # no internal detail echoed
             return None
 
     def json_response(self, status, data):

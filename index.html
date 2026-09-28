@@ -16,7 +16,7 @@
 <style>
 /* ---- PV Teal tokens (dark default) ---- */
 :root {
-  --bg: #080808;
+  --bg: #060f0f;
   --panel: rgba(255,255,255,0.03);
   --panel-2: rgba(255,255,255,0.05);
   --line: rgba(255,255,255,0.08);
@@ -47,16 +47,26 @@
 }
 * { box-sizing: border-box; }
 body {
-  margin: 0; background-color: var(--bg); background-image: var(--page-grad);
-  background-attachment: fixed; color: var(--text); font-family: var(--font-body);
+  margin: 0; background-color: var(--bg); color: var(--text); font-family: var(--font-body);
   line-height: 1.55; -webkit-font-smoothing: antialiased;
 }
+/* Cohesive with the catalog: glossy CS logo watermark on near-black, toned by one
+   uniform dark veil (no gradient halo). Same technique as curriculum.html. */
+body::before {
+  content: ""; position: fixed; inset: 0; z-index: -2;
+  background: #060f0f url("https://www.creativesilva.com/logos/CS_Logo_Glossy_Teal_v1.png") no-repeat center 40%;
+  background-size: min(74vw, 700px);
+}
+body::after { content: ""; position: fixed; inset: 0; z-index: -1; background: rgba(6,14,14,0.84); }
+:root[data-theme="light"] body::before { background: #f4f7f7; }
+:root[data-theme="light"] body::after { background: rgba(244,247,247,0.5); }
+@media (max-width: 900px){ body::before { background-size: min(88vw, 460px); background-position: center 36%; } }
 h1,h2,h3,.label { font-family: var(--font-head); font-weight: 700; letter-spacing: 0.05em; text-transform: uppercase; color: var(--text); margin: 0; }
 h1 { font-size: 1.5rem; } h2 { font-size: 1.05rem; }
 .num { font-variant-numeric: tabular-nums; }
 .sub { color: var(--text-faint); font-size: 0.82rem; margin-top: 6px; }
 .muted { color: var(--text-faint); }
-.wrap { max-width: 1280px; margin: 0 auto; padding: 28px 24px 64px; }
+.wrap { max-width: 1200px; margin: 0 auto; padding: 28px 32px 64px; }
 
 /* ---- Catalog header ---- */
 .catalog-sticky { position: sticky; top: 0; z-index: 500; background: linear-gradient(rgba(4,13,13,0.88), rgba(3,23,23,0.74)); backdrop-filter: blur(20px) saturate(1.4); -webkit-backdrop-filter: blur(20px) saturate(1.4); border-top: 3px solid var(--teal-bright); border-bottom: 1px solid rgba(0,184,184,0.22); box-shadow: 0 16px 40px -20px rgba(0,0,0,0.72); }
@@ -66,6 +76,9 @@ h1 { font-size: 1.5rem; } h2 { font-size: 1.05rem; }
 .cal-btn { flex: 0 0 auto; height: 32px; display: inline-flex; align-items: center; padding: 0 22px; font-family: var(--font-head); font-weight: 600; letter-spacing: 0.12em; text-transform: uppercase; font-size: 0.78rem; color: #fff; text-decoration: none; white-space: nowrap; background: var(--teal); border: 1px solid var(--teal-bright); transition: filter .15s; }
 .cal-btn:hover { filter: brightness(1.18); }
 .header-clock { flex: 0 0 auto; width: 158px; height: 48px; border: 0; background: transparent; display: block; }
+.hdr-user { flex: 0 0 auto; display: flex; align-items: center; gap: 10px; }
+.hdr-user-name { font-family: var(--font-head); font-size: 0.72rem; letter-spacing: 0.08em; text-transform: uppercase; color: var(--text-dim); }
+.cat-bar-sub { margin-left: auto; align-self: center; padding: 0 2px 0 16px; font-family: var(--font-head); font-size: 0.62rem; letter-spacing: 0.14em; text-transform: uppercase; color: var(--text-faint); white-space: nowrap; }
 .cat-bar { background: rgba(0,0,0,0.18); border-top: 1px solid rgba(0,184,184,0.24); }
 .cat-bar-inner { display: flex; align-items: stretch; flex-wrap: wrap; min-height: 50px; }
 .cat-bar-label { display: flex; align-items: center; padding: 0 20px 0 0; margin-right: 4px; border-right: 1px solid rgba(255,255,255,0.08); }
@@ -272,11 +285,15 @@ footer { text-align: center; color: var(--text-faint); font-size: 0.72rem; paddi
 <div class="catalog-sticky">
   <div class="catalog-sticky-inner">
     <div class="catalog-titlebar">
-      <h1 class="page-title">Curriculum Catalog</h1>
-      <a class="cal-btn" href="https://www.creativesilva.com/build-resources.html">Build Resources</a>
+      <h1 class="page-title">Teacher Command Center</h1>
       <a class="cal-btn" href="https://www.creativesilva.com/calendar.html">Calendar</a>
-      <button type="button" class="cal-btn" id="cat-search-btn" onclick="switchTab('canvas');document.getElementById('dashboard').style.display='block';">&#x1F50D; Search</button>
       <iframe class="header-clock" src="https://www.creativesilva.com/assets/embeds/period-clock.html" title="Class period countdown" scrolling="no" loading="lazy"></iframe>
+      <div class="hdr-user" id="hdr-user" style="display:none;">
+        <img class="user-avatar" id="user-avatar" src="Mr.Silva_Profile_Picture.png" alt="">
+        <span class="hdr-user-name" id="user-name">Mr. Silva</span>
+        <button id="themeToggle" class="btn ghost small" onclick="toggleTheme()"><span data-when="dark">Light</span><span data-when="light" hidden>Dark</span></button>
+        <button class="btn ghost small" onclick="signOut()">Sign Out</button>
+      </div>
     </div>
     <nav class="cat-bar" aria-label="Quick catalog menu">
       <div class="cat-bar-inner">
@@ -296,6 +313,7 @@ footer { text-align: center; color: var(--text-faint); font-size: 0.72rem; paddi
             </div>
           </div>
         </div>
+        <span class="cat-bar-sub" id="topbarSub"></span>
       </div>
     </nav>
   </div>
@@ -323,25 +341,6 @@ footer { text-align: center; color: var(--text-faint); font-size: 0.72rem; paddi
 
 <!-- Dashboard (hidden until auth) -->
 <div id="dashboard" style="display:none;">
-  <header class="topbar">
-    <a href="https://www.creativesilva.com/curriculum.html#teacher-resources" class="back-link">&larr; Catalog</a>
-    <img class="pv-logo" src="PV_Logo.png" alt="PVHS">
-    <div class="titles">
-      <h1>Teacher Command Center</h1>
-      <p class="sub" id="topbarSub"></p>
-    </div>
-    <div class="topbar-right">
-      <div class="user-info" id="user-info">
-        <img class="user-avatar" id="user-avatar" src="Mr.Silva_Profile_Picture.png" alt="">
-        <span id="user-name">Mr. Silva</span>
-      </div>
-      <button id="themeToggle" class="btn ghost small" onclick="toggleTheme()">
-        <span data-when="dark">Light</span><span data-when="light" hidden>Dark</span>
-      </button>
-      <button class="btn ghost small" onclick="signOut()">Sign Out</button>
-    </div>
-  </header>
-
   <div class="wrap">
     <div class="stat-row" id="statCards"></div>
 
@@ -611,11 +610,13 @@ async function initFirebase(){
       currentUser=user;
       document.getElementById('user-name').textContent='Mr. Silva';
       document.getElementById('user-avatar').src='Mr.Silva_Profile_Picture.png';
+      document.getElementById('hdr-user').style.display='flex';
       document.getElementById('login-screen').style.display='none';
       document.getElementById('dashboard').style.display='block';
       loadDashboard();
     } else {
       firebaseToken=null; currentUser=null;
+      document.getElementById('hdr-user').style.display='none';
       document.getElementById('login-screen').style.display='';
       document.getElementById('dashboard').style.display='none';
     }

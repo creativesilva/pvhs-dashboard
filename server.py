@@ -27,6 +27,10 @@ PORT         = int(os.environ.get('PORT', 8080))
 CANVAS_HOST  = 'smjuhsd.instructure.com'
 CANVAS_TOKEN = os.environ.get('CANVAS_TOKEN', '').strip()
 API_KEY      = os.environ.get('API_KEY', '')
+# Shared camera-manager password. Unlocks ONLY the camera checkout endpoints
+# (not Canvas, grades, or the full roster) so another teacher (e.g. Ms. Garcia)
+# can run the standalone camera calendar without a Command Center login.
+CAMERA_PIN   = os.environ.get('CAMERA_PIN', '').strip()
 SERVE_DIR    = os.path.dirname(os.path.abspath(__file__))
 
 FIREBASE_PROJECT_ID = 'girl-scouts-silva'
@@ -226,6 +230,21 @@ class Handler(BaseHTTPRequestHandler):
             return False
         return True
 
+    def check_camera_auth(self):
+        """Camera-scoped auth: a full login (Firebase/API key) OR the shared
+        camera password. Used only by the camera checkout endpoints."""
+        if self.check_auth():
+            return True
+        if CAMERA_PIN and self.headers.get('X-Camera-Key', '') == CAMERA_PIN:
+            return True
+        return False
+
+    def require_camera_auth(self):
+        if not self.check_camera_auth():
+            self.json_response(401, {'error': 'Unauthorized'})
+            return False
+        return True
+
     # -- Routing ------------------------------------------------------------
 
     def do_OPTIONS(self):
@@ -250,9 +269,9 @@ class Handler(BaseHTTPRequestHandler):
         elif path == '/api/camera/cameras':
             self.handle_camera_cameras()           # PUBLIC, inventory list only
         elif path == '/api/camera/checkouts':
-            if not self.require_auth():
+            if not self.require_camera_auth():
                 return
-            self.handle_camera_checkouts()         # AUTH, full detail for the teacher
+            self.handle_camera_checkouts()         # camera-scoped: full detail for the teacher
         elif path in ('/', ''):
             self.path = '/index.html'
             self.serve_file()
@@ -269,6 +288,15 @@ class Handler(BaseHTTPRequestHandler):
         if path == '/api/camera/lookup':
             self.handle_camera_lookup()        # PUBLIC: confirm full ID -> "First L." only
             return
+        # Camera management: full login OR the shared camera password (scoped to cameras only)
+        if path in ('/api/camera/return', '/api/camera/status', '/api/camera/update', '/api/camera/delete'):
+            if not self.require_camera_auth():
+                return
+            if path == '/api/camera/return':   self.handle_camera_return()   # mark returned
+            elif path == '/api/camera/status': self.handle_camera_status()   # reserved -> out -> returned
+            elif path == '/api/camera/update': self.handle_camera_update()   # edit a checkout
+            elif path == '/api/camera/delete': self.handle_camera_delete()   # remove a checkout
+            return
         if not self.require_auth():
             return
         if path == '/api/auth/verify':
@@ -279,14 +307,6 @@ class Handler(BaseHTTPRequestHandler):
             self.handle_batch_grades()
         elif path == '/api/batch/comments':
             self.handle_bulk_comments()
-        elif path == '/api/camera/return':
-            self.handle_camera_return()            # AUTH: mark returned
-        elif path == '/api/camera/status':
-            self.handle_camera_status()            # AUTH: reserved -> out -> returned
-        elif path == '/api/camera/update':
-            self.handle_camera_update()            # AUTH: edit a checkout
-        elif path == '/api/camera/delete':
-            self.handle_camera_delete()            # AUTH: remove a checkout
         elif path.startswith('/api/v1/'):
             self.proxy_canvas('POST')
         else:
@@ -404,8 +424,10 @@ class Handler(BaseHTTPRequestHandler):
         self.json_response(200, {'cameras': CAMERAS, 'checkouts': out})
 
     def handle_camera_checkouts(self):
-        """AUTH: full detail for the teacher (names + emergency phones)."""
-        self.json_response(200, {'cameras': CAMERAS, 'checkouts': load_checkouts()})
+        """Camera-scoped: full detail for the teacher (names + emergency phones).
+        Strips the internal _ip field before sending."""
+        items = [{k: v for k, v in c.items() if k != '_ip'} for c in load_checkouts()]
+        self.json_response(200, {'cameras': CAMERAS, 'checkouts': items})
 
     def handle_camera_lookup(self):
         """PUBLIC: confirm a FULL student ID resolves, returning ONLY a first name +
@@ -784,7 +806,7 @@ class Handler(BaseHTTPRequestHandler):
         self.send_header('Access-Control-Allow-Origin', '*')
         self.send_header('Access-Control-Allow-Methods', 'GET, POST, PUT, DELETE, OPTIONS')
         self.send_header('Access-Control-Allow-Headers',
-                         'Authorization, Content-Type, X-API-Key')
+                         'Authorization, Content-Type, X-API-Key, X-Camera-Key')
         self.send_header('Access-Control-Max-Age', '86400')
 
     def log_message(self, fmt, *args):
@@ -803,6 +825,7 @@ if __name__ == '__main__':
     print(f'  Canvas token: {"configured (" + str(len(CANVAS_TOKEN)) + " chars)" if CANVAS_TOKEN else "NOT SET"}')
     print(f'  Allowed emails: {ALLOWED_EMAILS or "(any authenticated user)"}')
     print(f'  API key: {"configured" if API_KEY else "not set"}')
+    print(f'  Camera PIN: {"configured" if CAMERA_PIN else "NOT SET (manager page will 401)"}')
     if CANVAS_TOKEN:
         import urllib.request
         try:

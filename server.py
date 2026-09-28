@@ -322,6 +322,7 @@ def _student_result(s):
         'last': last,
         'period': str(s.get('period', '')),
         'course': s.get('course') or s.get('course_code') or '',
+        'teacher': (s.get('instructor') or s.get('teacher_name') or 'Mr. Silva'),
         'student_cell': s.get('Student Cell') or s.get('student_cell') or '',
         'parent_guardian': s.get('Parent Guardian') or s.get('parent_guardian') or '',
         'parent_cell': s.get('Parent Cell') or s.get('parent_cell') or '',
@@ -757,8 +758,26 @@ class Handler(BaseHTTPRequestHandler):
         Strips the internal _ip field before sending. Includes the per-camera asset store
         and the memory-card wallet."""
         items = [{k: v for k, v in c.items() if k != '_ip'} for c in load_checkouts()]
+        # Enrich each held card with the student's contact + period + teacher (authed feed only) so
+        # the console can show who to reach out to about an un-offloaded card.
+        cards = {}
+        for slot, c in (load_memcards() or {}).items():
+            c = dict(c)
+            sid = str(c.get('student_id', '')).strip()
+            if sid:
+                r = resolve_student(sid)
+                if r.get('found'):
+                    if not c.get('student_name'):
+                        c['student_name'] = r.get('name', '')
+                    c['student_cell'] = r.get('student_cell', '')
+                    c['parent_guardian'] = r.get('parent_guardian', '')
+                    c['parent_cell'] = r.get('parent_cell', '')
+                    c['period'] = r.get('period', '')
+                    c['course'] = r.get('course', '')
+                    c['teacher'] = r.get('teacher', '')
+            cards[slot] = c
         self.json_response(200, {'cameras': CAMERAS, 'checkouts': items,
-                                 'assets': load_assets(), 'cards': load_memcards(),
+                                 'assets': load_assets(), 'cards': cards,
                                  'blackouts': _blackout_list()})
 
     def handle_camera_assets(self):

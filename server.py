@@ -1232,7 +1232,7 @@ class Handler(BaseHTTPRequestHandler):
             for k in ('camera', 'out', 'due', 'status', 'picked_up_date', 'returned', 'returned_date',
                       'student_name', 'student_id', 'period', 'course',
                       'student_cell', 'parent_guardian', 'parent_cell', 'flag',
-                      'kind', 'item', 'group', 'note', 'approved'):
+                      'kind', 'item', 'group', 'note', 'approved', 'pending'):
                 if k in data:
                     c[k] = data[k]
             if 'status' in data:

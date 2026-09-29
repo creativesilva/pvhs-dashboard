@@ -778,7 +778,8 @@ class Handler(BaseHTTPRequestHandler):
             cards[slot] = c
         self.json_response(200, {'cameras': CAMERAS, 'checkouts': items,
                                  'assets': load_assets(), 'cards': cards,
-                                 'blackouts': _blackout_list()})
+                                 'blackouts': _blackout_list(),
+                                 'missing_limit': MISSING_LIMIT})
 
     def handle_camera_assets(self):
         """Camera-scoped: the per-camera standing notes + out-of-service flags."""

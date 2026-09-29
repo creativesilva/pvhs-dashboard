@@ -68,7 +68,7 @@ h1 { font-size: 1.5rem; } h2 { font-size: 1.05rem; }
 .num { font-variant-numeric: tabular-nums; }
 .sub { color: var(--text-faint); font-size: 0.82rem; margin-top: 6px; }
 .muted { color: var(--text-faint); }
-.wrap { max-width: 1200px; margin: 0 auto; padding: 28px 32px 64px; }
+.wrap { max-width: 1200px; margin: 0 auto; padding: 26px 32px 64px; }
 
 /* ---- Catalog header ---- */
 .catalog-sticky { position: sticky; top: 0; z-index: 500; background: linear-gradient(rgba(4,13,13,0.88), rgba(3,23,23,0.74)); backdrop-filter: blur(20px) saturate(1.4); -webkit-backdrop-filter: blur(20px) saturate(1.4); border-top: 3px solid var(--teal-bright); border-bottom: 1px solid rgba(0,184,184,0.22); box-shadow: 0 16px 40px -20px rgba(0,0,0,0.72); }
@@ -121,13 +121,17 @@ h1 { font-size: 1.5rem; } h2 { font-size: 1.05rem; }
 .user-info { display: flex; align-items: center; gap: 8px; font-size: 0.82rem; color: var(--text-dim); }
 .user-avatar { width: 32px; height: 32px; border-radius: 6px; border: 1px solid var(--teal); }
 
-/* ---- Login ---- */
-#login-screen { display: flex; align-items: center; justify-content: center; min-height: 70vh; padding: 2rem; }
-.login-card { background: var(--panel); border: 1px solid var(--teal); padding: 3rem; max-width: 440px; width: 100%; text-align: center; }
-.login-card img { width: 100px; margin-bottom: 1.5rem; }
-.login-card h1 { font-size: 1.2rem; color: var(--teal-light); margin-bottom: 0.5rem; letter-spacing: 0.14em; }
-.login-card p { color: var(--text-faint); margin-bottom: 2rem; font-size: 0.85rem; }
+/* ---- Login (mirrors the Curriculum Catalog PIN gate so the entry feels identical:
+       full-screen near-black, CS-logo card, 3px teal top stripe) ---- */
+#login-screen { position: fixed; inset: 0; z-index: 9999; display: flex; align-items: center; justify-content: center; padding: 2rem; background: #060606; font-family: var(--font-body); }
+.login-card { width: 100%; max-width: 360px; background: #0e0e0e; border: 1px solid rgba(255,255,255,0.08); border-top: 3px solid #007474; padding: 40px 36px 36px; text-align: center; }
+.login-card img { width: 140px; height: auto; margin-bottom: 20px; opacity: 1; }
+.login-card h1 { font-size: 1rem; font-weight: 700; color: #5eead4; margin: 0 0 6px; letter-spacing: 0.18em; text-transform: uppercase; }
+.login-card p { color: rgba(255,255,255,0.38); margin: 0 0 28px; font-size: 0.82rem; line-height: 1.6; }
 .login-error { color: var(--alert); font-size: 0.85rem; margin-bottom: 1rem; display: none; }
+.login-card .cc-signin { width: 100%; display: inline-flex; align-items: center; justify-content: center; gap: 10px; background: #007474; color: #fff; border: none; font-family: var(--font-head); font-size: 0.78rem; font-weight: 700; letter-spacing: 0.14em; text-transform: uppercase; padding: 13px; cursor: pointer; transition: filter 0.15s; }
+.login-card .cc-signin:hover { filter: brightness(1.15); }
+.login-card .cc-signin svg { width: 18px; height: 18px; background: #fff; border-radius: 2px; padding: 2px; box-sizing: content-box; }
 .login-card .btn { display: inline-flex; align-items: center; gap: 12px; }
 .login-card .btn svg { flex-shrink: 0; }
 
@@ -314,11 +318,11 @@ footer { text-align: center; color: var(--text-faint); font-size: 0.72rem; paddi
 <!-- Login Screen -->
 <div id="login-screen">
   <div class="login-card">
-    <img src="PV_Logo.png" alt="PVHS">
+    <img src="https://www.creativesilva.com/logos/CS_Logo_Vector_TealWhite.svg" alt="Chris Silva">
     <h1>Teacher Command Center</h1>
     <p>Private access. Sign in with your authorized Google account.</p>
     <div id="login-error" class="login-error"></div>
-    <button class="btn" onclick="googleSignIn()">
+    <button class="cc-signin" onclick="googleSignIn()">
       <svg width="20" height="20" viewBox="0 0 48 48"><path fill="#EA4335" d="M24 9.5c3.54 0 6.71 1.22 9.21 3.6l6.85-6.85C35.9 2.38 30.47 0 24 0 14.62 0 6.51 5.38 2.56 13.22l7.98 6.19C12.43 13.72 17.74 9.5 24 9.5z"/><path fill="#4285F4" d="M46.98 24.55c0-1.57-.15-3.09-.38-4.55H24v9.02h12.94c-.58 2.96-2.26 5.48-4.78 7.18l7.73 6c4.51-4.18 7.09-10.36 7.09-17.65z"/><path fill="#FBBC05" d="M10.53 28.59c-.48-1.45-.76-2.99-.76-4.59s.27-3.14.76-4.59l-7.98-6.19C.92 16.46 0 20.12 0 24c0 3.88.92 7.54 2.56 10.78l7.97-6.19z"/><path fill="#34A853" d="M24 48c6.48 0 11.93-2.13 15.89-5.81l-7.73-6c-2.15 1.45-4.92 2.3-8.16 2.3-6.26 0-11.57-4.22-13.47-9.91l-7.98 6.19C6.51 42.62 14.62 48 24 48z"/></svg>
       Sign in with Google
     </button>
@@ -520,6 +524,19 @@ footer { text-align: center; color: var(--text-faint); font-size: 0.72rem; paddi
         tr.camrow.ret td{opacity:0.5;}
         #cam-list .tbl td{vertical-align:top;}
       </style>
+
+      <!-- Checkout holds: Photography students the reservation gate blocks (4+ missing in a Photo course).
+           Live from the same Canvas data the Missing Work tab loads; the student calendar enforces this. -->
+      <div class="panel" id="panel-camholds">
+        <div class="stripe"></div>
+        <div class="section-head">
+          <div class="head-row"><span class="eyebrow">Missing Work</span><h2>Not Eligible to Check Out</h2><span class="pill" id="camholds-count">&middot;</span></div>
+          <span class="rule"></span>
+        </div>
+        <p class="sub" style="margin:0 0 12px;">Photography students with more than <span id="camholds-limit">3</span> missing assignments cannot reserve a camera on the student calendar. When they enter their ID they are told to turn in their work and how many they are missing. This list is live from Canvas.</p>
+        <div id="cam-holds"><div class="sub">Loading Canvas data&#8230;</div></div>
+      </div>
+
       <div class="panel">
         <div class="stripe"></div>
         <div class="section-head">
@@ -818,6 +835,7 @@ async function loadAllCanvasData(){
   renderCanvasTab();
   renderMissingByPeriod();
   renderStatCards();
+  if(typeof renderCamHolds==='function') renderCamHolds();   // refresh the camera checkout-holds list
   if(typeof window._rosterRender==='function') window._rosterRender();
 }
 
@@ -1088,9 +1106,47 @@ async function loadCameras(){
   const list=document.getElementById('cam-list'); if(!list) return;
   try{
     const r=await api('/api/camera/checkouts'); const d=await r.json();
+    if(d.missing_limit!=null) CAM_MISSING_LIMIT=d.missing_limit;
     CAM_STATE={cameras:d.cameras||[], checkouts:d.checkouts||[]};
     renderCameras();
+    renderCamHolds();
   }catch(e){ list.innerHTML='<div class="sub">Could not load checkouts.</div>'; }
+}
+
+// ---- Checkout holds: Photography students the reservation gate blocks (4+ missing) ----
+// Built from the same Canvas data the Missing Work tab loads (missingOverviewData), filtered to
+// PHOTO courses, so it mirrors the server-side camera_eligibility gate. Awareness only; the live
+// gate on the student calendar is the source of truth for actually blocking a reservation.
+let CAM_MISSING_LIMIT=3;   // authoritative value arrives with the /api/camera/checkouts feed
+function _photoCourseIds(){
+  const ids=new Set();
+  (coursesCache||[]).forEach(c=>{ const n=((c.name||'')+' '+(c.course_code||'')).toLowerCase(); if(n.indexOf('photo')>=0) ids.add(c.id); });
+  return ids;
+}
+function renderCamHolds(){
+  const box=document.getElementById('cam-holds'); if(!box) return;
+  const limEl=document.getElementById('camholds-limit'); if(limEl) limEl.textContent=CAM_MISSING_LIMIT;
+  const cntEl=document.getElementById('camholds-count');
+  if(!canvasLoaded){ box.innerHTML='<div class="sub">Loading Canvas data&#8230;</div>'; if(cntEl) cntEl.textContent='·'; return; }
+  const photo=_photoCourseIds();
+  const byStudent={};
+  (missingOverviewData||[]).forEach(m=>{
+    if(!photo.has(m.courseId)||isTestStudent(m.name)) return;
+    const k=(m.name||'').toLowerCase();
+    if(!byStudent[k]) byStudent[k]={name:m.name,count:0,courses:new Set()};
+    byStudent[k].count+=m.count; byStudent[k].courses.add(m.course);
+  });
+  const perByName={};
+  if(rosterData&&rosterData.students) rosterData.students.forEach(s=>{ perByName[(`${s.last_name}, ${s.first_name}`).toLowerCase()]=s.period; });
+  const blocked=Object.values(byStudent).filter(s=>s.count>CAM_MISSING_LIMIT).sort((a,b)=>b.count-a.count);
+  if(cntEl) cntEl.textContent=blocked.length?(blocked.length+' blocked'):'none';
+  if(!blocked.length){ box.innerHTML='<div class="sub" style="color:var(--ok)">No Photography students are blocked right now. Everyone is eligible to check out.</div>'; return; }
+  const rows=blocked.map(s=>{
+    const per=perByName[s.name.toLowerCase()];
+    const cc=s.count>=5?'alert':'warn';
+    return `<tr><td class="name">${esc(s.name)}</td><td class="num">${per?('P'+esc(String(per))):''}</td><td><span class="pill ${cc}">${s.count} missing</span></td><td style="font-size:0.8rem;color:var(--text-dim);">${esc(Array.from(s.courses).join(', '))}</td></tr>`;
+  }).join('');
+  box.innerHTML=`<table class="tbl"><thead><tr><th>Student</th><th>Period</th><th>Missing</th><th>Course</th></tr></thead><tbody>${rows}</tbody></table>`;
 }
 function camStatusOf(c){ return c.status||(c.returned?'returned':'out'); }
 function camStatusPill(c){

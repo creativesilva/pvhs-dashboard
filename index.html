@@ -132,6 +132,31 @@ h1 { font-size: 1.5rem; } h2 { font-size: 1.05rem; }
 .login-card .cc-signin { width: 100%; display: inline-flex; align-items: center; justify-content: center; gap: 10px; background: #007474; color: #fff; border: none; font-family: var(--font-head); font-size: 0.78rem; font-weight: 700; letter-spacing: 0.14em; text-transform: uppercase; padding: 13px; cursor: pointer; transition: filter 0.15s; }
 .login-card .cc-signin:hover { filter: brightness(1.15); }
 .login-card .cc-signin svg { width: 18px; height: 18px; background: #fff; border-radius: 2px; padding: 2px; box-sizing: content-box; }
+
+/* ---- Reports tab + print-to-PDF ---- */
+#print-area { display: none; }
+.rep-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(268px, 1fr)); gap: 14px; }
+.rep-card { border: 1px solid var(--line); background: var(--panel-2); padding: 16px; display: flex; flex-direction: column; gap: 9px; }
+.rep-card h3 { font-family: var(--font-head); font-size: 0.92rem; letter-spacing: 0.05em; text-transform: uppercase; margin: 0; color: var(--text); }
+.rep-card p { margin: 0; font-size: 0.82rem; color: var(--text-dim); line-height: 1.5; flex: 1; }
+.rep-card .btn { align-self: flex-start; }
+@media print {
+  @page { margin: 0.5in; }
+  html, body { background: #fff !important; }
+  body > *:not(#print-area) { display: none !important; }
+  #print-area { display: block !important; color: #111; font-family: -apple-system, Arial, sans-serif; }
+  #print-area .rep-doc-head { border-bottom: 2px solid #007474; padding-bottom: 9px; margin-bottom: 14px; }
+  #print-area .rep-doc-title { font-family: "Oswald", Arial, sans-serif; font-size: 20pt; font-weight: 700; letter-spacing: 0.02em; text-transform: uppercase; color: #007474; margin: 0; }
+  #print-area .rep-doc-meta { font-size: 9pt; color: #555; margin-top: 3px; }
+  #print-area h2.rep-section { font-family: "Oswald", Arial, sans-serif; font-size: 12.5pt; text-transform: uppercase; color: #007474; margin: 15px 0 5px; page-break-after: avoid; }
+  #print-area table { width: 100%; border-collapse: collapse; font-size: 9.5pt; margin-bottom: 6px; }
+  #print-area thead { display: table-header-group; }
+  #print-area th { text-align: left; padding: 5px 7px; border-bottom: 1.5px solid #007474; font-family: "Oswald", Arial, sans-serif; font-size: 8pt; letter-spacing: 0.05em; text-transform: uppercase; color: #007474; }
+  #print-area td { padding: 4px 7px; border-bottom: 0.5px solid #cfcfcf; vertical-align: top; }
+  #print-area tr { page-break-inside: avoid; }
+  #print-area .rep-pill { display: inline-block; border: 1px solid #888; padding: 0 5px; margin-right: 3px; font-size: 7.5pt; }
+  #print-area .rep-foot { margin-top: 14px; padding-top: 6px; border-top: 0.5px solid #cfcfcf; font-size: 7.5pt; color: #777; }
+}
 .login-card .btn { display: inline-flex; align-items: center; gap: 12px; }
 .login-card .btn svg { flex-shrink: 0; }
 
@@ -292,8 +317,6 @@ footer { text-align: center; color: var(--text-faint); font-size: 0.72rem; paddi
 <nav class="silva-nav" aria-label="Site navigation"></nav>
 <!-- User controls + school/term, moved into the shared header once it builds. -->
 <div class="hdr-user" id="hdr-user" style="display:none;">
-  <img class="user-avatar" id="user-avatar" src="Mr.Silva_Profile_Picture.png" alt="">
-  <span class="hdr-user-name" id="user-name">Mr. Silva</span>
   <button id="themeToggle" class="btn ghost small" onclick="toggleTheme()"><span data-when="dark">Light</span><span data-when="light" hidden>Dark</span></button>
   <button class="btn ghost small" onclick="signOut()">Sign Out</button>
 </div>
@@ -306,7 +329,8 @@ footer { text-align: center; color: var(--text-faint); font-size: 0.72rem; paddi
   function inject(){
     var tb=document.querySelector('.silva-uni-titlebar'), bar=document.querySelector('.silva-uni-bar');
     if(!tb) return false;
-    var u=document.getElementById('hdr-user'); if(u && u.parentElement!==tb) tb.appendChild(u);
+    // Place Light + Sign Out BEFORE the period countdown so the countdown stays rightmost (catalog layout).
+    var u=document.getElementById('hdr-user'); if(u && u.parentElement!==tb){ var clk=tb.querySelector('.silva-uni-clock'); if(clk) tb.insertBefore(u, clk); else tb.appendChild(u); }
     var s=document.getElementById('topbarSub'); if(s && bar && s.parentElement!==bar){ s.hidden=false; bar.appendChild(s); }
     return true;
   }
@@ -346,6 +370,7 @@ footer { text-align: center; color: var(--text-faint); font-size: 0.72rem; paddi
       <button class="tab-btn" data-tab="grading" onclick="switchTab('grading')">Grading</button>
       <button class="tab-btn" data-tab="bulk" onclick="switchTab('bulk')">Bulk Comment</button>
       <button class="tab-btn" data-tab="cameras" onclick="switchTab('cameras')">Cameras</button>
+      <button class="tab-btn" data-tab="reports" onclick="switchTab('reports')">Reports</button>
     </div>
 
     <!-- Roster Tab -->
@@ -552,6 +577,30 @@ footer { text-align: center; color: var(--text-faint); font-size: 0.72rem; paddi
       </div>
     </div>
 
+    <!-- Reports Tab: one-click clean PDF/print reports (native print dialog, then PDF > Save as PDF) -->
+    <div id="tab-reports" class="tab-content">
+      <div class="panel">
+        <div class="stripe"></div>
+        <div class="section-head">
+          <div class="head-row"><span class="eyebrow">Print</span><h2>Reports &amp; PDF Export</h2></div>
+          <span class="rule"></span>
+        </div>
+        <p class="sub" style="margin:0 0 14px;">Pick a report. It opens the Mac print dialog: choose a printer, or select <b>PDF &rsaquo; Save as PDF</b> to export. Every report prints clean on white, ready to hand out or file.</p>
+        <div class="controls" style="margin:0 0 16px;gap:10px;">
+          <label class="camlbl" style="align-self:center;margin:0;">Scope by period</label>
+          <select class="field" id="rep-period"><option value="">All periods</option></select>
+          <span class="sub" style="align-self:center;">Applies to Class Roster and Missing Work.</span>
+        </div>
+        <div class="rep-grid">
+          <div class="rep-card"><h3>Class Roster</h3><p>Every student with period, seat, support flags, and missing-work count.</p><button class="btn" onclick="printReport('roster',document.getElementById('rep-period').value)">Print / PDF</button></div>
+          <div class="rep-card"><h3>Missing Work</h3><p>Every student with missing assignments, ranked by how many, with points at risk.</p><button class="btn" onclick="printReport('missing',document.getElementById('rep-period').value)">Print / PDF</button></div>
+          <div class="rep-card"><h3>Missing Work by Period</h3><p>Missing-work students grouped under each class period.</p><button class="btn" onclick="printReport('missingByPeriod')">Print / PDF</button></div>
+          <div class="rep-card"><h3>Support Flags Summary</h3><p>IEP, 504, SSA, and English Learner counts for every period.</p><button class="btn" onclick="printReport('support')">Print / PDF</button></div>
+          <div class="rep-card"><h3>Camera Checkouts &amp; Holds</h3><p>Equipment out, overdue, and reserved, plus students blocked for missing work.</p><button class="btn" onclick="printReport('cameras')">Print / PDF</button></div>
+        </div>
+      </div>
+    </div>
+
     <div class="modal-backdrop" id="camModal">
       <div class="modal">
         <div class="stripe"></div>
@@ -617,8 +666,6 @@ async function initFirebase(){
     if(user){
       firebaseToken=await user.getIdToken();
       currentUser=user;
-      document.getElementById('user-name').textContent='Mr. Silva';
-      document.getElementById('user-avatar').src='Mr.Silva_Profile_Picture.png';
       document.getElementById('hdr-user').style.display='flex';
       document.getElementById('login-screen').style.display='none';
       document.getElementById('dashboard').style.display='block';
@@ -766,17 +813,21 @@ async function loadDashboard(){
 // ---- Stat cards ----
 function renderStatCards(){
   const cards=[];
+  const missingCount=missingOverviewData.length;
+  const missingCard={label:'Flagged for Missing Work',num:missingCount,cls:missingCount?'alert':'ok',action:()=>goTo('status','missing')};
   if(rosterData){
     const s=rosterData.students;
+    // Chris wants Total Students and Flagged for Missing Work side by side, flagged second.
     cards.push({label:'Total Students',num:s.length,cls:'',action:()=>goTo('support','')});
+    cards.push(missingCard);
     cards.push({label:'IEP',num:s.filter(x=>x.iep==='Y').length,cls:'warn',action:()=>goTo('support','iep')});
     cards.push({label:'504 Plans',num:s.filter(x=>x.plan_504==='Y').length,cls:'warn',action:()=>goTo('support','p504')});
     cards.push({label:'SSA',num:s.filter(x=>x.ssa_flag==='Y').length,cls:'',action:()=>goTo('support','ssa')});
     cards.push({label:'English Learners',num:s.filter(x=>x.langflu_code==='L').length,cls:'',action:()=>goTo('support','el')});
+  } else {
+    cards.push(missingCard);
   }
   if(coursesCache.length) cards.push({label:'Canvas Courses',num:coursesCache.length,cls:'ok'});
-  const missingCount=missingOverviewData.length;
-  cards.push({label:'Flagged for Missing Work',num:missingCount,cls:missingCount?'alert':'ok',action:()=>goTo('status','missing')});
   const el=document.getElementById('statCards');
   el.innerHTML=cards.map((c,i)=>`<div class="stat ${c.cls} ${c.action?'clickable':''}" data-card="${i}"><div class="n num">${c.num}</div><div class="k">${c.label}</div></div>`).join('');
   el.querySelectorAll('.stat.clickable').forEach(card=>{
@@ -861,6 +912,7 @@ function renderRoster(){
   const students=rosterData.students, sections=rosterData.sections;
   const pf=document.getElementById('periodFilter');
   pf.innerHTML='<option value="">All periods</option>'+sections.map(s=>`<option value="${s.period}">Period ${s.period}: ${s.course_code}</option>`).join('');
+  const rp=document.getElementById('rep-period'); if(rp) rp.innerHTML='<option value="">All periods</option>'+sections.map(s=>`<option value="${s.period}">Period ${s.period}: ${s.course_code}</option>`).join('');
 
   function render(){
     const q=document.getElementById('search').value.trim().toLowerCase();
@@ -1148,6 +1200,84 @@ function renderCamHolds(){
   }).join('');
   box.innerHTML=`<table class="tbl"><thead><tr><th>Student</th><th>Period</th><th>Missing</th><th>Course</th></tr></thead><tbody>${rows}</tbody></table>`;
 }
+
+// ---- Reports: clean print-to-PDF documents (native Mac print dialog, then PDF > Save as PDF) ----
+function _repDate(){ try{ return new Date().toLocaleDateString(undefined,{weekday:'long',year:'numeric',month:'long',day:'numeric'}); }catch(e){ return new Date().toDateString(); } }
+function _repHead(title, sub){
+  const school=(rosterData&&rosterData.school)||'Pioneer Valley High School';
+  const term=rosterData?`${rosterData.term||''} ${rosterData.school_year||''}`.trim():'';
+  const meta=[school,term,'Mr. Silva',_repDate()].filter(Boolean).map(esc).join(' &middot; ');
+  return `<div class="rep-doc-head"><div class="rep-doc-title">${esc(title)}</div><div class="rep-doc-meta">${meta}${sub?(' &middot; '+esc(sub)):''}</div></div>`;
+}
+function _repFoot(){ return `<div class="rep-foot">PVHS Teacher Command Center. Confidential: contains student information.</div>`; }
+function _perByName(){ const m={}; if(rosterData&&rosterData.students) rosterData.students.forEach(s=>{ m[(`${s.last_name}, ${s.first_name}`).toLowerCase()]=String(s.period||''); }); return m; }
+function _reportRoster(period){
+  if(!rosterData) return _repHead('Class Roster')+'<p>No roster loaded yet.</p>'+_repFoot();
+  let list=rosterData.students.slice();
+  if(period) list=list.filter(s=>String(s.period)===String(period));
+  list.sort((a,b)=>{ const pa=String(a.period||''),pb=String(b.period||''); if(pa!==pb) return pa.localeCompare(pb,undefined,{numeric:true}); return (parseInt(a.Seat,10)||999)-(parseInt(b.Seat,10)||999); });
+  const rows=list.map(s=>{
+    const flags=CLASS_KEYS.filter(k=>CLASS_DEF[k].test(s)).map(k=>`<span class="rep-pill">${CLASS_DEF[k].label}</span>`).join('');
+    const miss=canvasLoaded?getStudentMissingCount(s):'';
+    return `<tr><td>${esc(String(s.period||''))}</td><td>${esc(s.Seat||'')}</td><td>${esc(s.last_name)}, ${esc(s.first_name)}${s.preferred_name?(' ('+esc(s.preferred_name)+')'):''}</td><td>${flags}</td><td>${miss!==''?miss:''}</td></tr>`;
+  }).join('');
+  return _repHead('Class Roster',(period?('Period '+period):'All periods')+', '+list.length+' students')
+    +`<table><thead><tr><th>Per</th><th>Seat</th><th>Student</th><th>Support</th><th>Missing</th></tr></thead><tbody>${rows}</tbody></table>`+_repFoot();
+}
+function _reportMissing(period){
+  const per=_perByName();
+  let data=(missingOverviewData||[]).filter(m=>!isTestStudent(m.name));
+  if(period) data=data.filter(m=>per[(m.name||'').toLowerCase()]===String(period));
+  data=data.slice().sort((a,b)=>b.count-a.count||b.pts-a.pts);
+  const rows=data.map(m=>`<tr><td>${esc(per[(m.name||'').toLowerCase()]||'')}</td><td>${esc(m.name)}</td><td>${esc(m.course)}</td><td>${m.count}</td><td>${(m.pts||0).toFixed(0)}</td></tr>`).join('');
+  return _repHead('Missing Work Report',(period?('Period '+period):'All periods')+', '+data.length+' entries')
+    +(canvasLoaded?'':'<p>Canvas data is still loading. Try again in a moment.</p>')
+    +`<table><thead><tr><th>Per</th><th>Student</th><th>Course</th><th>Missing</th><th>Pts at risk</th></tr></thead><tbody>${rows}</tbody></table>`+_repFoot();
+}
+function _reportMissingByPeriod(){
+  if(!rosterData) return _repHead('Missing Work by Period')+'<p>No roster loaded yet.</p>'+_repFoot();
+  const byP={};
+  rosterData.students.forEach(s=>{ const c=canvasLoaded?getStudentMissingCount(s):0; if(c>0){ const p=String(s.period||'?'); (byP[p]=byP[p]||[]).push({name:`${s.last_name}, ${s.first_name}`,count:c}); } });
+  const ps=Object.keys(byP).sort((a,b)=>a.localeCompare(b,undefined,{numeric:true}));
+  let body='';
+  ps.forEach(p=>{ const arr=byP[p].sort((a,b)=>b.count-a.count); const tot=arr.reduce((s,x)=>s+x.count,0);
+    body+=`<h2 class="rep-section">Period ${esc(p)} &middot; ${arr.length} students &middot; ${tot} missing</h2>`
+      +`<table><thead><tr><th>Student</th><th>Missing</th></tr></thead><tbody>${arr.map(x=>`<tr><td>${esc(x.name)}</td><td>${x.count}</td></tr>`).join('')}</tbody></table>`;
+  });
+  if(!ps.length) body='<p>No missing work. Everyone is caught up.</p>';
+  return _repHead('Missing Work by Period')+body+_repFoot();
+}
+function _reportSupport(){
+  if(!rosterData) return _repHead('Support Flags Summary')+'<p>No roster loaded yet.</p>'+_repFoot();
+  const secs=(rosterData.sections||[]).slice().sort((a,b)=>String(a.period).localeCompare(String(b.period),undefined,{numeric:true}));
+  const rows=secs.map(sec=>{ const inP=rosterData.students.filter(s=>String(s.period)===String(sec.period)); const c=k=>inP.filter(s=>CLASS_DEF[k].test(s)).length;
+    return `<tr><td>${esc(String(sec.period))}</td><td>${esc(sec.course_code||'')}</td><td>${inP.length}</td><td>${c('iep')}</td><td>${c('p504')}</td><td>${c('ssa')}</td><td>${c('el')}</td></tr>`;
+  }).join('');
+  return _repHead('Support Flags Summary','IEP, 504, SSA, and English Learner by period')
+    +`<table><thead><tr><th>Per</th><th>Course</th><th>Enrolled</th><th>IEP</th><th>504</th><th>SSA</th><th>EL</th></tr></thead><tbody>${rows}</tbody></table>`+_repFoot();
+}
+function _reportCameras(){
+  const fmt=(typeof camFmt==='function')?camFmt:(x=>esc(x||''));
+  const items=(CAM_STATE.checkouts||[]).filter(c=>camStatusOf(c)!=='returned').slice().sort((a,b)=>(a.due||'').localeCompare(b.due||''));
+  const crows=items.map(c=>{ const st=camStatusOf(c); const overdue=st==='out'&&c.due&&c.due<camToday();
+    return `<tr><td>${esc(c.camera||'')}</td><td>${esc(c.student_name||c.student_id||'')}</td><td>${esc(String(c.period||''))}</td><td>${fmt(c.out)}</td><td>${fmt(c.due)}</td><td>${overdue?'OVERDUE':(st==='reserved'?'Reserved':'Out')}</td></tr>`;
+  }).join('')||'<tr><td colspan="6">No active checkouts.</td></tr>';
+  let html=_repHead('Camera Checkouts')+`<table><thead><tr><th>Camera</th><th>Student</th><th>Per</th><th>Out</th><th>Due</th><th>Status</th></tr></thead><tbody>${crows}</tbody></table>`;
+  const photo=(typeof _photoCourseIds==='function')?_photoCourseIds():new Set();
+  const byS={}; (missingOverviewData||[]).forEach(m=>{ if(!photo.has(m.courseId)||isTestStudent(m.name)) return; const k=(m.name||'').toLowerCase(); (byS[k]=byS[k]||{name:m.name,count:0}); byS[k].count+=m.count; });
+  const per=_perByName();
+  const blocked=Object.values(byS).filter(s=>s.count>CAM_MISSING_LIMIT).sort((a,b)=>b.count-a.count);
+  html+=`<h2 class="rep-section">Not Eligible to Check Out &middot; ${blocked.length}</h2>`;
+  html+=blocked.length?`<table><thead><tr><th>Student</th><th>Per</th><th>Missing</th></tr></thead><tbody>${blocked.map(s=>`<tr><td>${esc(s.name)}</td><td>${esc(per[s.name.toLowerCase()]||'')}</td><td>${s.count}</td></tr>`).join('')}</tbody></table>`:'<p>No students are blocked right now.</p>';
+  return html+_repFoot();
+}
+function printReport(kind, period){
+  const area=document.getElementById('print-area'); if(!area) return;
+  const f={roster:_reportRoster,missing:_reportMissing,missingByPeriod:_reportMissingByPeriod,support:_reportSupport,cameras:_reportCameras}[kind];
+  if(!f) return;
+  area.innerHTML=f(period);
+  window.print();
+}
 function camStatusOf(c){ return c.status||(c.returned?'returned':'out'); }
 function camStatusPill(c){
   const st=camStatusOf(c);
@@ -1232,5 +1362,7 @@ async function camStatus(id,status){ await api('/api/camera/status',{method:'POS
 async function deleteCamFromModal(){ if(camEditId && confirm('Delete this checkout?')){ const id=camEditId; closeCamEdit(); await api('/api/camera/delete',{method:'POST',body:JSON.stringify({id})}); loadCameras(); } }
 document.addEventListener('click',e=>{ const m=document.getElementById('camModal'); if(m&&e.target===m) m.classList.remove('open'); });
 </script>
+<!-- Reports render here as a clean white document; shown only when printing (see @media print). -->
+<div id="print-area"></div>
 </body>
 </html>

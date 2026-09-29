@@ -31,7 +31,7 @@ API_KEY      = os.environ.get('API_KEY', '')
 # assignments (in Silva's Photo Canvas courses) is blocked from reserving until they turn work in.
 # Garcia's students are never gated (they are not in Silva's courses, and we skip the check for them).
 # The check is LIVE against Canvas at ID entry and FAILS OPEN: any error/undetermined => allowed.
-MISSING_LIMIT = int(os.environ.get('MISSING_LIMIT', '3'))
+MISSING_LIMIT = int(os.environ.get('MISSING_LIMIT', '6'))
 # Shared camera-manager password. Unlocks ONLY the camera checkout endpoints
 # (not Canvas, grades, or the full roster) so another teacher (e.g. Ms. Garcia)
 # can run the standalone camera calendar without a Command Center login.

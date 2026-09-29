@@ -750,8 +750,10 @@ class Handler(BaseHTTPRequestHandler):
         assets = load_assets()
         oos = [cam for cam in CAMERAS if (assets.get(cam) or {}).get('oos')]
         no_card = [cam for cam in CAMERAS if (assets.get(cam) or {}).get('no_card')]
+        # Kit contents: missing-item list per camera (no PII) so students see if a kit is incomplete.
+        kits = {cam: (assets.get(cam) or {}).get('kit', []) for cam in CAMERAS if (assets.get(cam) or {}).get('kit')}
         self.json_response(200, {'cameras': CAMERAS, 'checkouts': out, 'oos': oos, 'no_card': no_card,
-                                 'blackouts': _blackout_list()})
+                                 'kits': kits, 'blackouts': _blackout_list()})
 
     def handle_camera_checkouts(self):
         """Camera-scoped: full detail for the teacher (names + emergency phones).
@@ -843,6 +845,8 @@ class Handler(BaseHTTPRequestHandler):
                 rec['oos'] = bool(data.get('oos'))
             if 'no_card' in data:                 # memory card missing until a fresh one is installed
                 rec['no_card'] = bool(data.get('no_card'))
+            if 'kit' in data and isinstance(data['kit'], list):   # kit contents: list of MISSING item labels
+                rec['kit'] = [str(x) for x in data['kit']][:40]
             # issues = current open condition items (removable); log = permanent dated history.
             if 'issues' in data and isinstance(data['issues'], list):
                 rec['issues'] = [str(x) for x in data['issues']]

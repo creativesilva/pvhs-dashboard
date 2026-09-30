@@ -909,31 +909,46 @@ class Handler(BaseHTTPRequestHandler):
 
     def handle_camera_asset(self):
         """Camera-scoped: set a camera's standing note and/or out-of-service flag.
-        Body: {camera, note?, oos?}. The note follows the physical camera across checkouts."""
+        Body: {camera, note?, oos?}. The note follows the physical camera across checkouts.
+        `camera` may also be a pooled-gear key (tripod/wide/zoom/speedlite/...). Gear records carry
+        note/issues plus a `down` count (units out for repair) ONLY, never the camera-only
+        oos/no_card/kit fields, so a gear key can never leak into the student calendar's camera lists
+        (calendar.html derives its out-of-service / no-card / kit views from every asset key)."""
         data = self._read_json_body()
         if data is None:
             return
         cam = str(data.get('camera', '')).strip()
-        if cam not in CAMERAS:
-            self.json_response(400, {'error': 'Unknown camera'})
+        is_gear = cam in EQUIPMENT_ITEMS
+        if cam not in CAMERAS and not is_gear:
+            self.json_response(400, {'error': 'Unknown camera or item'})
             return
         with _assets_lock:
             assets = load_assets()
             rec = assets.get(cam) or {'note': '', 'oos': False, 'issues': [], 'log': []}
             if 'note' in data:
                 rec['note'] = str(data.get('note', ''))
-            if 'oos' in data:
-                rec['oos'] = bool(data.get('oos'))
-            if 'no_card' in data:                 # memory card missing until a fresh one is installed
-                rec['no_card'] = bool(data.get('no_card'))
-            if 'kit' in data and isinstance(data['kit'], list):   # kit contents: list of MISSING item labels
-                rec['kit'] = [str(x) for x in data['kit']][:40]
             # issues = current open condition items (removable); log = permanent dated history.
             if 'issues' in data and isinstance(data['issues'], list):
                 rec['issues'] = [str(x) for x in data['issues']]
             if 'log' in data and isinstance(data['log'], list):
                 rec['log'] = [{'date': str(e.get('date', '')), 'text': str(e.get('text', ''))}
                               for e in data['log'] if isinstance(e, dict)]
+            if is_gear:
+                # Pooled gear: `down` = units out for repair (0..pool total). Reduces availability so
+                # broken units are not offered for checkout. No oos/no_card/kit on gear (camera-only).
+                if 'down' in data:
+                    try:
+                        n = int(data.get('down') or 0)
+                    except (TypeError, ValueError):
+                        n = 0
+                    rec['down'] = max(0, min(n, EQUIPMENT_ITEMS[cam].get('total', 0)))
+            else:
+                if 'oos' in data:
+                    rec['oos'] = bool(data.get('oos'))
+                if 'no_card' in data:             # memory card missing until a fresh one is installed
+                    rec['no_card'] = bool(data.get('no_card'))
+                if 'kit' in data and isinstance(data['kit'], list):   # kit contents: list of MISSING item labels
+                    rec['kit'] = [str(x) for x in data['kit']][:40]
             rec.setdefault('issues', [])
             rec.setdefault('log', [])
             rec['updated'] = time.strftime('%Y-%m-%dT%H:%M:%SZ', time.gmtime())

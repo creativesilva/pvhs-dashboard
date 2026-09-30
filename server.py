@@ -36,6 +36,7 @@ MISSING_LIMIT = int(os.environ.get('MISSING_LIMIT', '6'))
 # (not Canvas, grades, or the full roster) so another teacher (e.g. Ms. Garcia)
 # can run the standalone camera calendar without a Command Center login.
 CAMERA_PIN   = os.environ.get('CAMERA_PIN', '').strip()
+CAMERA_OVERRIDE_CODE = os.environ.get('CAMERA_OVERRIDE_CODE', '3duc4t10n').strip()   # teacher code to unlock a Photo-2 camera for a Photo-1 student
 SERVE_DIR    = os.path.dirname(os.path.abspath(__file__))
 
 FIREBASE_PROJECT_ID = 'girl-scouts-silva'
@@ -69,18 +70,37 @@ _GARCIA_STUDENTS = []
 # Camera checkout: durable storage on the Render disk (/var/data), roster lookup
 # ---------------------------------------------------------------------------
 
-# Camera inventory. Cam 01..Cam 18 are ours (labels match the checkout Google Calendar).
-# Cam 19/20/21 belong to another teacher and are intentionally NOT in our inventory.
+# Camera inventory. CAMERAS (Cam 01..18) is the shared Silva/Garcia set (16-18 are Photo-2-only).
+# Ms. Mankin (Digital Arts) has her OWN Cam 19-21. ALL_CAMERAS is the full known set used for
+# checkout/asset validity; CAMERAS stays 01..18 so the existing feeds/clients are unchanged.
 CAMERAS = ["Cam 01","Cam 02","Cam 03","Cam 04","Cam 05","Cam 06","Cam 07","Cam 08","Cam 09",
            "Cam 10","Cam 11","Cam 12","Cam 13","Cam 14","Cam 15","Cam 16","Cam 17","Cam 18"]
+MANKIN_CAMERAS = ["Cam 19","Cam 20","Cam 21"]
+ALL_CAMERAS = CAMERAS + MANKIN_CAMERAS
+# Per-teacher camera pools the consoles + student calendar curate by. Silva: all 01-18. Garcia:
+# 01-15 (shares Silva's cameras, no Photo-2 kit 16-18). Mankin: her own 19-21.
+CAMERA_POOLS = {
+    "silva":  list(CAMERAS),
+    "garcia": CAMERAS[:15],
+    "mankin": list(MANKIN_CAMERAS),
+}
 
 # Add-on gear, tracked as its OWN checkout records (kind='equipment', item=<key>) so each unit
 # is reserved, picked up, returned, and noted independently of any camera. Totals = pool size.
+# `pool`: "shared" = Silva + Garcia; "mankin" = Ms. Mankin's own gear.
 EQUIPMENT_ITEMS = {
-    "tripod":    {"label": "K&F Concept Tripod",            "total": 5},
-    "wide":      {"label": "Canon RF-S 10-18mm ultra-wide", "total": 2},
-    "zoom":      {"label": "Canon RF 100-400mm ultra-zoom", "total": 2},
-    "speedlite": {"label": "Canon Speedlite EL-10 flash",   "total": 5},
+    "tripod":    {"label": "K&F Concept Tripod",            "total": 5, "pool": "shared"},
+    "wide":      {"label": "Canon RF-S 10-18mm ultra-wide", "total": 2, "pool": "shared"},
+    "zoom":      {"label": "Canon RF 100-400mm ultra-zoom", "total": 2, "pool": "shared"},
+    "speedlite": {"label": "Canon Speedlite EL-10 flash",   "total": 5, "pool": "shared"},
+    "mankin_tripod": {"label": "K&F Concept Tripod",   "total": 3,  "pool": "mankin"},
+    "apple_pencil":  {"label": "Apple Pencil (#31-40)", "total": 10, "pool": "mankin"},
+}
+# Equipment keys grouped by teacher view. "shared" gear appears for Silva and Garcia.
+EQUIPMENT_POOLS = {
+    "silva":  [k for k, v in EQUIPMENT_ITEMS.items() if v.get("pool") == "shared"],
+    "garcia": [k for k, v in EQUIPMENT_ITEMS.items() if v.get("pool") == "shared"],
+    "mankin": [k for k, v in EQUIPMENT_ITEMS.items() if v.get("pool") == "mankin"],
 }
 
 def _data_dir():
@@ -118,7 +138,34 @@ def _load_garcia():
     print(f'[garcia] {len(lst)} camera-only photography students loaded')
     return lst
 
+# Ms. Mankin's Digital Arts camera roster (her own cameras 19-21 + gear). Same pattern as Garcia:
+# a persistent-disk file wins, else seed from the MANKIN_ROSTER env var, then persist to disk.
+_MANKIN_STUDENTS = []
+MANKIN_PATH = os.path.join(_data_dir(), 'mankin_roster.json')
+_mankin_lock = threading.Lock()
+
+def _load_mankin():
+    global _MANKIN_STUDENTS
+    lst = []
+    if os.path.exists(MANKIN_PATH):
+        try:
+            lst = json.load(open(MANKIN_PATH)).get('students', [])
+        except Exception as e:
+            print(f'[mankin] disk load failed: {e}')
+    elif os.environ.get('MANKIN_ROSTER'):
+        try:
+            gd = json.loads(gzip.decompress(base64.b64decode(os.environ['MANKIN_ROSTER'])))
+            lst = gd.get('students', gd) if isinstance(gd, dict) else gd
+            with open(MANKIN_PATH, 'w') as f:
+                json.dump({'students': lst}, f)
+        except Exception as e:
+            print(f'[mankin] env seed failed: {e}')
+    _MANKIN_STUDENTS = lst
+    print(f'[mankin] {len(lst)} digital-arts camera students loaded')
+    return lst
+
 _load_garcia()
+_load_mankin()
 
 # Persistent student-contact OVERRIDES (student self-edits + teacher edits). Kept on the disk,
 # separate from the base rosters, and merged on top in _student_result so a correction sticks
@@ -310,7 +357,14 @@ def _camera_students():
     """Roster the camera checkout resolves against: PHOTOGRAPHY students only.
     = Silva's Photo classes (Digital Arts EXCLUDED, handled on paper) + Garcia's Photo roster.
     Garcia is listed first so a student in both (Silva DA + Garcia Photo) resolves as Photo."""
-    return list(_GARCIA_STUDENTS) + [s for s in _roster_students() if _is_photo(s)]
+    return list(_GARCIA_STUDENTS) + list(_MANKIN_STUDENTS) + [s for s in _roster_students() if _is_photo(s)]
+
+def _pool_for(teacher):
+    """Map a resolved teacher name to a camera-pool key (silva / garcia / mankin)."""
+    t = (teacher or '').lower()
+    if 'garcia' in t: return 'garcia'
+    if 'mankin' in t: return 'mankin'
+    return 'silva'
 
 def _student_result(s):
     first = (s.get('first_name') or '').strip()
@@ -608,7 +662,7 @@ class Handler(BaseHTTPRequestHandler):
             self.handle_camera_student_update()# PUBLIC: a student corrects their own contact -> overrides store
             return
         # Camera management: full login OR the shared camera password (scoped to cameras only)
-        if path in ('/api/camera/return', '/api/camera/status', '/api/camera/update', '/api/camera/delete', '/api/camera/asset', '/api/camera/garcia_roster', '/api/camera/card_hold', '/api/camera/card_return', '/api/camera/student_override', '/api/camera/blackout'):
+        if path in ('/api/camera/return', '/api/camera/status', '/api/camera/update', '/api/camera/delete', '/api/camera/asset', '/api/camera/garcia_roster', '/api/camera/mankin_roster', '/api/camera/card_hold', '/api/camera/card_return', '/api/camera/student_override', '/api/camera/blackout'):
             if not self.require_camera_auth():
                 return
             if path == '/api/camera/return':   self.handle_camera_return()   # mark returned
@@ -617,6 +671,7 @@ class Handler(BaseHTTPRequestHandler):
             elif path == '/api/camera/delete': self.handle_camera_delete()   # remove a checkout
             elif path == '/api/camera/asset':  self.handle_camera_asset()    # per-camera standing note / out-of-service
             elif path == '/api/camera/garcia_roster': self.handle_camera_garcia_roster()  # load Garcia's camera-only roster
+            elif path == '/api/camera/mankin_roster': self.handle_camera_mankin_roster()  # load Mankin's camera roster
             elif path == '/api/camera/card_hold':   self.handle_camera_card_hold()    # student left card -> wallet slot + flag camera
             elif path == '/api/camera/card_return': self.handle_camera_card_return()  # card returned to student -> free slot
             elif path == '/api/camera/student_override': self.handle_camera_student_override()  # teacher edits a student's contact -> profile
@@ -751,12 +806,15 @@ class Handler(BaseHTTPRequestHandler):
             })
         # Out-of-service and no-card cameras (names only, no PII) so the public reserve flow can block them.
         assets = load_assets()
-        oos = [cam for cam in CAMERAS if (assets.get(cam) or {}).get('oos')]
-        no_card = [cam for cam in CAMERAS if (assets.get(cam) or {}).get('no_card')]
+        oos = [cam for cam in ALL_CAMERAS if (assets.get(cam) or {}).get('oos')]
+        no_card = [cam for cam in ALL_CAMERAS if (assets.get(cam) or {}).get('no_card')]
         # Kit contents: missing-item list per camera (no PII) so students see if a kit is incomplete.
-        kits = {cam: (assets.get(cam) or {}).get('kit', []) for cam in CAMERAS if (assets.get(cam) or {}).get('kit')}
+        kits = {cam: (assets.get(cam) or {}).get('kit', []) for cam in ALL_CAMERAS if (assets.get(cam) or {}).get('kit')}
+        # `cameras` stays 01-18 for backward compatibility; `pools` drives the new per-teacher views.
         self.json_response(200, {'cameras': CAMERAS, 'checkouts': out, 'oos': oos, 'no_card': no_card,
-                                 'kits': kits, 'blackouts': _blackout_list()})
+                                 'kits': kits, 'blackouts': _blackout_list(),
+                                 'pools': CAMERA_POOLS, 'equipment_pools': EQUIPMENT_POOLS,
+                                 'equipment_items': EQUIPMENT_ITEMS})
 
     def handle_camera_checkouts(self):
         """Camera-scoped: full detail for the teacher (names + emergency phones).
@@ -784,7 +842,9 @@ class Handler(BaseHTTPRequestHandler):
         self.json_response(200, {'cameras': CAMERAS, 'checkouts': items,
                                  'assets': load_assets(), 'cards': cards,
                                  'blackouts': _blackout_list(),
-                                 'missing_limit': MISSING_LIMIT})
+                                 'missing_limit': MISSING_LIMIT,
+                                 'pools': CAMERA_POOLS, 'equipment_pools': EQUIPMENT_POOLS,
+                                 'equipment_items': EQUIPMENT_ITEMS})
 
     def handle_camera_assets(self):
         """Camera-scoped: the per-camera standing notes + out-of-service flags."""
@@ -807,6 +867,24 @@ class Handler(BaseHTTPRequestHandler):
                            'updated': time.strftime('%Y-%m-%dT%H:%M:%SZ', time.gmtime())}, f)
             _load_garcia()
         self.json_response(200, {'ok': True, 'count': len(_GARCIA_STUDENTS)})
+
+    def handle_camera_mankin_roster(self):
+        """Camera-scoped: replace Ms. Mankin's Digital Arts camera roster (persisted to disk). Body:
+        {students:[...]}. Used ONLY for camera resolution, never the dashboard roster."""
+        data = self._read_json_body()
+        if data is None:
+            return
+        students = data.get('students') if isinstance(data, dict) else (data if isinstance(data, list) else None)
+        if not isinstance(students, list) or not students:
+            self.json_response(400, {'error': 'Provide a non-empty students list.'})
+            return
+        with _mankin_lock:
+            os.makedirs(_data_dir(), exist_ok=True)
+            with open(MANKIN_PATH, 'w') as f:
+                json.dump({'students': students,
+                           'updated': time.strftime('%Y-%m-%dT%H:%M:%SZ', time.gmtime())}, f)
+            _load_mankin()
+        self.json_response(200, {'ok': True, 'count': len(_MANKIN_STUDENTS)})
 
     def handle_camera_blackout(self):
         """Camera-scoped: the teacher closes/opens a day to student checkouts (an absence, etc.).
@@ -999,6 +1077,9 @@ class Handler(BaseHTTPRequestHandler):
             'label': label,
             'name': r.get('name', ''),
             'period': str(r.get('period', '')),
+            'teacher': r.get('teacher', ''),
+            'course': r.get('course', ''),
+            'pool': _pool_for(r.get('teacher', '')),
             'student_cell': r.get('student_cell', ''),
             'parent_guardian': r.get('parent_guardian', ''),
             'parent_cell': r.get('parent_cell', ''),
@@ -1136,7 +1217,7 @@ class Handler(BaseHTTPRequestHandler):
             if _is_blackout(out):
                 self.json_response(409, {'error': 'That day is not available for checkouts. Please pick another day.'})
                 return
-            if camera not in CAMERAS:
+            if camera not in ALL_CAMERAS:
                 self.json_response(400, {'error': 'Unknown camera.'})
                 return
             a = load_assets().get(camera) or {}
@@ -1149,8 +1230,11 @@ class Handler(BaseHTTPRequestHandler):
             if camera in ('Cam 16', 'Cam 17', 'Cam 18'):
                 per = str(resolve_student(sid).get('period', '')).lstrip('0')
                 if per != '4':
-                    self.json_response(403, {'error': 'That camera is for Photography 2 only.'})
-                    return
+                    # Photo-1 student on a Photo-2 camera: allowed only when the teacher enters the
+                    # override code on the student's device. Validated here; the code never leaves the server.
+                    if str(data.get('override', '')).strip() != CAMERA_OVERRIDE_CODE:
+                        self.json_response(403, {'error': 'That camera is for Photography 2. Ask Mr. Silva to enter the teacher code to unlock it for you.', 'override_required': True})
+                        return
             if self._camera_busy(camera, out, due):
                 self.json_response(409, {'error': 'That camera is already booked for those days. Please pick another.'})
                 return

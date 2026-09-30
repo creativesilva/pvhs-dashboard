@@ -257,16 +257,24 @@ textarea.field { font-family: var(--font-body); resize: vertical; }
 .grade-comment:focus { outline: none; border-color: var(--teal); }
 
 /* ---- Modal ---- */
-.modal-backdrop { display: none; position: fixed; inset: 0; background: rgba(0,0,0,0.65); z-index: 70; align-items: flex-start; justify-content: center; padding: 6vh 16px; overflow-y: auto; }
+.modal-backdrop { display: none; position: fixed; inset: 0; background: rgba(0,0,0,0.65); z-index: 70; align-items: flex-start; justify-content: center; padding: 4vh 16px; overflow-y: auto; }
 .modal-backdrop.open { display: flex; }
-.modal { background: var(--bg); border: 1px solid var(--teal); max-width: 640px; width: 100%; overflow: hidden; }
-.modal > .stripe { height: 4px; background: var(--teal); }
-.modal-head { background: var(--panel-2); border-bottom: 1px solid var(--line); padding: 18px 22px; display: flex; justify-content: space-between; align-items: flex-start; gap: 12px; }
+.modal { background: var(--bg); border: 1px solid var(--teal); max-width: 640px; width: 100%; overflow: hidden; max-height: 92vh; display: flex; flex-direction: column; }
+.modal > .stripe { height: 4px; background: var(--teal); flex: 0 0 auto; }
+.modal-head { background: var(--panel-2); border-bottom: 1px solid var(--line); padding: 18px 22px; display: flex; justify-content: space-between; align-items: flex-start; gap: 12px; flex: 0 0 auto; }
 .modal-head h3 { font-size: 1.05rem; margin-bottom: 4px; }
 .modal-close { background: transparent; border: 1px solid var(--line-strong); color: var(--text); width: 28px; height: 28px; font-size: 15px; cursor: pointer; line-height: 1; font-family: var(--font-body); }
 .modal-close:hover { border-color: var(--teal-bright); color: var(--teal-light); }
-.modal-body { padding: 20px 22px; max-height: 68vh; overflow-y: auto; }
+.modal-body { padding: 20px 22px; flex: 1 1 auto; min-height: 0; overflow-y: auto; }
 .modal-section { margin-bottom: 20px; } .modal-section:last-child { margin-bottom: 0; }
+.stu-link { cursor: pointer; }
+.stu-link:hover { color: var(--teal-light); text-decoration: underline; }
+.miss-head { display: flex; align-items: center; justify-content: space-between; gap: 10px; margin-bottom: 10px; }
+.miss-head h4 { margin: 0; }
+.miss-table { width: 100%; border-collapse: collapse; font-size: 0.82rem; }
+.miss-table th { text-align: left; padding: 5px 8px; border-bottom: 1px solid var(--line-strong); font-family: var(--font-head); font-size: 0.6rem; letter-spacing: 0.12em; text-transform: uppercase; color: var(--teal-light); }
+.miss-table td { padding: 6px 8px; border-bottom: 1px solid var(--line); vertical-align: top; }
+.miss-table .mt-course { color: var(--text-dim); font-size: 0.78rem; }
 .modal-section h4 { font-family: var(--font-head); margin: 0 0 10px; font-size: 0.62rem; letter-spacing: 0.18em; text-transform: uppercase; color: var(--teal-light); }
 .kv { display: grid; grid-template-columns: 130px 1fr; gap: 7px 12px; font-size: 0.86rem; }
 .kv .k { color: var(--text-faint); font-size: 0.72rem; letter-spacing: 0.05em; text-transform: uppercase; padding-top: 2px; }
@@ -872,7 +880,7 @@ async function loadAllCanvasData(){
       if(s.user && !nameMap[s.user_id]) nameMap[s.user_id]=s.user.sortable_name||s.user.name||'';
       if(!byStudent[s.user_id]) byStudent[s.user_id]={items:[],totalPts:0};
       const a=assignments.find(x=>x.id===s.assignment_id);
-      byStudent[s.user_id].items.push({name:a?.name||'Unknown',pts:a?.points_possible||0});
+      byStudent[s.user_id].items.push({name:a?.name||'Unknown',pts:a?.points_possible||0,due:a?.due_at||null,lock:a?.lock_at||null,course:course.name});
       byStudent[s.user_id].totalPts+=(a?.points_possible||0);
     });
     const students=Object.entries(byStudent).map(([uid,d])=>({name:nameMap[uid]||'Unknown',userId:+uid,missing:d.items,totalPts:d.totalPts}));
@@ -899,7 +907,7 @@ function renderMissingOverview(){
   } else {
     tbody.innerHTML=top.map((s,i)=>{
       const cc=s.count>=5?'alert':s.count>=3?'warn':'';
-      return `<tr><td class="num">${i+1}</td><td class="name">${esc(s.name)}</td><td style="font-size:0.8rem;max-width:200px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${esc(s.course)}</td><td><span class="pill ${cc||'info'}">${s.count} missing</span></td><td style="color:var(--warn);font-variant-numeric:tabular-nums;">${s.pts.toFixed(0)} pts</td></tr>`;
+      return `<tr><td class="num">${i+1}</td><td class="name stu-link" data-sname="${esc(s.name)}" onclick="openStudentByName(this.dataset.sname)">${esc(s.name)}</td><td style="font-size:0.8rem;max-width:200px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${esc(s.course)}</td><td><span class="pill ${cc||'info'}">${s.count} missing</span></td><td style="color:var(--warn);font-variant-numeric:tabular-nums;">${s.pts.toFixed(0)} pts</td></tr>`;
     }).join('');
     const total=missingOverviewData.reduce((s,x)=>s+x.count,0);
     status.textContent=`${missingOverviewData.length} students across ${coursesCache.length} courses, ${total} total missing assignments.`;
@@ -1017,9 +1025,24 @@ function renderMissingByPeriod(){
 }
 
 // ---- Student modal ----
+// ---- Student detail modal (contact + detailed missing assignments + printable report) ----
+let _modalStudent=null;
+function studentNameKey(s){ return ((s.last_name!=null&&s.last_name!=='')?`${s.last_name}, ${s.first_name||''}`:(s.name||'')).toLowerCase().trim(); }
+function fmtDate(d){ if(!d) return null; const dt=new Date(d); if(isNaN(dt.getTime())) return null; return dt.toLocaleDateString('en-US',{month:'short',day:'numeric',year:'numeric'}); }
+function getStudentMissingItems(s){
+  const key=studentNameKey(s); if(!key) return [];
+  const out=[];
+  (canvasCoursesMissing||[]).forEach(cd=>{ (cd.students||[]).forEach(st=>{ if((st.name||'').toLowerCase().trim()===key){ (st.missing||[]).forEach(m=>out.push(Object.assign({course:cd.courseName},m))); } }); });
+  out.sort((a,b)=>String(a.lock||a.due||'9999').localeCompare(String(b.lock||b.due||'9999')));
+  return out;
+}
+function rosterByName(name){ const key=(name||'').toLowerCase().trim(); return ((rosterData&&rosterData.students)||[]).find(s=>`${s.last_name}, ${s.first_name}`.toLowerCase().trim()===key)||null; }
+function openStudentByName(name){ if(!name) return; openStudentModal(rosterByName(name)||{name:name}); }
 function openStudentModal(s){
-  document.getElementById('modalTitle').textContent=`${s.last_name}, ${s.first_name}`+(s.preferred_name?` (${s.preferred_name})`:'');
-  document.getElementById('modalSub').textContent=`ID ${s.student_id} · Period ${s.period} · Seat ${s.Seat||'none'} · ${s.course||''}`;
+  _modalStudent=s;
+  const title=(s.last_name!=null&&s.last_name!=='')?(`${s.last_name}, ${s.first_name||''}`+(s.preferred_name?` (${s.preferred_name})`:'')):(s.name||'Student');
+  document.getElementById('modalTitle').textContent=title;
+  document.getElementById('modalSub').textContent=[s.student_id&&`ID ${s.student_id}`,s.period&&`Period ${s.period}`,(s.Seat!=null&&s.Seat!=='')&&`Seat ${s.Seat}`,s.course].filter(Boolean).join(' · ');
   const fields=[
     ['Student Cell',s['Student Cell']||'none on file'],
     ['Parent / Guardian',(s['Parent Guardian']||'none on file')+(s['Parent Relationship']?` (${s['Parent Relationship']})`:'')],
@@ -1028,17 +1051,37 @@ function openStudentModal(s){
     ['Language',s.langflu_meaning||'n/a'],
   ];
   const kv=fields.map(([k,v])=>`<div class="k">${k}</div><div class="v">${esc(v).replace(/^\?/,'<span class="pill flag">?</span> ')}</div>`).join('');
-  const ff=flaggedFields(s);
+  const ff=(typeof flaggedFields==='function')?flaggedFields(s):[];
   const flagsHtml=ff.length?`<div class="modal-section"><h4>Data Quality Flags</h4><div>${ff.map(f=>`<span class="pill flag">${esc(f)}</span> `).join('')}</div></div>`:'';
   const notesHtml=s['Form Notes']?`<div class="modal-section"><h4>Notes</h4><p style="font-size:0.86rem;color:var(--text-dim);">${esc(s['Form Notes'])}</p></div>`:'';
-  const mc=getStudentMissingCount(s);
-  const missingHtml=mc?`<div class="modal-section"><h4>Missing Assignments</h4><span class="pill ${mc>=5?'absent':mc>=3?'flag':'info'}">${mc} missing across courses</span></div>`:'';
+  const items=getStudentMissingItems(s);
+  let missingHtml;
+  if(items.length){
+    const cc=items.length>=5?'absent':items.length>=3?'flag':'info';
+    const rows=items.map(m=>`<tr><td>${esc(m.name)}</td><td class="mt-course">${esc(m.course||'')}</td><td>${fmtDate(m.due)||'<span class="muted">none</span>'}</td><td>${fmtDate(m.lock)||'<span class="muted">none</span>'}</td></tr>`).join('');
+    missingHtml=`<div class="modal-section"><div class="miss-head"><h4>Missing Assignments <span class="pill ${cc}">${items.length}</span></h4><button class="btn small" onclick="printStudentMissing()">Print Report</button></div><table class="miss-table"><thead><tr><th>Assignment</th><th>Course</th><th>Due</th><th>Closes</th></tr></thead><tbody>${rows}</tbody></table></div>`;
+  } else if(canvasLoaded){
+    missingHtml=`<div class="modal-section"><h4>Missing Assignments</h4><span class="muted">None. Caught up.</span></div>`;
+  } else {
+    missingHtml=`<div class="modal-section"><h4>Missing Assignments</h4><span class="muted">Open the Missing Work tab first to load Canvas data.</span></div>`;
+  }
   document.getElementById('modalBody').innerHTML=`
     <div class="modal-section"><h4>Support Flags</h4><div class="support-flags">${supportBadges(s)||'<span class="muted">None</span>'}</div></div>
     ${flagsHtml}${missingHtml}
     <div class="modal-section"><h4>Contact Information</h4><div class="kv">${kv}</div></div>
     ${notesHtml}`;
   document.getElementById('modalBackdrop').classList.add('open');
+  const mb=document.getElementById('modalBody'); if(mb) mb.scrollTop=0;
+}
+function printStudentMissing(){
+  const s=_modalStudent; if(!s) return;
+  const area=document.getElementById('print-area'); if(!area) return;
+  const items=getStudentMissingItems(s);
+  const nm=(s.last_name!=null&&s.last_name!=='')?`${s.last_name}, ${s.first_name||''}`:(s.name||'Student');
+  const meta=[s.student_id&&('ID '+s.student_id),s.period&&('Period '+s.period),s.course].filter(Boolean).join(' · ');
+  const rows=items.length?items.map(m=>`<tr><td>${esc(m.name)}</td><td>${esc(m.course||'')}</td><td>${fmtDate(m.due)||'none'}</td><td>${fmtDate(m.lock)||'none'}</td><td style="text-align:right;">${m.pts||0}</td></tr>`).join(''):'<tr><td colspan="5">No missing assignments.</td></tr>';
+  area.innerHTML=`<div class="rep-doc-head"><h1 class="rep-doc-title">Missing Assignments</h1><div class="rep-doc-meta">${esc(nm)}${meta?(' · '+esc(meta)):''} · Generated ${esc(new Date().toLocaleDateString('en-US',{month:'long',day:'numeric',year:'numeric'}))}</div></div><h2 class="rep-section">${items.length} missing assignment${items.length===1?'':'s'} (as of today)</h2><table><thead><tr><th>Assignment</th><th>Course</th><th>Due Date</th><th>Closes (no longer accepted)</th><th style="text-align:right;">Points</th></tr></thead><tbody>${rows}</tbody></table>`;
+  window.print();
 }
 document.getElementById('modalClose').addEventListener('click',()=>document.getElementById('modalBackdrop').classList.remove('open'));
 document.getElementById('modalBackdrop').addEventListener('click',e=>{ if(e.target===document.getElementById('modalBackdrop')) document.getElementById('modalBackdrop').classList.remove('open'); });
@@ -1058,7 +1101,7 @@ function renderCanvasTab(){
     let html=`<div class="panel" style="margin-bottom:18px;"><div class="stripe"></div><div class="section-head"><div class="head-row"><span class="eyebrow">Course</span><h2>${esc(cd.courseName)}</h2><span class="pill info">${sorted.length} students</span></div><span class="rule"></span></div>`;
     sorted.forEach(st=>{
       const cc=st.missing.length>=5?'alert':st.missing.length>=3?'warn':'';
-      html+=`<div class="student-row" onclick="this.classList.toggle('expanded')"><div class="student-row-header"><span class="student-name">${esc(st.name)}</span><span class="pill ${cc||'info'}">${st.missing.length} missing</span><span style="font-size:0.78rem;color:var(--teal-light);min-width:5rem;text-align:center;">${st.totalPts.toFixed(0)} pts</span><span class="expand-icon">&rsaquo;</span></div><div class="student-detail"><ul class="assignment-list">${st.missing.map(m=>`<li><span>${esc(m.name)}</span><span style="color:var(--teal-light)">${m.pts} pts</span></li>`).join('')}</ul></div></div>`;
+      html+=`<div class="student-row" onclick="this.classList.toggle('expanded')"><div class="student-row-header"><span class="student-name stu-link" data-sname="${esc(st.name)}" onclick="event.stopPropagation();openStudentByName(this.dataset.sname)">${esc(st.name)}</span><span class="pill ${cc||'info'}">${st.missing.length} missing</span><span style="font-size:0.78rem;color:var(--teal-light);min-width:5rem;text-align:center;">${st.totalPts.toFixed(0)} pts</span><span class="expand-icon">&rsaquo;</span></div><div class="student-detail"><ul class="assignment-list">${st.missing.map(m=>`<li><span>${esc(m.name)}</span><span style="color:var(--teal-light)">${m.pts} pts</span></li>`).join('')}</ul></div></div>`;
     });
     html+='</div>'; container.innerHTML+=html;
   });
@@ -1196,7 +1239,7 @@ function renderCamHolds(){
   const rows=blocked.map(s=>{
     const per=perByName[s.name.toLowerCase()];
     const cc=s.count>=5?'alert':'warn';
-    return `<tr><td class="name">${esc(s.name)}</td><td class="num">${per?('P'+esc(String(per))):''}</td><td><span class="pill ${cc}">${s.count} missing</span></td><td style="font-size:0.8rem;color:var(--text-dim);">${esc(Array.from(s.courses).join(', '))}</td></tr>`;
+    return `<tr><td class="name stu-link" data-sname="${esc(s.name)}" onclick="openStudentByName(this.dataset.sname)">${esc(s.name)}</td><td class="num">${per?('P'+esc(String(per))):''}</td><td><span class="pill ${cc}">${s.count} missing</span></td><td style="font-size:0.8rem;color:var(--text-dim);">${esc(Array.from(s.courses).join(', '))}</td></tr>`;
   }).join('');
   box.innerHTML=`<table class="tbl"><thead><tr><th>Student</th><th>Period</th><th>Missing</th><th>Course</th></tr></thead><tbody>${rows}</tbody></table>`;
 }

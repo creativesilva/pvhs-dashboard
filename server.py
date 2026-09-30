@@ -355,6 +355,9 @@ def resolve_student(student_id):
 # ---------------------------------------------------------------------------
 _silva_ids_cache = {'ids': None, 'exp': 0}
 _photo_courses_cache = {'ids': None, 'exp': 0}
+_canvas_cache = {}            # Canvas GET proxy cache: path -> (expiry, status, content_type, link, body)
+_CANVAS_CACHE_TTL = 300       # 5 min. Speeds the dashboard's repeat course pulls; the Refresh button
+_canvas_cache_lock = threading.Lock()   # sends X-Canvas-Fresh:1 to bypass the cache and refill it.
 _elig_pass_cache = {}   # sid -> (expiry, result); caches only a DEFINITE pass, so a blocked
                         # student who turns work in is re-checked live on their next try.
 
@@ -1273,6 +1276,28 @@ class Handler(BaseHTTPRequestHandler):
             self.json_response(503, {'error': 'Canvas token not configured'})
             return
 
+        # Serve GETs from the short-lived in-memory cache (the dashboard re-pulls every course each
+        # time it loads). The Refresh button sends X-Canvas-Fresh:1 to skip the cache and refill it.
+        cache_key = self.path
+        fresh = self.headers.get('X-Canvas-Fresh') == '1'
+        if method == 'GET' and not fresh:
+            _now = time.time()
+            with _canvas_cache_lock:
+                hit = _canvas_cache.get(cache_key)
+            if hit and _now < hit[0]:
+                _st, _ct, _lk, _body = hit[1], hit[2], hit[3], hit[4]
+                self.send_response(_st)
+                self.send_header('Content-Type', _ct)
+                if _lk:
+                    self.send_header('Link', _lk)
+                self._cors_headers()
+                self.send_header('Cache-Control', 'no-store')
+                self.send_header('X-Canvas-Cache', 'hit')
+                self.send_header('Content-Length', len(_body))
+                self.end_headers()
+                self.wfile.write(_body)
+                return
+
         ctx = ssl.create_default_context()
         conn = http.client.HTTPSConnection(CANVAS_HOST, context=ctx)
         headers = {
@@ -1296,17 +1321,25 @@ class Handler(BaseHTTPRequestHandler):
             if resp.status >= 400:
                 print(f'[canvas] {method} {self.path} -> {resp.status}: {resp_body[:200]}')
 
-            self.send_response(resp.status)
             ct = resp.getheader('Content-Type', 'application/json')
-            self.send_header('Content-Type', ct)
-
             link = resp.getheader('Link', '')
             if link:
                 link = link.replace(f'https://{CANVAS_HOST}', '')
-                self.send_header('Link', link)
+            if method == 'GET' and resp.status < 400:
+                _now = time.time()
+                with _canvas_cache_lock:
+                    if len(_canvas_cache) > 300:   # prune expired entries so the cache stays bounded
+                        for _k in [k for k, v in _canvas_cache.items() if v[0] < _now]:
+                            _canvas_cache.pop(_k, None)
+                    _canvas_cache[cache_key] = (_now + _CANVAS_CACHE_TTL, resp.status, ct, link, resp_body)
 
+            self.send_response(resp.status)
+            self.send_header('Content-Type', ct)
+            if link:
+                self.send_header('Link', link)
             self._cors_headers()
             self.send_header('Cache-Control', 'no-store')
+            self.send_header('X-Canvas-Cache', 'miss')
             self.send_header('Content-Length', len(resp_body))
             self.end_headers()
             self.wfile.write(resp_body)

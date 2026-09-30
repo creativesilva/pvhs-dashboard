@@ -443,7 +443,7 @@ footer { text-align: center; color: var(--text-faint); font-size: 0.72rem; paddi
         <div class="stripe"></div>
         <div class="section-head">
           <div class="head-row"><span class="eyebrow">Canvas Live</span><h2>Students with Most Missing Work</h2>
-            <button class="btn ghost small" onclick="loadAllCanvasData()">Refresh</button>
+            <button class="btn ghost small" onclick="loadAllCanvasData(true)">Refresh</button>
           </div>
           <span class="rule"></span>
         </div>
@@ -460,7 +460,7 @@ footer { text-align: center; color: var(--text-faint); font-size: 0.72rem; paddi
           <div class="head-row">
             <span class="eyebrow">Canvas Live</span>
             <h2>Missing Assignments by Period</h2>
-            <button class="btn ghost small" onclick="loadAllCanvasData()">Refresh</button>
+            <button class="btn ghost small" onclick="loadAllCanvasData(true)">Refresh</button>
           </div>
           <span class="rule"></span>
         </div>
@@ -501,7 +501,7 @@ footer { text-align: center; color: var(--text-faint); font-size: 0.72rem; paddi
         <div class="controls" style="margin-bottom:14px;">
           <span class="sub" id="canvas-status">Loading courses from Canvas...</span>
           <div style="flex:1;"></div>
-          <button class="btn ghost small" onclick="loadAllCanvasData()">Refresh</button>
+          <button class="btn ghost small" onclick="loadAllCanvasData(true)">Refresh</button>
         </div>
         <div class="sort-bar" id="canvas-sort-bar" style="display:none;margin-bottom:14px;">
           <span class="sort-label">Sort:</span>
@@ -706,11 +706,11 @@ async function api(path, opts={}){
 }
 const sleep=ms=>new Promise(r=>setTimeout(r,ms));
 // Retry transient failures: proxy overload from many parallel course loads, or Canvas throttling.
-async function apiOK(url){
+async function apiOK(url, opts={}){
   const TRANSIENT={429:1,500:1,502:1,503:1,504:1};
   for(let attempt=0;;attempt++){
     let r;
-    try{ r=await api(url); }
+    try{ r=await api(url, opts); }
     catch(e){ if(attempt>=5) throw e; await sleep(500*(attempt+1)+Math.random()*400); continue; }
     if(r.ok) return r;
     if(TRANSIENT[r.status] && attempt<5){ await sleep(500*(attempt+1)+Math.random()*400); continue; }
@@ -728,10 +728,10 @@ async function mapPool(items, limit, fn){
   await Promise.all(Array.from({length:Math.min(limit,items.length||1)},worker));
   return results;
 }
-async function canvasFetch(canvasPath){
+async function canvasFetch(canvasPath, fresh){
   let all=[], url=`/api/v1${canvasPath}`;
   while(url){
-    const r=await apiOK(url);
+    const r=await apiOK(url, fresh?{headers:{'X-Canvas-Fresh':'1'}}:{});
     const data=await r.json(); all=all.concat(data);
     const link=r.headers.get('Link')||'';
     const next=link.match(/<([^>]+)>;\s*rel="next"/);
@@ -847,7 +847,7 @@ function renderStatCards(){
 let canvasLoaded=false, missingOverviewData=[];
 let canvasCoursesMissing=[];
 
-async function loadAllCanvasData(){
+async function loadAllCanvasData(fresh){
   canvasLoaded=false; missingOverviewData=[]; canvasCoursesMissing=[];
   const status=document.getElementById('missing-overview-status');
   const tbody=document.getElementById('missingOverviewRows');
@@ -858,9 +858,9 @@ async function loadAllCanvasData(){
   // overwhelmed the single proxy instance and returned a storm of 502s.
   const results=await mapPool(coursesCache, 4, async course=>{
     const [enrollments,assignments,allSubs]=await Promise.all([
-      canvasFetch(`/courses/${course.id}/enrollments?type[]=StudentEnrollment&state[]=active&per_page=100`),
-      canvasFetch(`/courses/${course.id}/assignments?per_page=100`),
-      canvasFetch(`/courses/${course.id}/students/submissions?student_ids[]=all&include[]=user&per_page=100`),
+      canvasFetch(`/courses/${course.id}/enrollments?type[]=StudentEnrollment&state[]=active&per_page=100`, fresh),
+      canvasFetch(`/courses/${course.id}/assignments?per_page=100`, fresh),
+      canvasFetch(`/courses/${course.id}/students/submissions?student_ids[]=all&include[]=user&per_page=100`, fresh),
     ]);
     return {course,enrollments,assignments,allSubs};
   });

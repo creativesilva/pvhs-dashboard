@@ -810,11 +810,24 @@ class Handler(BaseHTTPRequestHandler):
         no_card = [cam for cam in ALL_CAMERAS if (assets.get(cam) or {}).get('no_card')]
         # Kit contents: missing-item list per camera (no PII) so students see if a kit is incomplete.
         kits = {cam: (assets.get(cam) or {}).get('kit', []) for cam in ALL_CAMERAS if (assets.get(cam) or {}).get('kit')}
+        # Equipment (gear) reservations, SANITIZED (item + dates + status only, never a name/ID/phone)
+        # so the per-teacher "Other Equipment" tab can compute per-day availability. `equipment_down`
+        # = units out for repair per gear key (also removed from availability).
+        equip = []
+        for c in load_checkouts():
+            if c.get('kind') != 'equipment':
+                continue
+            est = status_of(c)
+            equip.append({'id': c.get('id'), 'item': c.get('item', ''), 'out': c.get('out', ''),
+                          'due': c.get('due', ''), 'returned': (est == 'returned'),
+                          'returned_date': c.get('returned_date', ''), 'status': est})
+        equip_down = {k: (assets.get(k) or {}).get('down', 0) for k in EQUIPMENT_ITEMS if (assets.get(k) or {}).get('down')}
         # `cameras` stays 01-18 for backward compatibility; `pools` drives the new per-teacher views.
         self.json_response(200, {'cameras': CAMERAS, 'checkouts': out, 'oos': oos, 'no_card': no_card,
                                  'kits': kits, 'blackouts': _blackout_list(),
                                  'pools': CAMERA_POOLS, 'equipment_pools': EQUIPMENT_POOLS,
-                                 'equipment_items': EQUIPMENT_ITEMS})
+                                 'equipment_items': EQUIPMENT_ITEMS,
+                                 'equipment': equip, 'equipment_down': equip_down})
 
     def handle_camera_checkouts(self):
         """Camera-scoped: full detail for the teacher (names + emergency phones).

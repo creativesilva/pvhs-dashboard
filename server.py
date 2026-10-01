@@ -85,23 +85,44 @@ CAMERA_POOLS = {
     "mankin": list(MANKIN_CAMERAS),
 }
 
-# Add-on gear, tracked as its OWN checkout records (kind='equipment', item=<key>) so each unit
-# is reserved, picked up, returned, and noted independently of any camera. Totals = pool size.
-# `pool`: "shared" = Silva + Garcia; "mankin" = Ms. Mankin's own gear.
-EQUIPMENT_ITEMS = {
-    "tripod":    {"label": "K&F Concept Tripod",            "total": 5, "pool": "shared"},
-    "wide":      {"label": "Canon RF-S 10-18mm ultra-wide", "total": 2, "pool": "shared"},
-    "zoom":      {"label": "Canon RF 100-400mm ultra-zoom", "total": 2, "pool": "shared"},
-    "speedlite": {"label": "Canon Speedlite EL-10 flash",   "total": 5, "pool": "shared"},
-    "mankin_tripod": {"label": "K&F Concept Tripod",   "total": 3,  "pool": "mankin"},
-    "apple_pencil":  {"label": "Apple Pencil (#31-40)", "total": 10, "pool": "mankin"},
+# Add-on gear, tracked as its OWN PER-UNIT checkout records (kind='equipment', item=<unit id>) so
+# every physical unit reserves, picks up, returns, is noted, out-of-serviced, and kit-checked
+# independently, exactly like a camera. `pool`: "shared" = Silva + Garcia (Photo 1 + Photo 2);
+# "mankin" = Ms. Mankin's own gear.
+EQUIPMENT_TYPES = {
+    # key: {label (type name), unit (per-unit label prefix), count, pool, start?(default 1), kit[]}
+    "wide":      {"label": "Ultra-Wide Lens",  "unit": "Ultra-Wide", "count": 5,  "pool": "shared",
+                  "kit": ["Front lens cap", "Rear lens cap", "Lens filter", "Lens hood"]},
+    "zoom":      {"label": "Ultra-Zoom Lens",  "unit": "Ultra-Zoom", "count": 2,  "pool": "shared",
+                  "kit": ["Front lens cap", "Rear lens cap", "Lens filter", "Lens hood"]},
+    "speedlite": {"label": "Speedlite",        "unit": "Speedlite",  "count": 15, "pool": "shared",
+                  "kit": ["Diffuser dome", "Mini stand", "Soft pouch"]},
+    "tripod":    {"label": "Tripod",           "unit": "Tripod",     "count": 5,  "pool": "shared",
+                  "kit": ["Quick-release plate", "Carry bag"]},
+    "reflector": {"label": "Neewer Reflector", "unit": "Reflector",  "count": 5,  "pool": "shared",
+                  "kit": ["Scrim frame", "Reflector zip surface", "Reflector zip case"]},
+    "mankin_tripod": {"label": "Tripod (Mankin)", "unit": "Mankin Tripod", "count": 3, "pool": "mankin",
+                  "kit": ["Quick-release plate", "Carry bag"]},
+    "apple_pencil":  {"label": "Apple Pencil", "unit": "Apple Pencil", "count": 10, "pool": "mankin", "start": 31},
 }
-# Equipment keys grouped by teacher view. "shared" gear appears for Silva and Garcia.
+# Expand the types into concrete per-unit identities: id "<type>-<NN>" -> {type, label, pool, kit}.
+EQUIPMENT_UNITS = {}
+EQUIPMENT_UNIT_IDS = []
+for _t, _d in EQUIPMENT_TYPES.items():
+    _start = _d.get("start", 1)
+    for _i in range(_start, _start + _d["count"]):
+        _uid = "%s-%02d" % (_t, _i)
+        EQUIPMENT_UNITS[_uid] = {"type": _t, "label": "%s %02d" % (_d["unit"], _i),
+                                 "pool": _d["pool"], "kit": list(_d.get("kit", []))}
+        EQUIPMENT_UNIT_IDS.append(_uid)
+# Per-teacher gear views: unit ids grouped by pool. "shared" units appear for Silva and Garcia.
 EQUIPMENT_POOLS = {
-    "silva":  [k for k, v in EQUIPMENT_ITEMS.items() if v.get("pool") == "shared"],
-    "garcia": [k for k, v in EQUIPMENT_ITEMS.items() if v.get("pool") == "shared"],
-    "mankin": [k for k, v in EQUIPMENT_ITEMS.items() if v.get("pool") == "mankin"],
+    "silva":  [u for u in EQUIPMENT_UNIT_IDS if EQUIPMENT_UNITS[u]["pool"] == "shared"],
+    "garcia": [u for u in EQUIPMENT_UNIT_IDS if EQUIPMENT_UNITS[u]["pool"] == "shared"],
+    "mankin": [u for u in EQUIPMENT_UNIT_IDS if EQUIPMENT_UNITS[u]["pool"] == "mankin"],
 }
+# Type-level labels for grouping units under a header in the clients.
+EQUIPMENT_TYPE_LABELS = {t: {"label": d["label"], "unit": d["unit"]} for t, d in EQUIPMENT_TYPES.items()}
 
 def _data_dir():
     """The Render persistent disk mount, or the app dir as a local/dev fallback."""
@@ -851,9 +872,8 @@ class Handler(BaseHTTPRequestHandler):
         no_card = [cam for cam in ALL_CAMERAS if (assets.get(cam) or {}).get('no_card')]
         # Kit contents: missing-item list per camera (no PII) so students see if a kit is incomplete.
         kits = {cam: (assets.get(cam) or {}).get('kit', []) for cam in ALL_CAMERAS if (assets.get(cam) or {}).get('kit')}
-        # Equipment (gear) reservations, SANITIZED (item + dates + status only, never a name/ID/phone)
-        # so the per-teacher "Other Equipment" tab can compute per-day availability. `equipment_down`
-        # = units out for repair per gear key (also removed from availability).
+        # Equipment (gear) reservations, SANITIZED (unit id + dates + status only, never a name/ID/phone)
+        # so the per-teacher "Other Equipment" tab can compute per-UNIT availability, exactly like cameras.
         equip = []
         for c in load_checkouts():
             if c.get('kind') != 'equipment':
@@ -862,13 +882,15 @@ class Handler(BaseHTTPRequestHandler):
             equip.append({'id': c.get('id'), 'item': c.get('item', ''), 'out': c.get('out', ''),
                           'due': c.get('due', ''), 'returned': (est == 'returned'),
                           'returned_date': c.get('returned_date', ''), 'status': est})
-        equip_down = {k: (assets.get(k) or {}).get('down', 0) for k in EQUIPMENT_ITEMS if (assets.get(k) or {}).get('down')}
+        # Per-unit gear out-of-service + kit (missing-item) lists, mirroring the camera oos/kits above.
+        equip_oos = [u for u in EQUIPMENT_UNIT_IDS if (assets.get(u) or {}).get('oos')]
+        equip_kits = {u: (assets.get(u) or {}).get('kit', []) for u in EQUIPMENT_UNIT_IDS if (assets.get(u) or {}).get('kit')}
         # `cameras` stays 01-18 for backward compatibility; `pools` drives the new per-teacher views.
         self.json_response(200, {'cameras': CAMERAS, 'checkouts': out, 'oos': oos, 'no_card': no_card,
                                  'kits': kits, 'blackouts': _blackout_list(),
                                  'pools': CAMERA_POOLS, 'equipment_pools': EQUIPMENT_POOLS,
-                                 'equipment_items': EQUIPMENT_ITEMS,
-                                 'equipment': equip, 'equipment_down': equip_down})
+                                 'equipment_units': EQUIPMENT_UNITS, 'equipment_types': EQUIPMENT_TYPE_LABELS,
+                                 'equipment': equip, 'equipment_oos': equip_oos, 'equipment_kits': equip_kits})
 
     def handle_camera_checkouts(self):
         """Camera-scoped: full detail for the teacher (names + emergency phones).
@@ -898,7 +920,7 @@ class Handler(BaseHTTPRequestHandler):
                                  'blackouts': _blackout_list(),
                                  'missing_limit': MISSING_LIMIT,
                                  'pools': CAMERA_POOLS, 'equipment_pools': EQUIPMENT_POOLS,
-                                 'equipment_items': EQUIPMENT_ITEMS})
+                                 'equipment_units': EQUIPMENT_UNITS, 'equipment_types': EQUIPMENT_TYPE_LABELS})
 
     def handle_camera_assets(self):
         """Camera-scoped: the per-camera standing notes + out-of-service flags."""
@@ -962,19 +984,18 @@ class Handler(BaseHTTPRequestHandler):
         self.json_response(200, {'ok': True, 'blackouts': sorted(_load_blackouts().keys())})
 
     def handle_camera_asset(self):
-        """Camera-scoped: set a camera's standing note and/or out-of-service flag.
-        Body: {camera, note?, oos?}. The note follows the physical camera across checkouts.
-        `camera` may also be a pooled-gear key (tripod/wide/zoom/speedlite/...). Gear records carry
-        note/issues, a `down` count (units out for repair), and `gkit` (gear kit checklist: list of
-        MISSING item labels) ONLY, never the camera-only oos/no_card/kit fields, so a gear key can
-        never leak into the student calendar's camera lists (calendar.html derives its out-of-service
-        / no-card / kit views from every asset key; `gkit` is a separate field it does not read)."""
+        """Camera-scoped: set a camera's (or gear unit's) standing note, out-of-service flag, and kit.
+        Body: {camera, note?, oos?, kit?, issues?, log?}. The note follows the physical unit across
+        checkouts. `camera` may also be a per-unit gear id (e.g. tripod-03, reflector-01). A gear unit
+        behaves like a camera (note/oos/kit/issues/log); only `no_card` is camera-only. The public feed
+        keeps cameras and gear separate by filtering on ALL_CAMERAS vs EQUIPMENT_UNITS, so a gear unit's
+        oos/kit never leaks into the camera lists."""
         data = self._read_json_body()
         if data is None:
             return
         cam = str(data.get('camera', '')).strip()
-        is_gear = cam in EQUIPMENT_ITEMS
-        if cam not in CAMERAS and not is_gear:
+        is_gear_unit = cam in EQUIPMENT_UNITS
+        if cam not in CAMERAS and not is_gear_unit:
             self.json_response(400, {'error': 'Unknown camera or item'})
             return
         with _assets_lock:
@@ -988,24 +1009,14 @@ class Handler(BaseHTTPRequestHandler):
             if 'log' in data and isinstance(data['log'], list):
                 rec['log'] = [{'date': str(e.get('date', '')), 'text': str(e.get('text', ''))}
                               for e in data['log'] if isinstance(e, dict)]
-            if is_gear:
-                # Pooled gear: `down` = units out for repair (0..pool total). Reduces availability so
-                # broken units are not offered for checkout. No oos/no_card/kit on gear (camera-only).
-                if 'down' in data:
-                    try:
-                        n = int(data.get('down') or 0)
-                    except (TypeError, ValueError):
-                        n = 0
-                    rec['down'] = max(0, min(n, EQUIPMENT_ITEMS[cam].get('total', 0)))
-                if 'gkit' in data and isinstance(data['gkit'], list):   # gear kit: list of MISSING item labels
-                    rec['gkit'] = [str(x) for x in data['gkit']][:40]
-            else:
-                if 'oos' in data:
-                    rec['oos'] = bool(data.get('oos'))
+            # Cameras and gear units share oos + kit (list of MISSING item labels).
+            if 'oos' in data:
+                rec['oos'] = bool(data.get('oos'))
+            if 'kit' in data and isinstance(data['kit'], list):
+                rec['kit'] = [str(x) for x in data['kit']][:40]
+            if not is_gear_unit:
                 if 'no_card' in data:             # memory card missing until a fresh one is installed
                     rec['no_card'] = bool(data.get('no_card'))
-                if 'kit' in data and isinstance(data['kit'], list):   # kit contents: list of MISSING item labels
-                    rec['kit'] = [str(x) for x in data['kit']][:40]
             rec.setdefault('issues', [])
             rec.setdefault('log', [])
             rec['updated'] = time.strftime('%Y-%m-%dT%H:%M:%SZ', time.gmtime())
@@ -1211,7 +1222,7 @@ class Handler(BaseHTTPRequestHandler):
             flags.append('unknown student id')
         if kind == 'camera' and camera not in CAMERAS:
             flags.append('unknown camera')
-        if kind == 'equipment' and item not in EQUIPMENT_ITEMS:
+        if kind == 'equipment' and item not in EQUIPMENT_UNITS:
             flags.append('unknown item')
         rec = {
             'id': 'ck_' + str(int(time.time() * 1000)) + ('' if not group else '_' + item),
@@ -1315,15 +1326,17 @@ class Handler(BaseHTTPRequestHandler):
             if not sid or not item or not due:
                 self.json_response(400, {'error': 'Enter a student ID, an item, and a due date.'})
                 return
-            if item not in EQUIPMENT_ITEMS:
+            if item not in EQUIPMENT_UNITS:
                 self.json_response(400, {'error': 'Unknown item.'})
                 return
             if due < out:
                 self.json_response(400, {'error': 'The due date is before the pickup date.'})
                 return
             # Student-facing guards (the teacher console is trusted to override these). Defense in
-            # depth: the client already blocks ineligible students and only shows free gear, but a
-            # direct or stale call must not slip through the gear path either. All fail open.
+            # depth: the client already blocks ineligible students and only shows free units, but a
+            # direct or stale call must not slip through the gear path either. All fail open. Per-unit,
+            # exactly like a camera: a unit is available if it is not out of service and not already
+            # booked over the requested span.
             if not is_teacher:
                 if not camera_eligibility(sid)['eligible']:
                     self.json_response(403, {'error': 'You are not eligible to reserve equipment right now because you have more than %d missing assignments. Please turn in your missing work and try again later.' % MISSING_LIMIT})
@@ -1331,10 +1344,11 @@ class Handler(BaseHTTPRequestHandler):
                 if _is_blackout(out):
                     self.json_response(409, {'error': 'That day is not available for checkouts. Please pick another day.'})
                     return
-                total = EQUIPMENT_ITEMS[item].get('total', 0)
-                down = int((load_assets().get(item) or {}).get('down', 0) or 0)
-                if self._equipment_units_booked(item, out, due) >= max(0, total - down):
-                    self.json_response(409, {'error': 'That equipment is fully booked for those days. Please pick another day or item.'})
+                if (load_assets().get(item) or {}).get('oos'):
+                    self.json_response(409, {'error': 'That unit is out of service right now. Please pick another.'})
+                    return
+                if self._equipment_unit_busy(item, out, due):
+                    self.json_response(409, {'error': 'That unit is already booked for those days. Please pick another day or unit.'})
                     return
             rec = self._new_checkout_rec(data, 'equipment', item, '', out, due, str(data.get('group', '')))
             with _checkouts_lock:
@@ -1386,7 +1400,7 @@ class Handler(BaseHTTPRequestHandler):
         if isinstance(extras, list):
             for key in extras:
                 key = str(key).strip()
-                if key in EQUIPMENT_ITEMS:
+                if key in EQUIPMENT_UNITS:
                     extra_recs.append(self._new_checkout_rec(data, 'equipment', key, '', out, due, rec['id']))
         with _checkouts_lock:
             items = load_checkouts()
@@ -1408,10 +1422,9 @@ class Handler(BaseHTTPRequestHandler):
                 return True
         return False
 
-    def _equipment_units_booked(self, item, out, due):
-        """How many units of this equipment item are reserved/out over [out, due) (half-open, so a
-        same-day handoff is allowed). Returned records free their unit."""
-        n = 0
+    def _equipment_unit_busy(self, item, out, due):
+        """True if this specific gear unit (item = unit id) has a non-returned reservation overlapping
+        [out, due) (half-open, so a same-day handoff is allowed). Mirrors _camera_busy for per-unit gear."""
         for c in load_checkouts():
             if c.get('kind') != 'equipment' or c.get('item') != item:
                 continue
@@ -1419,8 +1432,8 @@ class Handler(BaseHTTPRequestHandler):
                 continue
             eo = str(c.get('out', '')); ed = str(c.get('due', '')) or eo
             if eo and ed and eo < due and out < ed:
-                n += 1
-        return n
+                return True
+        return False
 
     def _find_checkout(self, items, cid):
         for x in items:

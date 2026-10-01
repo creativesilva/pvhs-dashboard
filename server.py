@@ -911,9 +911,10 @@ class Handler(BaseHTTPRequestHandler):
         """Camera-scoped: set a camera's standing note and/or out-of-service flag.
         Body: {camera, note?, oos?}. The note follows the physical camera across checkouts.
         `camera` may also be a pooled-gear key (tripod/wide/zoom/speedlite/...). Gear records carry
-        note/issues plus a `down` count (units out for repair) ONLY, never the camera-only
-        oos/no_card/kit fields, so a gear key can never leak into the student calendar's camera lists
-        (calendar.html derives its out-of-service / no-card / kit views from every asset key)."""
+        note/issues, a `down` count (units out for repair), and `gkit` (gear kit checklist: list of
+        MISSING item labels) ONLY, never the camera-only oos/no_card/kit fields, so a gear key can
+        never leak into the student calendar's camera lists (calendar.html derives its out-of-service
+        / no-card / kit views from every asset key; `gkit` is a separate field it does not read)."""
         data = self._read_json_body()
         if data is None:
             return
@@ -942,6 +943,8 @@ class Handler(BaseHTTPRequestHandler):
                     except (TypeError, ValueError):
                         n = 0
                     rec['down'] = max(0, min(n, EQUIPMENT_ITEMS[cam].get('total', 0)))
+                if 'gkit' in data and isinstance(data['gkit'], list):   # gear kit: list of MISSING item labels
+                    rec['gkit'] = [str(x) for x in data['gkit']][:40]
             else:
                 if 'oos' in data:
                     rec['oos'] = bool(data.get('oos'))

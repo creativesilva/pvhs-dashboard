@@ -232,6 +232,25 @@ def save_checkouts(items):
         json.dump(items, f)
     os.replace(tmp, CHECKOUTS_PATH)
 
+# Photo Walk logs: Mr. Silva's per-period record of which kit each seat took on a given day, with the
+# kit's completion % at that moment. SILVA-only, authenticated, server-side (ties kits to students).
+# Keyed "YYYY-MM-DD|<period>". One log per date+period (reopening a day loads it to adjust).
+PHOTOWALK_PATH = os.path.join(_data_dir(), 'photo_walk_logs.json')
+_photowalk_lock = threading.Lock()
+
+def load_photowalks():
+    try:
+        with open(PHOTOWALK_PATH) as f:
+            return json.load(f)
+    except Exception:
+        return {}
+
+def save_photowalks(d):
+    tmp = PHOTOWALK_PATH + '.tmp'
+    with open(tmp, 'w') as f:
+        json.dump(d, f)
+    os.replace(tmp, PHOTOWALK_PATH)
+
 # Per-camera ASSET store: a standing note that follows the physical camera across checkouts
 # (e.g. "lens cap replaced 9/28", "small scratch") + an out-of-service flag for broken gear.
 # Keyed by camera name (Cam 01..18). Separate from per-checkout notes, which are incident history.
@@ -399,6 +418,26 @@ def resolve_student(student_id):
             return _student_result(s)
     return {'found': False, 'name': '', 'first': '', 'last': '', 'period': '', 'course': '',
             'student_cell': '', 'parent_guardian': '', 'parent_cell': ''}
+
+def _photowalk_seatmap():
+    """For the Photo Walk Log: {period: {'course':..., 'seats': {seatNo: {'id':..., 'label':...}}}}.
+    Built from Mr. Silva's roster (period + Seat + student_id), covering ALL his classes including
+    Digital Arts (resolve_student is photo-only, so build names here). Authenticated use only."""
+    out = {}
+    for s in _roster_students():
+        if not isinstance(s, dict):
+            continue
+        period = str(s.get('period', '')).strip().lstrip('0')
+        seat = str(s.get('Seat', '')).strip().lstrip('0')
+        sid = str(s.get('student_id', '')).strip()
+        if not period or not seat or not sid:
+            continue
+        first = (s.get('preferred_name') or s.get('call_name') or s.get('first_name') or '').strip()
+        last = (s.get('last_name') or '').strip()
+        label = (first + ' ' + (last[:1] + '.' if last else '')).strip()
+        rec = out.setdefault(period, {'course': s.get('course') or s.get('course_code') or '', 'seats': {}})
+        rec['seats'][seat] = {'id': sid, 'label': label}
+    return out
 
 # ---------------------------------------------------------------------------
 # Camera-reservation eligibility: block a Silva PHOTO student who has MORE THAN
@@ -662,9 +701,11 @@ class Handler(BaseHTTPRequestHandler):
             self.handle_camera_student_update()# PUBLIC: a student corrects their own contact -> overrides store
             return
         # Camera management: full login OR the shared camera password (scoped to cameras only)
-        if path in ('/api/camera/return', '/api/camera/status', '/api/camera/update', '/api/camera/delete', '/api/camera/asset', '/api/camera/garcia_roster', '/api/camera/mankin_roster', '/api/camera/card_hold', '/api/camera/card_return', '/api/camera/student_override', '/api/camera/blackout'):
+        if path in ('/api/camera/return', '/api/camera/status', '/api/camera/update', '/api/camera/delete', '/api/camera/asset', '/api/camera/garcia_roster', '/api/camera/mankin_roster', '/api/camera/card_hold', '/api/camera/card_return', '/api/camera/student_override', '/api/camera/blackout', '/api/camera/seatmap', '/api/camera/photowalk'):
             if not self.require_camera_auth():
                 return
+            if path == '/api/camera/seatmap':  self.handle_camera_seatmap();  return
+            if path == '/api/camera/photowalk': self.handle_camera_photowalk(); return
             if path == '/api/camera/return':   self.handle_camera_return()   # mark returned
             elif path == '/api/camera/status': self.handle_camera_status()   # reserved -> out -> returned
             elif path == '/api/camera/update': self.handle_camera_update()   # edit a checkout
@@ -1201,6 +1242,46 @@ class Handler(BaseHTTPRequestHandler):
         }
         stamp_status(rec, data.get('status'))
         return rec
+
+    def handle_camera_seatmap(self):
+        """AUTHED (camera key). Seat -> student per period for the Photo Walk Log. Server-side only."""
+        self.json_response(200, {'periods': _photowalk_seatmap()})
+
+    def handle_camera_photowalk(self):
+        """AUTHED (camera key). Photo Walk Log store: action = save | list | get.
+        One log per date+period (key "YYYY-MM-DD|<period>"); saving the same day overwrites it."""
+        data = self._read_json_body()
+        if data is None:
+            return
+        action = str(data.get('action', '')).strip()
+        if action == 'list':
+            d = load_photowalks()
+            rows = [{'key': k, 'date': v.get('date'), 'period': v.get('period'),
+                     'course': v.get('course'), 'saved_at': v.get('saved_at'),
+                     'kits': len(v.get('kits', []))} for k, v in d.items() if isinstance(v, dict)]
+            rows.sort(key=lambda r: (str(r.get('date', '')), str(r.get('period', ''))), reverse=True)
+            self.json_response(200, {'logs': rows})
+            return
+        if action == 'get':
+            key = str(data.get('key', '')).strip() or (str(data.get('date', '')).strip() + '|' + str(data.get('period', '')).strip())
+            self.json_response(200, {'log': load_photowalks().get(key)})
+            return
+        if action == 'save':
+            date = str(data.get('date', '')).strip()
+            period = str(data.get('period', '')).strip()
+            if not date or not period:
+                self.json_response(400, {'error': 'Missing date or period.'})
+                return
+            rec = {'date': date, 'period': period, 'course': str(data.get('course', '')),
+                   'saved_at': time.strftime('%Y-%m-%dT%H:%M:%S'),
+                   'kits': data.get('kits') if isinstance(data.get('kits'), list) else []}
+            with _photowalk_lock:
+                d = load_photowalks()
+                d[date + '|' + period] = rec
+                save_photowalks(d)
+            self.json_response(200, {'ok': True, 'key': date + '|' + period})
+            return
+        self.json_response(400, {'error': 'Unknown action.'})
 
     def handle_camera_checkout(self):
         """PUBLIC submit. Student enters ID + camera + dates (+ optional accessories). We resolve

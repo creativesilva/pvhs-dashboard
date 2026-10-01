@@ -183,6 +183,15 @@ h1 { font-size: 1.5rem; } h2 { font-size: 1.05rem; }
 .panel.flush { padding: 0; } .panel.flush > .stripe { margin: 0; } .panel.flush .panel-inner { padding: 22px 22px 4px; }
 .section-head { margin-bottom: 14px; }
 .section-head .head-row { display: flex; align-items: center; flex-wrap: wrap; gap: 14px; margin-bottom: 10px; }
+/* Collapsible sections (accordion): tap a section heading to hide its body (privacy at the desk). */
+.cc-acc-head { cursor: pointer; }
+.cc-acc-chev { margin-left: auto; width: 10px; height: 10px; border-right: 2px solid var(--muted); border-bottom: 2px solid var(--muted); transform: rotate(45deg); transition: transform .2s; flex: 0 0 auto; align-self: center; }
+.panel.cc-collapsed .cc-acc-chev { transform: rotate(-45deg); }
+.panel.cc-collapsed > :not(.stripe):not(.section-head):not(.panel-inner) { display: none !important; }
+.panel.cc-collapsed > .panel-inner > :not(.head-row):not(.section-head) { display: none !important; }
+.panel.cc-collapsed .section-head .rule, .panel.cc-collapsed .section-head > .sub { display: none !important; }
+.panel.cc-collapsed .section-head .head-row { margin-bottom: 0; }
+.panel.cc-collapsed { padding-bottom: 4px; }
 .eyebrow { display: inline-block; background: var(--chip-bg); border-left: 3px solid var(--teal); padding: 5px 12px 5px 10px; font-family: var(--font-head); font-size: 0.62rem; letter-spacing: 0.22em; text-transform: uppercase; color: var(--teal-light); }
 .section-head .rule { display: block; width: 60px; height: 2px; background: var(--teal); }
 
@@ -329,7 +338,9 @@ footer { text-align: center; color: var(--text-faint); font-size: 0.72rem; paddi
   <button class="btn ghost small" onclick="signOut()">Sign Out</button>
 </div>
 <span class="cat-bar-sub" id="topbarSub" hidden></span>
-<script src="https://www.creativesilva.com/js/silva-nav.js?v=7ea8b872"></script>
+<!-- Command Center: nav Calendar button -> Equipment Manager; every nav link opens a new tab (keep this slow standalone page open). -->
+<script>window.SILVA_CAL_HREF='/camera-manager.html';window.SILVA_CAL_LABEL='Equipment Manager';window.SILVA_NAV_BLANK=true;</script>
+<script src="https://www.creativesilva.com/js/silva-nav.js?v=eqmgr1"></script>
 <script>
 (function(){
   // Move the Command Center's user controls + school/term into the shared header
@@ -677,6 +688,7 @@ async function initFirebase(){
       document.getElementById('hdr-user').style.display='flex';
       document.getElementById('login-screen').style.display='none';
       document.getElementById('dashboard').style.display='block';
+      setupAccordions();
       loadDashboard();
     } else {
       firebaseToken=null; currentUser=null;
@@ -753,7 +765,26 @@ function switchTab(tab){
   document.querySelectorAll('.tab-btn').forEach(b=>b.classList.toggle('active',b.dataset.tab===tab));
   document.querySelectorAll('.tab-content').forEach(el=>el.classList.toggle('active',el.id==='tab-'+tab));
   if(tab==='cameras' && typeof loadCameras==='function') loadCameras();
+  setupAccordions();
 }
+// Collapsible sections: tap a section heading to hide its body (privacy when a student is at the desk).
+// State persists per section in localStorage so a closed section stays closed.
+function setupAccordions(){
+  document.querySelectorAll('.panel').forEach(function(panel){
+    var hr=panel.querySelector('.head-row'); if(!hr) return;
+    var h2=hr.querySelector('h2'); var key='ccacc:'+(panel.id || (h2?h2.textContent.trim():''));
+    if(!panel.dataset.acc){ panel.dataset.acc='1'; hr.classList.add('cc-acc-head');
+      var chev=document.createElement('span'); chev.className='cc-acc-chev'; chev.setAttribute('aria-hidden','true'); hr.appendChild(chev);
+      hr.addEventListener('click',function(e){ if(e.target.closest('button')||e.target.closest('a')||e.target.closest('input')||e.target.closest('select')) return;
+        var collapse=!panel.classList.contains('cc-collapsed'); panel.classList.toggle('cc-collapsed',collapse); try{ localStorage.setItem(key, collapse?'1':'0'); }catch(_){} });
+    }
+    try{ if(localStorage.getItem(key)==='1') panel.classList.add('cc-collapsed'); }catch(_){}
+  });
+}
+// Every link opens a new tab, so this slow standalone page is never navigated away from.
+document.addEventListener('click', function(e){ var a=e.target.closest('a[href]'); if(!a) return;
+  var h=a.getAttribute('href')||''; if(!h||h.charAt(0)==='#'||/^(javascript|mailto|tel):/i.test(h)) return;
+  if(a.target==='_blank'){ return; } e.preventDefault(); window.open(a.href,'_blank','noopener'); }, true);
 
 // ---- Roster support ----
 const CLASS_DEF={

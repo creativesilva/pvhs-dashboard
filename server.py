@@ -1281,6 +1281,15 @@ class Handler(BaseHTTPRequestHandler):
                 save_photowalks(d)
             self.json_response(200, {'ok': True, 'key': date + '|' + period})
             return
+        if action == 'delete':
+            key = str(data.get('key', '')).strip() or (str(data.get('date', '')).strip() + '|' + str(data.get('period', '')).strip())
+            with _photowalk_lock:
+                d = load_photowalks()
+                if key in d:
+                    del d[key]
+                    save_photowalks(d)
+            self.json_response(200, {'ok': True})
+            return
         self.json_response(400, {'error': 'Unknown action.'})
 
     def handle_camera_checkout(self):

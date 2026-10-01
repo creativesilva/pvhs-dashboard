@@ -1225,6 +1225,27 @@ class Handler(BaseHTTPRequestHandler):
             if not sid or not item or not due:
                 self.json_response(400, {'error': 'Enter a student ID, an item, and a due date.'})
                 return
+            if item not in EQUIPMENT_ITEMS:
+                self.json_response(400, {'error': 'Unknown item.'})
+                return
+            if due < out:
+                self.json_response(400, {'error': 'The due date is before the pickup date.'})
+                return
+            # Student-facing guards (the teacher console is trusted to override these). Defense in
+            # depth: the client already blocks ineligible students and only shows free gear, but a
+            # direct or stale call must not slip through the gear path either. All fail open.
+            if not is_teacher:
+                if not camera_eligibility(sid)['eligible']:
+                    self.json_response(403, {'error': 'You are not eligible to reserve equipment right now because you have more than %d missing assignments. Please turn in your missing work and try again later.' % MISSING_LIMIT})
+                    return
+                if _is_blackout(out):
+                    self.json_response(409, {'error': 'That day is not available for checkouts. Please pick another day.'})
+                    return
+                total = EQUIPMENT_ITEMS[item].get('total', 0)
+                down = int((load_assets().get(item) or {}).get('down', 0) or 0)
+                if self._equipment_units_booked(item, out, due) >= max(0, total - down):
+                    self.json_response(409, {'error': 'That equipment is fully booked for those days. Please pick another day or item.'})
+                    return
             rec = self._new_checkout_rec(data, 'equipment', item, '', out, due, str(data.get('group', '')))
             with _checkouts_lock:
                 items = load_checkouts(); items.append(rec); save_checkouts(items)
@@ -1296,6 +1317,20 @@ class Handler(BaseHTTPRequestHandler):
             if eo and ed and eo < due and out < ed:
                 return True
         return False
+
+    def _equipment_units_booked(self, item, out, due):
+        """How many units of this equipment item are reserved/out over [out, due) (half-open, so a
+        same-day handoff is allowed). Returned records free their unit."""
+        n = 0
+        for c in load_checkouts():
+            if c.get('kind') != 'equipment' or c.get('item') != item:
+                continue
+            if status_of(c) == 'returned':
+                continue
+            eo = str(c.get('out', '')); ed = str(c.get('due', '')) or eo
+            if eo and ed and eo < due and out < ed:
+                n += 1
+        return n
 
     def _find_checkout(self, items, cid):
         for x in items:

@@ -390,6 +390,7 @@ footer { text-align: center; color: var(--text-faint); font-size: 0.72rem; paddi
       <button class="tab-btn" data-tab="bulk" onclick="switchTab('bulk')">Bulk Comment</button>
       <button class="tab-btn" data-tab="cameras" onclick="switchTab('cameras')">Cameras</button>
       <button class="tab-btn" data-tab="reports" onclick="switchTab('reports')">Reports</button>
+      <button class="tab-btn" data-tab="subs" onclick="switchTab('subs')">Sub Logins</button>
     </div>
 
     <!-- Roster Tab -->
@@ -620,6 +621,54 @@ footer { text-align: center; color: var(--text-faint); font-size: 0.72rem; paddi
       </div>
     </div>
 
+    <!-- Sub Logins Tab: confidential Aeries substitute-account lookup (behind the Google login) -->
+    <style>
+      #tab-subs .controls{ display:flex; flex-wrap:wrap; align-items:center; }
+      .sub-count{ font-family:var(--font-head); font-size:0.78rem; letter-spacing:0.04em; text-transform:uppercase; color:var(--text-dim); margin:0 0 12px; }
+      .sub-table{ width:100%; border-collapse:collapse; font-size:0.86rem; }
+      .sub-table th{ text-align:left; font-family:var(--font-head); font-weight:600; font-size:0.72rem; letter-spacing:0.06em; text-transform:uppercase; color:var(--teal-light); background:var(--th-bg); padding:9px 12px; border-bottom:1px solid var(--line-strong); white-space:nowrap; }
+      .sub-table td{ padding:9px 12px; border-bottom:1px solid var(--line); color:var(--text); vertical-align:middle; }
+      .sub-table tbody tr:hover td{ background:var(--row-hover); }
+      .sub-cred,.sub-pw{ font-family:ui-monospace,Menlo,Consolas,monospace; font-size:0.84rem; color:var(--text); }
+      .sub-pw{ letter-spacing:0.08em; }
+      .sub-copy,.sub-reveal{ font-family:var(--font-head); font-size:0.64rem; letter-spacing:0.05em; text-transform:uppercase; margin-left:8px; padding:3px 9px; background:var(--chip-bg); color:var(--teal-light); border:1px solid var(--line-strong); cursor:pointer; }
+      .sub-copy:hover,.sub-reveal:hover{ border-color:var(--teal-bright); color:var(--teal-bright); }
+      .sub-badge{ font-family:var(--font-head); font-size:0.64rem; letter-spacing:0.05em; text-transform:uppercase; padding:3px 9px; border:1px solid transparent; white-space:nowrap; }
+      .sub-badge.active{ color:var(--ok); background:rgba(95,204,138,0.12); border-color:rgba(95,204,138,0.35); }
+      .sub-badge.soon{ color:var(--warn); background:rgba(255,178,124,0.12); border-color:rgba(255,178,124,0.4); }
+      .sub-badge.expired{ color:var(--text-faint); background:rgba(160,160,160,0.1); border-color:var(--line-strong); }
+      .sub-empty{ text-align:center; color:var(--text-faint); font-family:var(--font-head); letter-spacing:0.08em; text-transform:uppercase; padding:40px 10px; }
+      @media (max-width:720px){
+        .sub-table thead{ display:none; }
+        .sub-table, .sub-table tbody, .sub-table tr, .sub-table td{ display:block; width:100%; }
+        .sub-table tr{ border:1px solid var(--line-strong); margin-bottom:12px; padding:4px 2px; background:var(--panel); }
+        .sub-table td{ border:none; display:flex; justify-content:space-between; align-items:center; gap:12px; padding:6px 12px; }
+        .sub-table td::before{ content:attr(data-label); font-family:var(--font-head); font-size:0.62rem; letter-spacing:0.06em; text-transform:uppercase; color:var(--text-dim); }
+      }
+      @media print{ .sub-reveal,.sub-copy{ display:none !important; } .sub-pw{ color:transparent !important; } }
+    </style>
+    <div id="tab-subs" class="tab-content">
+      <div class="panel flush" id="panel-subs">
+        <div class="stripe"></div>
+        <div class="panel-inner">
+          <div class="section-head">
+            <div class="head-row"><span class="eyebrow">Aeries</span><h2>Substitute Logins</h2></div>
+            <span class="rule"></span>
+          </div>
+          <div class="controls" style="margin-bottom:12px;gap:10px;">
+            <input class="field" type="search" id="subSearch" placeholder="Search name, Staff ID, or username" autocomplete="off" spellcheck="false" style="flex:1 1 280px;min-width:220px;">
+            <select class="field" id="subSort">
+              <option value="last">Sort: Last name</option>
+              <option value="first">Sort: First name</option>
+              <option value="staff">Sort: Staff ID</option>
+            </select>
+          </div>
+          <div class="sub-count" id="subCount"></div>
+          <div id="subResults"></div>
+        </div>
+      </div>
+    </div>
+
     <div class="modal-backdrop" id="camModal">
       <div class="modal">
         <div class="stripe"></div>
@@ -762,9 +811,12 @@ function hideLoading(){ document.getElementById('loading-overlay').classList.rem
 
 // ---- Tab switching ----
 function switchTab(tab){
+  var curBtn=document.querySelector('.tab-btn.active');
+  if(curBtn && curBtn.dataset.tab==='subs' && tab!=='subs' && typeof subsOnLeave==='function') subsOnLeave();
   document.querySelectorAll('.tab-btn').forEach(b=>b.classList.toggle('active',b.dataset.tab===tab));
   document.querySelectorAll('.tab-content').forEach(el=>el.classList.toggle('active',el.id==='tab-'+tab));
   if(tab==='cameras' && typeof loadCameras==='function') loadCameras();
+  if(tab==='subs' && typeof loadAeriesSubs==='function') loadAeriesSubs();
   setupAccordions();
 }
 // Collapsible sections: tap a section heading to hide its body (privacy when a student is at the desk).
@@ -1435,6 +1487,131 @@ async function saveCamEdit(){
 async function camStatus(id,status){ await api('/api/camera/status',{method:'POST',body:JSON.stringify({id,status})}); loadCameras(); }
 async function deleteCamFromModal(){ if(camEditId && confirm('Delete this checkout?')){ const id=camEditId; closeCamEdit(); await api('/api/camera/delete',{method:'POST',body:JSON.stringify({id})}); loadCameras(); } }
 document.addEventListener('click',e=>{ const m=document.getElementById('camModal'); if(m&&e.target===m) m.classList.remove('open'); });
+</script>
+<!-- Aeries Substitute Logins: confidential lookup. Accounts (no passwords) load once from the authed
+     endpoint; each password is fetched one at a time only on Reveal. No URL state, clears on leave. -->
+<script>
+(function(){
+  var ACCOUNTS=null, LOADED=false;
+  function fmtDate(iso){ if(!iso) return ''; var p=String(iso).split('-'); return p.length===3 ? (p[1]+'/'+p[2]+'/'+p[0]) : iso; }
+  function statusOf(expires){
+    var d=new Date(expires+'T00:00:00'); if(isNaN(d)) return {cls:'active',label:'Active'};
+    var now=new Date(); now.setHours(0,0,0,0);
+    if(d<now) return {cls:'expired',label:'Expired'};
+    var days=(d-now)/86400000;
+    if(days<=30) return {cls:'soon',label:'Expires soon'};
+    return {cls:'active',label:'Active'};
+  }
+  // Levenshtein (last-name typo fallback), from the staff-directory reference logic.
+  function lev(a,b){
+    var m=Array.from({length:a.length+1},function(_,i){return [i];});
+    for(var j=1;j<=b.length;j++) m[0][j]=j;
+    for(var i=1;i<=a.length;i++){ for(var k=1;k<=b.length;k++){
+      var cost=a[i-1]===b[k-1]?0:1;
+      m[i][k]=Math.min(m[i-1][k]+1, m[i][k-1]+1, m[i-1][k-1]+cost);
+    } }
+    return m[a.length][b.length];
+  }
+  function search(q){
+    q=(q||'').toLowerCase().trim();
+    if(!q) return ACCOUNTS.slice();
+    // Pass 1: substring across name + staff id + username (never the password).
+    var res=ACCOUNTS.filter(function(r){
+      return [r.last_name,r.first_name,r.display_name,r.staff_id,r.aeries_username].join(' ').toLowerCase().indexOf(q)>=0;
+    });
+    // Pass 2: last-name typo fallback (distance <= 1) only when pass 1 is empty and q is 3+ chars.
+    if(res.length===0 && q.length>=3){
+      res=ACCOUNTS.map(function(r){ return {r:r, d:lev(q, String(r.last_name||'').toLowerCase().substring(0,q.length))}; })
+                  .filter(function(x){ return x.d<=1; })
+                  .sort(function(a,b){ return a.d-b.d; })
+                  .map(function(x){ return x.r; });
+    }
+    return res;
+  }
+  function sortRows(rows){
+    var k=(document.getElementById('subSort')||{}).value||'last';
+    var cmp={ last:function(a,b){ return String(a.last_name).localeCompare(String(b.last_name)) || String(a.first_name).localeCompare(String(b.first_name)); },
+              first:function(a,b){ return String(a.first_name).localeCompare(String(b.first_name)); },
+              staff:function(a,b){ return String(a.staff_id).localeCompare(String(b.staff_id)); } }[k];
+    return cmp ? rows.slice().sort(cmp) : rows;
+  }
+  function render(){
+    if(!ACCOUNTS) return;
+    var q=(document.getElementById('subSearch')||{}).value||'';
+    var rows=sortRows(search(q));
+    var cnt=document.getElementById('subCount');
+    if(!q.trim()) cnt.textContent=ACCOUNTS.length+' accounts, all expire '+(ACCOUNTS.length?fmtDate(ACCOUNTS[0].expires):'');
+    else cnt.textContent=rows.length+' found';
+    var box=document.getElementById('subResults');
+    if(!rows.length){ box.innerHTML='<div class="sub-empty">No matches found</div>'; return; }
+    var h='<table class="sub-table"><thead><tr><th>Last</th><th>First</th><th>Staff ID</th><th>Username</th><th>Password</th><th>Expires</th><th>Status</th></tr></thead><tbody>';
+    rows.forEach(function(r){
+      var st=statusOf(r.expires), sid=esc(String(r.staff_id));
+      h+='<tr>'+
+        '<td data-label="Last">'+esc(r.last_name)+'</td>'+
+        '<td data-label="First">'+esc(r.first_name)+'</td>'+
+        '<td data-label="Staff ID">'+sid+'</td>'+
+        '<td data-label="Username"><span class="sub-cred">'+esc(r.aeries_username)+'</span><button type="button" class="sub-copy" data-copy="'+esc(r.aeries_username)+'">Copy</button></td>'+
+        '<td data-label="Password"><span class="sub-pw" id="pw-'+sid+'">&bull;&bull;&bull;&bull;&bull;&bull;&bull;&bull;</span><button type="button" class="sub-reveal" data-reveal="'+sid+'">Reveal</button></td>'+
+        '<td data-label="Expires">'+esc(fmtDate(r.expires))+'</td>'+
+        '<td data-label="Status"><span class="sub-badge '+st.cls+'">'+st.label+'</span></td>'+
+      '</tr>';
+    });
+    box.innerHTML=h+'</tbody></table>';
+  }
+  window.loadAeriesSubs=async function(){
+    var inp=document.getElementById('subSearch'); if(inp) inp.value='';   // fresh state on every open
+    if(LOADED){ render(); return; }
+    var box=document.getElementById('subResults'); box.innerHTML='<div class="sub-empty">Loading...</div>';
+    try{
+      var r=await api('/api/aeries/subs');
+      if(!r.ok){ box.innerHTML='<div class="sub-empty">'+(r.status===404?'No Aeries data loaded yet':'Could not load ('+r.status+')')+'</div>'; return; }
+      var j=await r.json(); ACCOUNTS=j.accounts||[]; LOADED=true; render();
+    }catch(e){ box.innerHTML='<div class="sub-empty">Could not load</div>'; }
+  };
+  function remask(span,btn){
+    if(span){ span.textContent='••••••••'; span.dataset.pw=''; span.dataset.shown=''; clearTimeout(span._t); }
+    if(btn) btn.textContent='Reveal';
+    if(span){ var c=span.parentNode.querySelector('.sub-copy-pw'); if(c) c.remove(); }
+  }
+  function remaskAll(){ document.querySelectorAll('.sub-pw').forEach(function(s){ remask(s, s.parentNode.querySelector('.sub-reveal')); }); }
+  window.subsOnLeave=function(){ remaskAll(); var inp=document.getElementById('subSearch'); if(inp) inp.value=''; };
+  async function revealPw(sid, btn){
+    var span=document.getElementById('pw-'+sid); if(!span) return;
+    if(span.dataset.shown==='1'){ remask(span, btn); return; }
+    btn.disabled=true; var old=btn.textContent; btn.textContent='...';
+    try{
+      var r=await api('/api/aeries/sub_password',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({staff_id:sid})});
+      var j=await r.json().catch(function(){return {};});
+      btn.disabled=false;
+      if(!r.ok || !j.found){ btn.textContent=old; return; }
+      span.textContent=j.password; span.dataset.pw=j.password; span.dataset.shown='1'; btn.textContent='Hide';
+      if(!span.parentNode.querySelector('.sub-copy-pw')){
+        var c=document.createElement('button'); c.type='button'; c.className='sub-copy sub-copy-pw'; c.textContent='Copy';
+        c.addEventListener('click',function(){ copyCred(span.dataset.pw, c); });
+        btn.parentNode.insertBefore(c, btn.nextSibling);
+      }
+      clearTimeout(span._t); span._t=setTimeout(function(){ remask(span, btn); }, 15000);  // auto re-mask
+    }catch(e){ btn.disabled=false; btn.textContent=old; }
+  }
+  async function copyCred(val, btn){
+    if(val==null) return;
+    try{ await navigator.clipboard.writeText(val); }catch(e){}
+    var old=btn.textContent; btn.textContent='Copied, clears 30s';
+    setTimeout(function(){ btn.textContent=old; }, 2500);
+    setTimeout(function(){ try{ navigator.clipboard.writeText(''); }catch(e){} }, 30000);   // best-effort clipboard wipe
+  }
+  document.addEventListener('input', function(e){ if(e.target && e.target.id==='subSearch') render(); });
+  document.addEventListener('change', function(e){ if(e.target && e.target.id==='subSort') render(); });
+  document.addEventListener('click', function(e){
+    var t=e.target; if(!t.closest) return;
+    var cp=t.closest('[data-copy]'); if(cp){ copyCred(cp.getAttribute('data-copy'), cp); return; }
+    var rv=t.closest('[data-reveal]'); if(rv){ revealPw(rv.getAttribute('data-reveal'), rv); return; }
+  });
+  // Re-mask any revealed password when the page is hidden (tab/app switch). The value was already
+  // copied to the clipboard if needed; this keeps credentials off an unattended screen.
+  document.addEventListener('visibilitychange', function(){ if(document.hidden) remaskAll(); });
+})();
 </script>
 <!-- Reports render here as a clean white document; shown only when printing (see @media print). -->
 <div id="print-area"></div>

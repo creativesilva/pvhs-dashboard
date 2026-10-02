@@ -60,6 +60,22 @@ if _roster_env:
         except Exception as e:
             print(f'[roster] Failed to load from env: {e}')
 
+# Aeries substitute-account data, same base64+gzip env pattern as the roster. Two separate CONFIDENTIAL
+# collections, both gitignored and never in the public repo: accounts (no passwords) + credentials
+# (passwords, joined by staff_id). On Render, set AERIES_ACCOUNTS / AERIES_CREDENTIALS env vars.
+for _av, _af in (('AERIES_ACCOUNTS', 'aeries_substitute_accounts.json'),
+                 ('AERIES_CREDENTIALS', 'aeries_substitute_credentials.json')):
+    _ae = os.environ.get(_av, '')
+    if _ae:
+        _ap = os.path.join(SERVE_DIR, _af)
+        if not os.path.exists(_ap):
+            try:
+                with open(_ap, 'wb') as f:
+                    f.write(gzip.decompress(base64.b64decode(_ae)))
+                print(f'[aeries] Auto-loaded {_af} from {_av}')
+            except Exception as e:
+                print(f'[aeries] Failed to load {_av}: {e}')
+
 # Garcia's CAMERA-ONLY roster (Mrs. Garcia / Solorio, CTE Photo 1A P2+P3): students that exist ONLY
 # for camera-checkout resolution (resolve_student), never in Silva's dashboard roster/grading. It is
 # loaded from the persistent disk (uploaded via the camera-scoped endpoint), or seeded from the
@@ -703,6 +719,10 @@ class Handler(BaseHTTPRequestHandler):
             if not self.require_auth():
                 return
             self.handle_roster()
+        elif path == '/api/aeries/subs':
+            if not self.require_auth():
+                return
+            self.handle_aeries_subs()              # authed: substitute accounts, no passwords
         elif path == '/api/camera/calendar':
             self.handle_camera_calendar()          # PUBLIC, sanitized (no names/phones/IDs)
         elif path == '/api/camera/cameras':
@@ -759,6 +779,8 @@ class Handler(BaseHTTPRequestHandler):
             return
         if path == '/api/auth/verify':
             self.handle_auth_verify()
+        elif path == '/api/aeries/sub_password':
+            self.handle_aeries_sub_password()      # authed: one account's password, on explicit reveal
         elif path == '/api/roster/upload':
             self.handle_roster_upload()
         elif path == '/api/batch/grades':
@@ -852,6 +874,50 @@ class Handler(BaseHTTPRequestHandler):
             'ok': True,
             'students': len(data['students']),
             'sections': len(data['sections']),
+        })
+
+    # -- Aeries substitute accounts (authenticated; confidential) -----------
+
+    def _aeries_accounts(self):
+        p = os.path.join(SERVE_DIR, 'aeries_substitute_accounts.json')
+        if not os.path.exists(p):
+            return None
+        with open(p, encoding='utf-8') as f:
+            return json.load(f)
+
+    def handle_aeries_subs(self):
+        """Authed. Returns the substitute accounts WITHOUT passwords, for the search table.
+        Passwords live in a separate collection and are only served one at a time on reveal."""
+        data = self._aeries_accounts()
+        if data is None:
+            self.json_response(404, {'error': 'No Aeries account data loaded'})
+            return
+        # Defense in depth: strip anything password-like before it ever leaves the server.
+        safe = [{k: v for k, v in a.items() if 'password' not in k.lower()} for a in data]
+        self.json_response(200, {'accounts': safe, 'count': len(safe)})
+
+    def handle_aeries_sub_password(self):
+        """Authed. Returns ONE account's temporary password, only on an explicit reveal. Passwords
+        are never shipped in bulk; the client asks for them a single staff_id at a time."""
+        body = self._read_json_body()
+        if body is None:
+            return
+        sid = str(body.get('staff_id', '')).strip()
+        p = os.path.join(SERVE_DIR, 'aeries_substitute_credentials.json')
+        if not sid or not os.path.exists(p):
+            self.json_response(404, {'found': False})
+            return
+        with open(p, encoding='utf-8') as f:
+            creds = json.load(f)
+        rec = next((c for c in creds if str(c.get('staff_id', '')).strip() == sid), None)
+        if not rec:
+            self.json_response(404, {'found': False})
+            return
+        self.json_response(200, {
+            'found': True,
+            'staff_id': sid,
+            'aeries_username': rec.get('aeries_username', ''),
+            'password': rec.get('temporary_password', ''),
         })
 
     # -- Camera checkout ----------------------------------------------------

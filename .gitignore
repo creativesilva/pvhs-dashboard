@@ -8,3 +8,6 @@ camera_assets.json
 checkouts.json
 checkouts.json.tmp
 memory_cards.json
+aeries_substitute_accounts.json
+aeries_substitute_credentials.json
+aeries_*.json

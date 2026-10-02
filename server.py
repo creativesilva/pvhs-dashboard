@@ -95,7 +95,7 @@ EQUIPMENT_TYPES = {
                   "kit": ["Front lens cap", "Rear lens cap", "Lens filter", "Lens hood"]},
     "zoom":      {"label": "Ultra-Zoom Lens",  "unit": "Ultra-Zoom", "count": 2,  "pool": "shared",
                   "kit": ["Front lens cap", "Rear lens cap", "Lens filter", "Lens hood"]},
-    "speedlite": {"label": "Speedlite",        "unit": "Speedlite",  "count": 15, "pool": "shared",
+    "speedlite": {"label": "Speedlite",        "unit": "Speedlite",  "count": 5,  "pool": "shared",
                   "kit": ["Diffuser dome", "Mini stand", "Soft pouch"]},
     "tripod":    {"label": "Tripod",           "unit": "Tripod",     "count": 5,  "pool": "shared",
                   "kit": ["Quick-release plate", "Carry bag"]},

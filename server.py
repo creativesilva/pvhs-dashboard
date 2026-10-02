@@ -103,7 +103,7 @@ EQUIPMENT_TYPES = {
                   "kit": ["Scrim frame", "Reflector zip surface", "Reflector zip case"]},
     "mankin_tripod": {"label": "Tripod (Mankin)", "unit": "Mankin Tripod", "count": 3, "pool": "mankin",
                   "kit": ["Quick-release plate", "Carry bag"]},
-    "apple_pencil":  {"label": "Apple Pencil", "unit": "Apple Pencil", "count": 10, "pool": "mankin", "start": 31},
+    "apple_pencil":  {"label": "iPad Stylus", "unit": "iPad Stylus", "count": 10, "pool": "mankin", "start": 31},
 }
 # Expand the types into concrete per-unit identities: id "<type>-<NN>" -> {type, label, pool, kit}.
 EQUIPMENT_UNITS = {}

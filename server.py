@@ -429,11 +429,27 @@ def _student_result(s):
                 res[k] = ov[k]
     return res
 
+DEMO_TEACHER_ID = 'teacher'   # Mr. Silva's self-demo account. Typing "teacher" as the student ID
+                              # resolves to a labeled demo student (Period 1, Silva pool, always
+                              # eligible) so he can walk a class through reserving a camera.
+
+def _demo_teacher_result():
+    """Synthetic student for the "teacher" demo ID. Clearly labeled (Demo) everywhere it shows, with
+    fictitious 555 contacts so the reserve flow runs end to end without stalling on contact entry."""
+    return {
+        'found': True, 'name': 'Silva, Mr. (Demo)', 'first': 'Mr.', 'last': 'Silva',
+        'period': '1', 'course': 'Photography 1 (Demo)', 'teacher': 'Mr. Silva',
+        'student_cell': '(805) 555-0100', 'parent_guardian': 'Demo Parent',
+        'parent_cell': '(805) 555-0101', 'demo': True,
+    }
+
 def resolve_student(student_id):
     """Look a student up for CAMERA CHECKOUT. Resolves photography students only (Silva Photo +
     Garcia Photo); Silva's Digital Arts students are intentionally not in the camera system.
     Never exposed on public endpoints; used server-side only."""
     sid = str(student_id).strip()
+    if sid.lower() == DEMO_TEACHER_ID:
+        return _demo_teacher_result()
     for s in _camera_students():
         if str(s.get('student_id', '')).strip() == sid:
             return _student_result(s)
@@ -1136,10 +1152,14 @@ class Handler(BaseHTTPRequestHandler):
         data = self._read_json_body()
         if data is None:
             return
-        sid = ''.join(ch for ch in str(data.get('student_id', '')) if ch.isdigit())
-        if len(sid) < 5:
-            self.json_response(200, {'found': False})
-            return
+        raw = str(data.get('student_id', '')).strip()
+        if raw.lower() == DEMO_TEACHER_ID:
+            sid = DEMO_TEACHER_ID   # Mr. Silva's demo account: skip the digits-only requirement.
+        else:
+            sid = ''.join(ch for ch in raw if ch.isdigit())
+            if len(sid) < 5:
+                self.json_response(200, {'found': False})
+                return
         r = resolve_student(sid)
         if not r['found']:
             self.json_response(200, {'found': False})

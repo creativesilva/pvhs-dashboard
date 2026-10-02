@@ -915,7 +915,9 @@ class Handler(BaseHTTPRequestHandler):
                     c['course'] = r.get('course', '')
                     c['teacher'] = r.get('teacher', '')
             cards[slot] = c
-        self.json_response(200, {'cameras': CAMERAS, 'checkouts': items,
+        # Teacher console gets ALL cameras (01-21) so the Silva/Garcia/Mankin view toggle can show each
+        # pool; the console filters to the selected pool with DATA.pools. (Public feed stays 01-18.)
+        self.json_response(200, {'cameras': ALL_CAMERAS, 'checkouts': items,
                                  'assets': load_assets(), 'cards': cards,
                                  'blackouts': _blackout_list(),
                                  'missing_limit': MISSING_LIMIT,

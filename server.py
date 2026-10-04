@@ -37,6 +37,10 @@ MISSING_LIMIT = int(os.environ.get('MISSING_LIMIT', '6'))
 # can run the standalone camera calendar without a Command Center login.
 CAMERA_PIN   = os.environ.get('CAMERA_PIN', '').strip()
 CAMERA_OVERRIDE_CODE = os.environ.get('CAMERA_OVERRIDE_CODE', '3duc4t10n').strip()   # teacher code to unlock a Photo-2 camera for a Photo-1 student
+# Reservation approval is SHELVED by default (Chris 2026-10-03): student reservations auto-confirm and
+# the console shows a Recent Reservations list instead of an approval queue. Set APPROVAL_REQUIRED=1 in
+# the environment to bring the approve/deny workflow back; nothing else needs to change.
+APPROVAL_REQUIRED = os.environ.get('APPROVAL_REQUIRED', '').strip().lower() in ('1', 'true', 'yes', 'on')
 SERVE_DIR    = os.path.dirname(os.path.abspath(__file__))
 
 FIREBASE_PROJECT_ID = 'girl-scouts-silva'
@@ -1004,6 +1008,7 @@ class Handler(BaseHTTPRequestHandler):
                                  'blackouts': _blackout_list(),
                                  'missing_limit': MISSING_LIMIT,
                                  'pools': CAMERA_POOLS, 'equipment_pools': EQUIPMENT_POOLS,
+                                 'approval_required': APPROVAL_REQUIRED,
                                  'equipment_units': EQUIPMENT_UNITS, 'equipment_types': EQUIPMENT_TYPE_LABELS})
 
     def handle_camera_assets(self):
@@ -1334,7 +1339,7 @@ class Handler(BaseHTTPRequestHandler):
             'note': str(data.get('note', '')),  # condition note (missing cap, lost plate, etc.)
             # Student self-reservations arrive with pending=true and need teacher approval; teacher-made
             # reservations (from the console) are approved on creation.
-            'approved': (False if data.get('pending') else True),
+            'approved': (False if (APPROVAL_REQUIRED and data.get('pending')) else True),  # auto-confirm while approval is shelved
             'created': time.strftime('%Y-%m-%dT%H:%M:%SZ', time.gmtime()),
             'flag': '; '.join(flags),
             '_ip': self._client_ip(),

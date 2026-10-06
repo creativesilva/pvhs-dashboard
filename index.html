@@ -23,7 +23,7 @@
   --panel-2: rgba(255,255,255,0.05);
   --line: rgba(255,255,255,0.08);
   --line-strong: rgba(255,255,255,0.16);
-  --page-grad: linear-gradient(180deg, rgba(8,8,8,0.97) 0%, rgba(0,56,56,0.55) 50%, rgba(8,8,8,0.97) 100%);
+  --page-grad: linear-gradient(180deg, rgba(8,8,8,0.97) 0%, rgba(0,56,56,0.94) 50%, rgba(8,8,8,0.97) 100%);
   --topbar-grad: linear-gradient(120deg, rgba(0,130,130,0.55) 0%, rgba(0,60,60,0.65) 50%, rgba(8,8,8,0.75) 100%);
   --text: #ffffff; --text-dim: #aaaaaa; --text-faint: #777777;
   --teal: #007474; --teal-bright: #00b8b8; --teal-light: #80e0e0;
@@ -52,17 +52,20 @@ body {
   margin: 0; background-color: var(--bg); color: var(--text); font-family: var(--font-body);
   line-height: 1.55; -webkit-font-smoothing: antialiased;
 }
-/* Cohesive with the catalog: glossy CS logo watermark on near-black, toned by one
-   uniform dark veil (no gradient halo). Same technique as curriculum.html. */
+/* Cohesive with the catalog: teal gradient backdrop (body::before) + ghosted CS monogram
+   (body::after), matching calendar / camera-manager / photo-walk / curriculum. */
 body::before {
   content: ""; position: fixed; inset: 0; z-index: -2;
-  background: #060f0f url("https://www.creativesilva.com/logos/CS_Logo_Glossy_Teal_v1.png") no-repeat center 40%;
-  background-size: min(74vw, 700px);
+  background: var(--page-grad);
 }
-body::after { content: ""; position: fixed; inset: 0; z-index: -1; background: rgba(6,14,14,0.84); }
-:root[data-theme="light"] body::before { background: #f4f7f7; }
-:root[data-theme="light"] body::after { background: rgba(244,247,247,0.5); }
-@media (max-width: 900px){ body::before { background-size: min(88vw, 460px); background-position: center 36%; } }
+body::after {
+  content: ""; position: fixed; inset: 0; z-index: -1;
+  background: url("https://www.creativesilva.com/logos/CS_Logo_Glossy_Teal_v1.png") no-repeat center 40%;
+  background-size: min(74vw, 700px);
+  filter: brightness(0) invert(1); opacity: 0.07;
+}
+:root[data-theme="light"] body::after { filter: brightness(0); opacity: 0.05; }
+@media (max-width: 900px){ body::after { background-size: min(88vw, 460px); background-position: center 36%; } }
 h1,h2,h3,.label { font-family: var(--font-head); font-weight: 700; letter-spacing: 0.05em; text-transform: uppercase; color: var(--text); margin: 0; }
 h1 { font-size: 1.5rem; } h2 { font-size: 1.05rem; }
 .num { font-variant-numeric: tabular-nums; }
@@ -75,6 +78,14 @@ h1 { font-size: 1.5rem; } h2 { font-size: 1.05rem; }
 .catalog-sticky-inner { max-width: 1200px; margin: 0 auto; padding: 0 32px; }
 .catalog-titlebar { display: flex; align-items: center; gap: 14px; flex-wrap: wrap; padding: 16px 0 15px; }
 .catalog-titlebar .page-title { margin: 0 auto 0 0; text-align: left; flex: 0 1 auto; font-family: var(--font-head); font-weight: 700; text-transform: uppercase; font-size: clamp(1.45rem,2.9vw,2.05rem); line-height: 1; letter-spacing: 0.005em; color: var(--text); }
+/* Title block: give the shared universal header's title row the fade-to-right treatment
+   (teal-rich left, fading to the right), matching the catalog's .catalog-titlebar. Local to
+   the Command Center; !important overrides the injected silva-nav header styles. */
+.silva-uni-titlebar {
+  padding: 15px 26px 15px 20px !important;
+  background-image: linear-gradient(90deg, rgba(0,66,68,0.96) 0%, rgba(3,18,20,0.82) 44%, rgba(3,18,20,0) 100%) !important;
+  border-left: 7px solid #00b8b8 !important;
+}
 .cal-btn { flex: 0 0 auto; height: 32px; display: inline-flex; align-items: center; padding: 0 22px; font-family: var(--font-head); font-weight: 600; letter-spacing: 0.12em; text-transform: uppercase; font-size: 0.78rem; color: #fff; text-decoration: none; white-space: nowrap; background: var(--teal); border: 1px solid var(--teal-bright); transition: filter .15s; }
 .cal-btn:hover { filter: brightness(1.18); }
 .header-clock { flex: 0 0 auto; width: 158px; height: 48px; border: 0; background: transparent; display: block; }

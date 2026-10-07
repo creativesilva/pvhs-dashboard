@@ -474,7 +474,7 @@ def resolve_student(student_id):
         if str(s.get('student_id', '')).strip() == sid:
             return _student_result(s)
     return {'found': False, 'name': '', 'first': '', 'last': '', 'period': '', 'course': '',
-            'student_cell': '', 'parent_guardian': '', 'parent_cell': ''}
+            'teacher': '', 'student_cell': '', 'parent_guardian': '', 'parent_cell': ''}
 
 def _photowalk_seatmap():
     """For the Photo Walk Log: {period: {'course':..., 'seats': {seatNo: {'id':..., 'label':...}}}}.
@@ -983,6 +983,11 @@ class Handler(BaseHTTPRequestHandler):
         Strips the internal _ip field before sending. Includes the per-camera asset store
         and the memory-card wallet."""
         items = [{k: v for k, v in c.items() if k != '_ip'} for c in load_checkouts()]
+        # Backfill the student's teacher on the served copy for any record created before teacher
+        # was stored (display only; the stored record is untouched).
+        for _c in items:
+            if not _c.get('teacher') and _c.get('student_id'):
+                _c['teacher'] = resolve_student(str(_c['student_id']).strip()).get('teacher', '')
         # Enrich each held card with the student's contact + period + teacher (authed feed only) so
         # the console can show who to reach out to about an un-offloaded card.
         cards = {}
@@ -1326,6 +1331,7 @@ class Handler(BaseHTTPRequestHandler):
             'student_name': r['name'],
             'period': r['period'],
             'course': r['course'],
+            'teacher': r['teacher'],
             'student_cell': r['student_cell'],
             'parent_guardian': r['parent_guardian'],
             'parent_cell': r['parent_cell'],

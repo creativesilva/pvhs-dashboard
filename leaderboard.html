@@ -1,0 +1,170 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Class Standings</title>
+<link rel="icon" href="data:,">
+<style>
+  :root{
+    --bg0:#04171a; --bg1:#072a2c; --teal:#13c6c6; --teal-lt:#8ff2f2; --ink:#eafeff;
+    --muted:rgba(206,244,244,0.60); --line:rgba(19,198,198,0.22);
+    --ok:#2ecc8f; --warn:#f3b14e; --bad:#d8463c; --gold:#f5c451;
+    --font:'Oswald','Arial Narrow',system-ui,sans-serif;
+  }
+  *{box-sizing:border-box;}
+  html,body{height:100%;margin:0;}
+  body{
+    font-family:var(--font); color:var(--ink); overflow:hidden;
+    background:
+      radial-gradient(120% 90% at 85% -10%, rgba(19,198,198,0.16), transparent 60%),
+      linear-gradient(160deg,var(--bg1) 0%, var(--bg0) 60%, #020d0f 100%);
+  }
+  /* big ghosted CHRISSILVA watermark, like the Command Center graphic */
+  .wm{position:fixed;inset:0;display:flex;align-items:center;justify-content:center;pointer-events:none;z-index:0;overflow:hidden;}
+  .wm span{font-weight:700;letter-spacing:0.06em;font-size:19vw;color:rgba(255,255,255,0.028);white-space:nowrap;text-transform:uppercase;}
+  .wrap{position:relative;z-index:1;height:100%;display:flex;flex-direction:column;padding:2.2vmin 3vmin 1.6vmin;}
+  /* header */
+  .head{display:flex;align-items:flex-end;justify-content:space-between;gap:2vmin;border-bottom:2px solid var(--teal);padding-bottom:1.4vmin;margin-bottom:1.4vmin;flex:0 0 auto;}
+  .ttl{display:flex;align-items:center;gap:1.6vmin;min-width:0;}
+  .chip{font-size:1.5vmin;font-weight:600;letter-spacing:0.22em;text-transform:uppercase;color:#04171a;background:var(--teal);padding:0.5vmin 1.1vmin;white-space:nowrap;}
+  .ttl h1{margin:0;font-size:3.5vmin;font-weight:700;letter-spacing:0.03em;text-transform:uppercase;line-height:1;}
+  .ttl h1 small{display:block;font-size:1.5vmin;font-weight:400;letter-spacing:0.16em;color:var(--muted);margin-top:0.5vmin;}
+  .upd{font-size:1.4vmin;letter-spacing:0.08em;color:var(--muted);text-transform:uppercase;white-space:nowrap;text-align:right;}
+  .upd b{color:var(--teal-lt);font-weight:600;}
+  /* rows fill the height evenly */
+  .board{flex:1 1 auto;display:flex;flex-direction:column;gap:1.1vmin;min-height:0;}
+  .row{flex:1 1 0;display:flex;align-items:center;gap:2vmin;background:linear-gradient(90deg,rgba(19,198,198,0.09),rgba(19,198,198,0.02));border:1px solid var(--line);border-left:0.9vmin solid var(--teal);padding:0 2.2vmin;min-height:0;position:relative;overflow:hidden;}
+  .row.lead{border-left-color:var(--gold);background:linear-gradient(90deg,rgba(245,196,81,0.14),rgba(245,196,81,0.02));}
+  .row.trail{border-left-color:var(--bad);}
+  .rank{flex:0 0 auto;width:8vmin;text-align:center;font-weight:700;font-size:5.2vmin;line-height:1;color:var(--teal-lt);}
+  .row.lead .rank{color:var(--gold);}
+  .idn{flex:0 0 auto;width:26vmin;min-width:0;}
+  .idn .per{font-size:3.6vmin;font-weight:700;line-height:1;letter-spacing:0.01em;}
+  .idn .crs{font-size:1.7vmin;font-weight:400;letter-spacing:0.14em;text-transform:uppercase;color:var(--muted);margin-top:0.6vmin;}
+  .mid{flex:1 1 auto;min-width:0;display:flex;flex-direction:column;justify-content:center;gap:1vmin;}
+  .bar{height:2.4vmin;display:flex;background:rgba(0,0,0,0.35);overflow:hidden;}
+  .bar i{display:block;height:100%;}
+  .bar .s-ok{background:var(--ok);}
+  .bar .s-warn{background:var(--warn);}
+  .bar .s-bad{background:var(--bad);}
+  .sub{display:flex;align-items:center;gap:1.4vmin;font-size:1.5vmin;letter-spacing:0.05em;color:var(--muted);text-transform:uppercase;}
+  .sub .tag{font-weight:600;padding:0.3vmin 0.9vmin;font-size:1.3vmin;letter-spacing:0.14em;}
+  .sub .tag.lead{color:#04171a;background:var(--gold);}
+  .sub .tag.trail{color:#fff;background:rgba(216,70,60,0.85);}
+  .pct{flex:0 0 auto;width:15vmin;text-align:right;}
+  .pct .n{font-size:5.4vmin;font-weight:700;line-height:0.95;}
+  .pct .n small{font-size:2.2vmin;font-weight:600;color:var(--muted);}
+  .pct .cu{font-size:1.5vmin;letter-spacing:0.08em;text-transform:uppercase;color:var(--muted);margin-top:0.3vmin;}
+  /* legend + footer */
+  .foot{flex:0 0 auto;display:flex;align-items:center;justify-content:space-between;gap:2vmin;margin-top:1.3vmin;padding-top:1.1vmin;border-top:1px solid var(--line);}
+  .legend{display:flex;gap:2.4vmin;font-size:1.4vmin;letter-spacing:0.06em;text-transform:uppercase;color:var(--muted);}
+  .legend span{display:flex;align-items:center;gap:0.8vmin;}
+  .legend i{width:1.6vmin;height:1.6vmin;display:inline-block;}
+  .brand{font-size:1.5vmin;letter-spacing:0.14em;text-transform:uppercase;color:var(--teal-lt);font-weight:600;}
+  /* empty / error states */
+  .msg{flex:1 1 auto;display:flex;align-items:center;justify-content:center;text-align:center;padding:4vmin;}
+  .msg div{max-width:70%;}
+  .msg h2{font-size:4vmin;font-weight:700;letter-spacing:0.03em;margin:0 0 1.5vmin;text-transform:uppercase;}
+  .msg p{font-size:2.2vmin;color:var(--muted);line-height:1.5;margin:0;}
+</style>
+</head>
+<body>
+  <div class="wm"><span>CHRISSILVA</span></div>
+  <div class="wrap">
+    <div class="head">
+      <div class="ttl">
+        <span class="chip">Live</span>
+        <h1>Class Standings<small>Who is caught up on assignments</small></h1>
+      </div>
+      <div class="upd" id="upd">&nbsp;</div>
+    </div>
+    <div class="board" id="board">
+      <div class="msg"><div><h2>Warming up&hellip;</h2><p>Loading the latest standings.</p></div></div>
+    </div>
+    <div class="foot">
+      <div class="legend">
+        <span><i style="background:var(--ok)"></i> Caught up</span>
+        <span><i style="background:var(--warn)"></i> 1-2 missing</span>
+        <span><i style="background:var(--bad)"></i> 3+ missing</span>
+      </div>
+      <div class="brand">Mr. Silva &middot; Pioneer Valley</div>
+    </div>
+  </div>
+
+<script>
+(function(){
+  var REFRESH_MS = 45000;
+  var board = document.getElementById('board');
+  var updEl = document.getElementById('upd');
+
+  function esc(s){ return (s==null?'':String(s)).replace(/[&<>]/g, function(c){ return {'&':'&amp;','<':'&lt;','>':'&gt;'}[c]; }); }
+  function pct(n, d){ return d > 0 ? (n / d) * 100 : 0; }
+
+  function ago(ts){
+    if(!ts){ return ''; }
+    var secs = Math.max(0, Math.floor(Date.now()/1000 - ts));
+    if(secs < 60) return 'just now';
+    var m = Math.floor(secs/60);
+    if(m < 60) return m + ' min ago';
+    var h = Math.floor(m/60);
+    return h + ' hr ago';
+  }
+
+  function message(title, body){
+    board.innerHTML = '<div class="msg"><div><h2>' + esc(title) + '</h2><p>' + body + '</p></div></div>';
+  }
+
+  function render(data){
+    var periods = (data && data.periods) || [];
+    // keep only periods that actually have students
+    periods = periods.filter(function(p){ return (p.total||0) > 0; });
+    updEl.innerHTML = periods.length ? ('Updated <b>' + esc(ago(data.updated)) + '</b>') : '&nbsp;';
+    if(!periods.length){
+      message('No standings yet', 'The standings appear here once Mr. Silva opens the dashboard. They refresh on their own.');
+      return;
+    }
+    // rank by % caught up (clean / total), most caught up first; tie-break by fewer 3+ missing
+    periods.forEach(function(p){ p._cu = pct(p.clean||0, p.total||0); });
+    periods.sort(function(a,b){ return (b._cu - a._cu) || ((a.high||0) - (b.high||0)); });
+
+    var n = periods.length;
+    board.innerHTML = periods.map(function(p, i){
+      var total = p.total || 0, clean = p.clean || 0, low = p.low || 0, high = p.high || 0;
+      var cu = Math.round(pct(clean, total));
+      var cls = (i === 0 ? ' lead' : (i === n - 1 && n > 1 ? ' trail' : ''));
+      var tag = (i === 0 ? '<span class="tag lead">Leading</span>'
+                 : (i === n - 1 && n > 1 ? '<span class="tag trail">Trailing</span>' : ''));
+      return '<div class="row' + cls + '">'
+        + '<div class="rank">' + (i + 1) + '</div>'
+        + '<div class="idn"><div class="per">Period ' + esc(p.p) + '</div>'
+        +   '<div class="crs">' + esc(p.label || '') + '</div></div>'
+        + '<div class="mid">'
+        +   '<div class="bar">'
+        +     '<i class="s-ok" style="width:' + pct(clean,total) + '%"></i>'
+        +     '<i class="s-warn" style="width:' + pct(low,total) + '%"></i>'
+        +     '<i class="s-bad" style="width:' + pct(high,total) + '%"></i>'
+        +   '</div>'
+        +   '<div class="sub">' + tag + '<span>' + clean + ' of ' + total + ' caught up</span></div>'
+        + '</div>'
+        + '<div class="pct"><div class="n">' + cu + '<small>%</small></div>'
+        +   '<div class="cu">caught up</div></div>'
+        + '</div>';
+    }).join('');
+  }
+
+  function load(){
+    fetch('/api/leaderboard', { cache: 'no-store' })
+      .then(function(r){ return r.ok ? r.json() : Promise.reject(r.status); })
+      .then(render)
+      .catch(function(){ /* keep the last good board on a transient error */
+        if(!board.querySelector('.row')){ message('Standings unavailable', 'Trying again in a moment.'); }
+      });
+  }
+
+  load();
+  setInterval(load, REFRESH_MS);
+})();
+</script>
+</body>
+</html>

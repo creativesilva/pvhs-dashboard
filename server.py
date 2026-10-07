@@ -465,6 +465,27 @@ def _build_class_leads():
                            'p': str(S.get('p', '')), 'why': S.get('why', '')})
     return {'periods': periods, 'spring': spring}
 
+# --- Missing-assignments leaderboard (period AGGREGATES only, NEVER a student name or id) -----
+# The authenticated Command Center publishes the per-period clean/low/high/total counts it already
+# computes for the "Missing Assignments by Period" graphic. The PUBLIC /leaderboard page and
+# /api/leaderboard read that snapshot so a classroom screen (classroomscreen.com embed) can show the
+# standings. Stored on the Render disk so the screen keeps showing the last standings across restarts.
+LEADERBOARD_PATH = os.path.join(_data_dir(), 'leaderboard.json')
+
+def _load_leaderboard():
+    try:
+        with open(LEADERBOARD_PATH) as f:
+            return json.load(f)
+    except Exception:
+        return {'updated': 0, 'periods': []}
+
+def _save_leaderboard(snap):
+    try:
+        with open(LEADERBOARD_PATH, 'w') as f:
+            json.dump(snap, f)
+    except Exception as e:
+        print('[leaderboard] save failed:', e)
+
 def _is_photo(s):
     """A photography student (CTE Photo 1 or 2). Digital Arts students are NOT photo."""
     v = ((s.get('course_code') or '') + ' ' + (s.get('course') or '')).lower()
@@ -761,6 +782,37 @@ class Handler(BaseHTTPRequestHandler):
             return False
         return True
 
+    def handle_leaderboard(self):
+        """PUBLIC: period-level missing-assignment standings for the classroom-screen embed.
+        Only aggregate counts are returned, never a student name or id."""
+        self.json_response(200, _load_leaderboard())
+
+    def handle_leaderboard_publish(self):
+        """AUTHED: the Command Center publishes the per-period aggregate it already computes for the
+        Missing Assignments by Period graphic. Stored stripped to pure counts, so no name can leak."""
+        length = int(self.headers.get('Content-Length', 0))
+        try:
+            data = json.loads(self.rfile.read(length) if length else b'{}')
+        except Exception:
+            self.json_response(400, {'error': 'bad json'}); return
+        periods = []
+        for p in (data.get('periods') or []):
+            if not isinstance(p, dict):
+                continue
+            try:
+                periods.append({
+                    'p': str(p.get('p', ''))[:4],
+                    'label': str(p.get('label', ''))[:40],
+                    'clean': max(0, int(p.get('clean', 0))),
+                    'low': max(0, int(p.get('low', 0))),
+                    'high': max(0, int(p.get('high', 0))),
+                    'total': max(0, int(p.get('total', 0))),
+                })
+            except Exception:
+                continue
+        _save_leaderboard({'updated': time.time(), 'periods': periods})
+        self.json_response(200, {'ok': True, 'count': len(periods)})
+
     # -- Routing ------------------------------------------------------------
 
     def do_OPTIONS(self):
@@ -796,6 +848,11 @@ class Handler(BaseHTTPRequestHandler):
             if not self.require_camera_auth():
                 return
             self.handle_camera_assets()            # per-camera standing notes + out-of-service
+        elif path == '/api/leaderboard':
+            self.handle_leaderboard()              # PUBLIC: period aggregates only (no names)
+        elif path == '/leaderboard':
+            self.path = '/leaderboard.html'
+            self.serve_file()                      # PUBLIC: classroom-screen standings page
         elif path in ('/', ''):
             self.path = '/index.html'
             self.serve_file()
@@ -835,6 +892,11 @@ class Handler(BaseHTTPRequestHandler):
             elif path == '/api/camera/card_return': self.handle_camera_card_return()  # card returned to student -> free slot
             elif path == '/api/camera/student_override': self.handle_camera_student_override()  # teacher edits a student's contact -> profile
             elif path == '/api/camera/blackout': self.handle_camera_blackout()  # teacher closes/opens a day to checkouts
+            return
+        if path == '/api/leaderboard/publish':
+            if not self.require_camera_auth():
+                return
+            self.handle_leaderboard_publish()      # AUTHED: the CC publishes the period aggregate
             return
         if not self.require_auth():
             return

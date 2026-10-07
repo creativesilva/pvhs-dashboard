@@ -3,6 +3,7 @@ __pycache__/
 .DS_Store
 roster_data.json
 class_leads.json
+leaderboard.json
 garcia_roster.json
 *roster*.json
 camera_assets.json

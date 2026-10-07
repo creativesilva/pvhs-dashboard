@@ -499,6 +499,7 @@ footer { text-align: center; color: var(--text-faint); font-size: 0.72rem; paddi
             <span class="eyebrow">Canvas Live</span>
             <h2>Missing Assignments by Period</h2>
             <button class="btn ghost small" onclick="loadAllCanvasData(true)">Refresh</button>
+            <button class="btn ghost small" onclick="copyLeaderboardEmbed(this)" title="Copy an embed code to show the class standings on classroomscreen.com (period level only, no student names)">Copy Embed Code</button>
           </div>
           <span class="rule"></span>
         </div>
@@ -1107,6 +1108,7 @@ function renderMissingByPeriod(){
     return;
   }
   const sections=rosterData.sections, students=rosterData.students;
+  const agg=[];
   document.getElementById('missingPeriodBars').innerHTML=sections.map(sec=>{
     const ps=students.filter(s=>s.period===sec.period);
     const total=ps.length;
@@ -1118,6 +1120,7 @@ function renderMissingByPeriod(){
       else if(mc<=2) low++;
       else high++;
     });
+    agg.push({p:sec.period, label:sec.course_code, clean, low, high, total});
     const pClean=((clean/total)*100).toFixed(1);
     const pLow=((low/total)*100).toFixed(1);
     const pHigh=((high/total)*100).toFixed(1);
@@ -1131,6 +1134,25 @@ function renderMissingByPeriod(){
       <div class="pct">${clean}/${total} clean</div>
     </div>`;
   }).join('');
+  publishLeaderboard(agg);
+}
+
+// Publish the period AGGREGATE (counts only, never a student name) so the PUBLIC /leaderboard page
+// can show the classroom-screen standings. Fire-and-forget; any failure is ignored silently.
+function publishLeaderboard(agg){
+  if(!agg||!agg.length) return;
+  try{
+    api('/api/leaderboard/publish',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({periods:agg})}).catch(function(){});
+  }catch(e){}
+}
+
+// Copy an iframe embed code for classroomscreen.com (points at whatever origin the console is on).
+function copyLeaderboardEmbed(btn){
+  const url=location.origin+'/leaderboard';
+  const code='<iframe src="'+url+'" style="width:100%;height:100%;border:0;" title="Class Standings" allow="fullscreen"></iframe>';
+  const done=function(){ if(btn){ const t=btn.textContent; btn.textContent='Copied!'; setTimeout(function(){ btn.textContent=t; },1800); } };
+  if(navigator.clipboard&&navigator.clipboard.writeText){ navigator.clipboard.writeText(code).then(done).catch(function(){ window.prompt('Copy this embed code for classroomscreen.com:',code); }); }
+  else { window.prompt('Copy this embed code for classroomscreen.com:',code); }
 }
 
 // ---- Student modal ----

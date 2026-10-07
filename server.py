@@ -80,6 +80,20 @@ for _av, _af in (('AERIES_ACCOUNTS', 'aeries_substitute_accounts.json'),
             except Exception as e:
                 print(f'[aeries] Failed to load {_av}: {e}')
 
+# Class-leads config (student_id -> leadership role + period), same base64+gzip env pattern as the
+# roster. Gitignored and NEVER in the public repo; the server resolves ids to names only on the
+# AUTHENTICATED teacher feed, so no student name touches the public site. On Render set CLASS_LEADS.
+_cl_env = os.environ.get('CLASS_LEADS', '')
+if _cl_env:
+    _cl_path = os.path.join(SERVE_DIR, 'class_leads.json')
+    if not os.path.exists(_cl_path):
+        try:
+            with open(_cl_path, 'wb') as f:
+                f.write(gzip.decompress(base64.b64decode(_cl_env)))
+            print('[class_leads] Auto-loaded from CLASS_LEADS env')
+        except Exception as e:
+            print(f'[class_leads] Failed to load from env: {e}')
+
 # Garcia's CAMERA-ONLY roster (Mrs. Garcia / Solorio, CTE Photo 1A P2+P3): students that exist ONLY
 # for camera-checkout resolution (resolve_student), never in Silva's dashboard roster/grading. It is
 # loaded from the persistent disk (uploaded via the camera-scoped endpoint), or seeded from the
@@ -407,6 +421,49 @@ def _roster_students():
             return json.load(f).get('students', [])
     except Exception:
         return []
+
+def _class_leads_config():
+    """Raw class-leads config (student ids only, no names): {periods:[{p, leads:[{id,r,c}]}],
+    spring:[{id,p,why}]}. Gitignored, seeded from the CLASS_LEADS env var."""
+    try:
+        with open(os.path.join(SERVE_DIR, 'class_leads.json')) as f:
+            return json.load(f)
+    except Exception:
+        return {}
+
+def _build_class_leads():
+    """Resolve the class-leads config to display names for the AUTHENTICATED Class Leads card.
+    Names are looked up from Silva's roster at request time and returned only on the teacher feed,
+    so they never appear in the public repo or the public feed. Shape the card expects:
+    {periods:[{p, leads:[{r,c,id,n}]}], spring:[{id,n,p,why}]}."""
+    cfg = _class_leads_config()
+    if not cfg:
+        return {'periods': [], 'spring': []}
+    by_id = {str(s.get('student_id', '')).strip(): s for s in _roster_students() if isinstance(s, dict)}
+    def nm(sid):
+        s = by_id.get(str(sid).strip())
+        if not s:
+            return ''
+        first = (s.get('first_name') or '').strip()
+        last = (s.get('last_name') or '').strip()
+        return (last + ', ' + first).strip().strip(',')
+    periods = []
+    for pd in cfg.get('periods', []):
+        leads = []
+        for L in pd.get('leads', []):
+            n = nm(L.get('id'))
+            if n:
+                leads.append({'r': L.get('r', ''), 'c': L.get('c', ''),
+                              'id': str(L.get('id', '')).strip(), 'n': n})
+        if leads:
+            periods.append({'p': str(pd.get('p', '')), 'leads': leads})
+    spring = []
+    for S in cfg.get('spring', []):
+        n = nm(S.get('id'))
+        if n:
+            spring.append({'id': str(S.get('id', '')).strip(), 'n': n,
+                           'p': str(S.get('p', '')), 'why': S.get('why', '')})
+    return {'periods': periods, 'spring': spring}
 
 def _is_photo(s):
     """A photography student (CTE Photo 1 or 2). Digital Arts students are NOT photo."""
@@ -1014,6 +1071,7 @@ class Handler(BaseHTTPRequestHandler):
                                  'missing_limit': MISSING_LIMIT,
                                  'pools': CAMERA_POOLS, 'equipment_pools': EQUIPMENT_POOLS,
                                  'approval_required': APPROVAL_REQUIRED,
+                                 'class_leads': _build_class_leads(),
                                  'equipment_units': EQUIPMENT_UNITS, 'equipment_types': EQUIPMENT_TYPE_LABELS})
 
     def handle_camera_assets(self):

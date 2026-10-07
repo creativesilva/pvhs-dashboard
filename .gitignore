@@ -2,6 +2,7 @@ __pycache__/
 *.pyc
 .DS_Store
 roster_data.json
+class_leads.json
 garcia_roster.json
 *roster*.json
 camera_assets.json
@@ -11,3 +12,4 @@ memory_cards.json
 aeries_substitute_accounts.json
 aeries_substitute_credentials.json
 aeries_*.json
+.env

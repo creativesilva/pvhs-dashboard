@@ -199,8 +199,10 @@ h1 { font-size: 1.5rem; } h2 { font-size: 1.05rem; }
 .section-head { margin-bottom: 14px; }
 .section-head .head-row { display: flex; align-items: center; flex-wrap: wrap; gap: 14px; margin-bottom: 10px; }
 /* Collapsible sections (accordion): tap a section heading to hide its body (privacy at the desk). */
-.cc-acc-head { cursor: pointer; }
-.cc-acc-chev { margin-left: auto; width: 10px; height: 10px; border-right: 2px solid var(--muted); border-bottom: 2px solid var(--muted); transform: rotate(45deg); transition: transform .2s; flex: 0 0 auto; align-self: center; }
+.cc-acc-head { cursor: pointer; background: linear-gradient(90deg, rgba(0,184,184,0.11) 0%, rgba(0,184,184,0.03) 55%, transparent 100%); border-left: 3px solid rgba(0,184,184,0.45); padding: 11px 14px; margin: -8px -8px 12px -8px; transition: filter .15s, border-color .15s; }
+.cc-acc-head:hover { filter: brightness(1.16); border-left-color: var(--teal-bright); }
+.panel.cc-collapsed .cc-acc-head { margin-bottom: -8px; }
+.cc-acc-chev { margin-left: auto; width: 11px; height: 11px; border-right: 2px solid var(--teal-light); border-bottom: 2px solid var(--teal-light); transform: rotate(45deg); transition: transform .2s; flex: 0 0 auto; align-self: center; }
 .panel.cc-collapsed .cc-acc-chev { transform: rotate(-45deg); }
 .panel.cc-collapsed > :not(.stripe):not(.section-head):not(.panel-inner) { display: none !important; }
 .panel.cc-collapsed > .panel-inner > :not(.head-row):not(.section-head) { display: none !important; }
@@ -857,7 +859,10 @@ function setupAccordions(){
       hr.addEventListener('click',function(e){ if(e.target.closest('button')||e.target.closest('a')||e.target.closest('input')||e.target.closest('select')) return;
         var collapse=!panel.classList.contains('cc-collapsed'); panel.classList.toggle('cc-collapsed',collapse); try{ localStorage.setItem(key, collapse?'1':'0'); }catch(_){} });
     }
-    try{ if(localStorage.getItem(key)==='1') panel.classList.add('cc-collapsed'); }catch(_){}
+    // Default COLLAPSED (accordion menu): a section starts closed unless it was explicitly opened
+    // before (saved '0'). Keeps the console a clean menu of sections you expand on demand.
+    var _s=null; try{ _s=localStorage.getItem(key); }catch(_){}
+    if(_s!=='0') panel.classList.add('cc-collapsed');
   });
 }
 // Every link opens a new tab, so this slow standalone page is never navigated away from.

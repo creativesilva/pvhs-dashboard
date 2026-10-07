@@ -227,6 +227,9 @@ h1 { font-size: 1.5rem; } h2 { font-size: 1.05rem; }
 .pill.absent { color: var(--alert); border-color: rgba(230,36,41,0.5); background: rgba(230,36,41,0.08); }
 .pill.flag { color: var(--warn); border-color: rgba(255,178,124,0.5); background: rgba(255,178,124,0.08); }
 .pill.info { color: var(--teal-light); border-color: rgba(0,184,184,0.5); background: rgba(0,184,184,0.08); }
+.pill.lead-weekly { color: var(--teal-bright); border-color: rgba(0,184,184,0.6); background: rgba(0,184,184,0.12); }
+.pill.lead-pw { color: #ff9d5c; border-color: rgba(255,107,26,0.55); background: rgba(255,107,26,0.12); }
+.pill.lead-tam { color: #c4b5fd; border-color: rgba(139,92,246,0.55); background: rgba(139,92,246,0.14); }
 .pill.iep { color: var(--teal-mint); border-color: var(--teal-mint); background: rgba(94,234,212,0.10); }
 .pill.p504 { color: var(--teal-bright); border-color: var(--teal-bright); background: rgba(0,184,184,0.10); }
 .pill.ssa { color: var(--teal-light); border-color: var(--teal-light); background: rgba(128,224,224,0.10); }
@@ -901,7 +904,7 @@ function goTo(filter,value){
 }
 
 // ---- Dashboard load ----
-let rosterData=null, coursesCache=[], canvasSort='last';
+let rosterData=null, coursesCache=[], canvasSort='last', CLASS_LEADS_BY_ID={};
 
 async function loadDashboard(){
   showLoading('Loading roster data...');
@@ -910,7 +913,7 @@ async function loadDashboard(){
     if(rr.ok){
       rosterData=await rr.json();
       document.getElementById('topbarSub').textContent=`${rosterData.school} · ${rosterData.term} ${rosterData.school_year}`;
-      renderRoster(); renderStatCards();
+      renderRoster(); renderStatCards(); loadClassLeads();
     } else {
       document.getElementById('topbarSub').textContent='Pioneer Valley High School';
       document.getElementById('studentRows').innerHTML='<tr><td colspan="8" class="empty">No roster data uploaded yet.</td></tr>';
@@ -1030,6 +1033,20 @@ function renderMissingOverview(){
 }
 
 // ---- Roster table ----
+// Class leads: fetch the resolved per-period leads and mark lead students in the roster
+// (Weekly EQ / Photo Walk EQ / Team Attendance) by student id. Authed endpoint; names resolved server-side.
+function loadClassLeads(){
+  api('/api/class_leads').then(r=>r.ok?r.json():null).then(function(d){
+    if(!d) return;
+    CLASS_LEADS_BY_ID={};
+    (d.periods||[]).forEach(function(pd){ (pd.leads||[]).forEach(function(L){ CLASS_LEADS_BY_ID[String(L.id).trim()]={r:L.r,c:L.c}; }); });
+    if(rosterData) renderRoster();
+  }).catch(function(){});
+}
+function leadBadge(sid){
+  var L=CLASS_LEADS_BY_ID[String(sid==null?'':sid).trim()];
+  return L ? ` <span class="pill lead-${esc(L.c)}" title="Class lead">${esc(L.r)}</span>` : '';
+}
 function renderRoster(){
   if(!rosterData){ document.getElementById('studentRows').innerHTML='<tr><td colspan="8" class="empty">No roster data.</td></tr>'; return; }
   const students=rosterData.students, sections=rosterData.sections;
@@ -1066,7 +1083,7 @@ function renderRoster(){
       return `<tr class="rowclick" data-idx="${i}">
         <td class="num">${s.Seat||NONE}</td>
         <td>P${s.period}</td>
-        <td class="name">${esc(s.last_name)}, ${esc(s.first_name)}${s.preferred_name?` <span class="muted">(${esc(s.preferred_name)})</span>`:''}<div class="muted num" style="font-size:11px">${s.student_id}</div></td>
+        <td class="name">${esc(s.last_name)}, ${esc(s.first_name)}${s.preferred_name?` <span class="muted">(${esc(s.preferred_name)})</span>`:''}${leadBadge(s.student_id)}<div class="muted num" style="font-size:11px">${s.student_id}</div></td>
         <td class="support-flags">${supportBadges(s)||NONE}</td>
         <td>${mBadge}</td>
         <td>${nFlags?`<span class="pill flag">${nFlags} flag${nFlags>1?'s':''}</span>`:NONE}</td>

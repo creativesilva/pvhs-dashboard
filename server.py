@@ -832,6 +832,10 @@ class Handler(BaseHTTPRequestHandler):
             if not self.require_auth():
                 return
             self.handle_roster()
+        elif path == '/api/class_leads':
+            if not self.require_auth():
+                return
+            self.json_response(200, _build_class_leads())   # authed: resolved leads, to mark the roster
         elif path == '/api/aeries/subs':
             if not self.require_auth():
                 return

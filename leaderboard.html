@@ -10,7 +10,7 @@
     --bg0:#04171a; --bg1:#072a2c; --teal:#13c6c6; --teal-lt:#8ff2f2; --ink:#eafeff;
     --muted:rgba(206,244,244,0.60); --line:rgba(19,198,198,0.22);
     --ok:#2ecc8f; --warn:#f3b14e; --bad:#d8463c; --gold:#f5c451;
-    --font:'Oswald','Arial Narrow',system-ui,sans-serif;
+    --font:system-ui,-apple-system,'Segoe UI',Roboto,'Helvetica Neue',Arial,sans-serif;
   }
   *{box-sizing:border-box;}
   html,body{height:100%;margin:0;}
@@ -20,9 +20,6 @@
       radial-gradient(120% 90% at 85% -10%, rgba(19,198,198,0.16), transparent 60%),
       linear-gradient(160deg,var(--bg1) 0%, var(--bg0) 60%, #020d0f 100%);
   }
-  /* big ghosted CHRISSILVA watermark, like the Command Center graphic */
-  .wm{position:fixed;inset:0;display:flex;align-items:center;justify-content:center;pointer-events:none;z-index:0;overflow:hidden;}
-  .wm span{font-weight:700;letter-spacing:0.06em;font-size:19vw;color:rgba(255,255,255,0.028);white-space:nowrap;text-transform:uppercase;}
   .wrap{position:relative;z-index:1;height:100%;display:flex;flex-direction:column;padding:2.2vmin 3vmin 1.6vmin;}
   /* header */
   .head{display:flex;align-items:flex-end;justify-content:space-between;gap:2vmin;border-bottom:2px solid var(--teal);padding-bottom:1.4vmin;margin-bottom:1.4vmin;flex:0 0 auto;}
@@ -70,7 +67,6 @@
 </style>
 </head>
 <body>
-  <div class="wm"><span>CHRISSILVA</span></div>
   <div class="wrap">
     <div class="head">
       <div class="ttl">

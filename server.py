@@ -306,6 +306,72 @@ def save_photowalks(d):
         json.dump(d, f)
     os.replace(tmp, PHOTOWALK_PATH)
 
+# Inbox Board: a glanceable Kanban of district email. Written by the email routine (Claude in
+# Chrome using Mr. Silva's authenticated session) and read by inbox.html. Teacher-only, behind
+# the Command Center auth. Cards hold SHORT summaries only, never email bodies or student PII;
+# a sensitive card hides its text and points to Outlook. (CommandCenter InboxBoard BuildSpec v1_1.)
+INBOX_PATH = os.path.join(_data_dir(), 'inbox_cards.json')
+_inbox_lock = threading.Lock()
+INBOX_COLUMNS = ('today', 'week', 'waiting', 'events')
+INBOX_PRIORITIES = ('high', 'normal')
+INBOX_ROLES = ('Admin', 'Dept Chair', 'ASB', 'Parent', 'Staff', 'District', 'Vendor')
+
+def load_inbox():
+    try:
+        with open(INBOX_PATH) as f:
+            d = json.load(f)
+            return d if isinstance(d, list) else []
+    except Exception:
+        return []
+
+def save_inbox(cards):
+    tmp = INBOX_PATH + '.tmp'
+    with open(tmp, 'w') as f:
+        json.dump(cards, f)
+    os.replace(tmp, INBOX_PATH)
+
+def _inbox_stamp():
+    return time.strftime('%Y-%m-%dT%H:%M:%S', time.localtime())
+
+def _inbox_last_sorted(cards):
+    stamps = [c.get('updatedAt') or c.get('createdAt') or '' for c in cards]
+    stamps = [x for x in stamps if x]
+    return max(stamps) if stamps else ''
+
+def _clean_inbox_card(c):
+    """Validate + normalize one incoming card. Returns a dict, or None to reject it.
+    Enforces the privacy rule: a sensitive card carries no readable summary/next action/tags."""
+    if not isinstance(c, dict):
+        return None
+    cid = str(c.get('id') or '').strip()
+    if not cid or c.get('column') not in INBOX_COLUMNS:
+        return None
+    sensitive = bool(c.get('sensitive'))
+    def s(v, n):
+        return str(v if v is not None else '')[:n]
+    card = {
+        'id': cid[:200],
+        'title': s(c.get('title'), 120),
+        'sender': s(c.get('sender'), 80),
+        'role': c.get('role') if c.get('role') in INBOX_ROLES else 'Staff',
+        'column': c.get('column'),
+        'priority': c.get('priority') if c.get('priority') in INBOX_PRIORITIES else 'normal',
+        'due': (s(c.get('due'), 10) or None),
+        'receivedAt': s(c.get('receivedAt'), 40),
+        'summary': ('' if sensitive else s(c.get('summary'), 400)),
+        'nextAction': ('' if sensitive else s(c.get('nextAction'), 200)),
+        'draftReady': bool(c.get('draftReady')),
+        'sensitive': sensitive,
+        'tags': ([] if sensitive else [s(t, 30) for t in (c.get('tags') or []) if t][:8]),
+        'outlookUrl': s(c.get('outlookUrl'), 600),
+        'manualColumn': bool(c.get('manualColumn')),
+        'done': bool(c.get('done')),
+        'doneAt': (s(c.get('doneAt'), 40) or None),
+    }
+    if sensitive and not card['title']:
+        card['title'] = 'Student matter: open in Outlook'
+    return card
+
 # Per-camera ASSET store: a standing note that follows the physical camera across checkouts
 # (e.g. "lens cap replaced 9/28", "small scratch") + an out-of-service flag for broken gear.
 # Keyed by camera name (Cam 01..18). Separate from per-checkout notes, which are incident history.
@@ -843,6 +909,10 @@ class Handler(BaseHTTPRequestHandler):
             if not self.require_auth():
                 return
             self.handle_roster()
+        elif path == '/api/inbox/list':
+            if not self.require_camera_auth():
+                return
+            self.handle_inbox_list()
         elif path == '/api/class_leads':
             if not self.require_auth():
                 return
@@ -917,6 +987,13 @@ class Handler(BaseHTTPRequestHandler):
             elif path == '/api/camera/card_return': self.handle_camera_card_return()  # card returned to student -> free slot
             elif path == '/api/camera/student_override': self.handle_camera_student_override()  # teacher edits a student's contact -> profile
             elif path == '/api/camera/blackout': self.handle_camera_blackout()  # teacher closes/opens a day to checkouts
+            return
+        if path in ('/api/inbox/upsert', '/api/inbox/resolve', '/api/inbox/move'):
+            if not self.require_camera_auth():
+                return
+            if path == '/api/inbox/upsert':    self.handle_inbox_upsert()
+            elif path == '/api/inbox/resolve': self.handle_inbox_resolve()
+            elif path == '/api/inbox/move':    self.handle_inbox_move()
             return
         if path == '/api/leaderboard/publish':
             if not self.require_camera_auth():
@@ -1996,6 +2073,107 @@ class Handler(BaseHTTPRequestHandler):
         self.wfile.write(body)
 
     # -- Utilities ----------------------------------------------------------
+
+    # ---- Inbox Board (teacher-only; behind the Command Center auth) ----
+    def handle_inbox_list(self):
+        """Return non-done cards plus cards done in the last 7 days (for the Done list)."""
+        cards = load_inbox()
+        cutoff = time.strftime('%Y-%m-%d', time.localtime(time.time() - 7 * 86400))
+        out = [c for c in cards if (not c.get('done')) or ((c.get('doneAt') or '')[:10] >= cutoff)]
+        self.json_response(200, {'cards': out, 'lastSorted': _inbox_last_sorted(cards)})
+
+    def handle_inbox_upsert(self):
+        """Insert or update cards by id (the email routine writes here). BuildSpec sec 7:
+        a manual column always wins; a done card stays done unless a newer reply reopens it."""
+        data = self._read_json_body()
+        if data is None:
+            return
+        incoming = data.get('cards') if isinstance(data, dict) else data
+        if not isinstance(incoming, list):
+            self.json_response(400, {'error': 'cards must be a list'})
+            return
+        added = updated = skipped = 0
+        now = _inbox_stamp()
+        with _inbox_lock:
+            cards = load_inbox()
+            by_id = {c.get('id'): c for c in cards}
+            for raw in incoming[:500]:
+                card = _clean_inbox_card(raw)
+                if card is None:
+                    skipped += 1
+                    continue
+                existing = by_id.get(card['id'])
+                if existing is None:
+                    card['createdAt'] = now
+                    card['updatedAt'] = now
+                    cards.append(card)
+                    by_id[card['id']] = card
+                    added += 1
+                    continue
+                if existing.get('done') and not card.get('done'):
+                    # a done card reopens only when the incoming card is newer (a new reply)
+                    if (card.get('receivedAt') or '') <= (existing.get('receivedAt') or ''):
+                        skipped += 1
+                        continue
+                    existing['done'] = False
+                    existing['doneAt'] = None
+                keep_col = existing.get('manualColumn')
+                for k, v in card.items():
+                    if k == 'column' and keep_col:
+                        continue            # manual move wins; the routine never overrides it
+                    existing[k] = v
+                existing['updatedAt'] = now
+                updated += 1
+            save_inbox(cards)
+        self.json_response(200, {'added': added, 'updated': updated, 'skipped': skipped})
+
+    def handle_inbox_resolve(self):
+        """Mark cards done (or undone) by id. From the routine and the Done button."""
+        data = self._read_json_body()
+        if data is None:
+            return
+        ids = data.get('ids') or []
+        if not isinstance(ids, list):
+            self.json_response(400, {'error': 'ids must be a list'})
+            return
+        done = bool(data.get('done', True))
+        now = _inbox_stamp()
+        n = 0
+        with _inbox_lock:
+            cards = load_inbox()
+            idset = set(str(i) for i in ids)
+            for c in cards:
+                if str(c.get('id')) in idset:
+                    c['done'] = done
+                    c['doneAt'] = now if done else None
+                    c['updatedAt'] = now
+                    n += 1
+            save_inbox(cards)
+        self.json_response(200, {'ok': True, 'updated': n})
+
+    def handle_inbox_move(self):
+        """Mr. Silva moves a card (drag/drop, Move to, or snooze). A manual move always wins,
+        so the routine will not move it back."""
+        data = self._read_json_body()
+        if data is None:
+            return
+        cid = str(data.get('id') or '')
+        col = data.get('column')
+        now = _inbox_stamp()
+        with _inbox_lock:
+            cards = load_inbox()
+            c = next((x for x in cards if str(x.get('id')) == cid), None)
+            if not c:
+                self.json_response(404, {'error': 'card not found'})
+                return
+            if col in INBOX_COLUMNS:
+                c['column'] = col
+                c['manualColumn'] = True
+            if 'due' in data:
+                c['due'] = (str(data.get('due') or '')[:10] or None)
+            c['updatedAt'] = now
+            save_inbox(cards)
+        self.json_response(200, {'ok': True})
 
     def _read_json_body(self, max_bytes=6 * 1024 * 1024):
         try:

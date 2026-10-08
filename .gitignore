@@ -14,3 +14,4 @@ aeries_substitute_accounts.json
 aeries_substitute_credentials.json
 aeries_*.json
 .env
+inbox_cards.json

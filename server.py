@@ -2137,6 +2137,7 @@ class Handler(BaseHTTPRequestHandler):
             self.json_response(400, {'error': 'ids must be a list'})
             return
         done = bool(data.get('done', True))
+        dismissed = bool(data.get('dismissed', False))   # "not for me": clear it + flag so the routine archives the email and skips similar ones
         now = _inbox_stamp()
         n = 0
         with _inbox_lock:
@@ -2146,6 +2147,10 @@ class Handler(BaseHTTPRequestHandler):
                 if str(c.get('id')) in idset:
                     c['done'] = done
                     c['doneAt'] = now if done else None
+                    if dismissed:
+                        c['dismissed'] = True
+                    elif not done:
+                        c['dismissed'] = False    # reopening a card clears the dismissed flag
                     c['updatedAt'] = now
                     n += 1
             save_inbox(cards)

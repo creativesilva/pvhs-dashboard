@@ -9,7 +9,7 @@ PVHS Dashboard Server
 
 from http.server import HTTPServer, BaseHTTPRequestHandler
 from socketserver import ThreadingMixIn
-from urllib.parse import urlparse
+from urllib.parse import urlparse, parse_qs
 import http.client
 import ssl
 import json
@@ -421,6 +421,17 @@ def _roster_students():
             return json.load(f).get('students', [])
     except Exception:
         return []
+
+def _valid_student_ids():
+    """Set of Mr. Silva's student id strings, for the public Print Party gate.
+    Returns ids only; names and contact info never leave the server."""
+    ids = set()
+    for s in _roster_students():
+        if isinstance(s, dict):
+            sid = str(s.get('student_id', '')).strip()
+            if sid:
+                ids.add(sid)
+    return ids
 
 def _class_leads_config():
     """Raw class-leads config (student ids only, no names): {periods:[{p, leads:[{id,r,c}]}],
@@ -854,6 +865,8 @@ class Handler(BaseHTTPRequestHandler):
             self.handle_camera_assets()            # per-camera standing notes + out-of-service
         elif path == '/api/leaderboard':
             self.handle_leaderboard()              # PUBLIC: period aggregates only (no names)
+        elif path == '/api/verify_student':
+            self.handle_verify_student()           # PUBLIC: boolean only, no names/PII (Print Party gate)
         elif path == '/leaderboard':
             self.path = '/leaderboard.html'
             self.serve_file()                      # PUBLIC: classroom-screen standings page
@@ -862,6 +875,14 @@ class Handler(BaseHTTPRequestHandler):
             self.serve_file()
         else:
             self.serve_file()
+
+    def handle_verify_student(self):
+        """Print Party gate: is this student number one of Mr. Silva's students?
+        Returns only {ok, valid} -- never a name or any contact info."""
+        qs = parse_qs(urlparse(self.path).query)
+        sid = (qs.get('id', [''])[0] or '').strip()
+        valid = sid.isdigit() and 4 <= len(sid) <= 10 and sid in _valid_student_ids()
+        self.json_response(200, {'ok': True, 'valid': valid})
 
     def do_POST(self):
         path = urlparse(self.path).path

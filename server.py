@@ -260,6 +260,9 @@ def _write_override(sid, data, ip=''):
     if 'student_cell' in data:    fields['student_cell'] = _clean_phone(data.get('student_cell'))
     if 'parent_guardian' in data: fields['parent_guardian'] = _clean_name(data.get('parent_guardian'))
     if 'parent_cell' in data:     fields['parent_cell'] = _clean_phone(data.get('parent_cell'))
+    # Teacher grant (Mr. Silva, from a student's profile): may take the Photo-2 cameras 16-18 even
+    # though they are not a Period-4 Photo-2 student. Stored on the student so it sticks.
+    if 'p2' in data:              fields['p2'] = bool(data.get('p2'))
     if not fields:
         return False
     with _overrides_lock:
@@ -602,6 +605,8 @@ def _student_result(s):
         for k in ('student_cell', 'parent_guardian', 'parent_cell'):
             if ov.get(k) not in (None, ''):
                 res[k] = ov[k]
+        if ov.get('p2'):
+            res['p2'] = True   # Mr. Silva granted this student the Photo-2 cameras
     return res
 
 DEMO_TEACHER_ID = 'teacher'   # Mr. Silva's self-demo account. Typing "teacher" as the student ID
@@ -1236,6 +1241,7 @@ class Handler(BaseHTTPRequestHandler):
                                  'pools': CAMERA_POOLS, 'equipment_pools': EQUIPMENT_POOLS,
                                  'approval_required': APPROVAL_REQUIRED,
                                  'class_leads': _build_class_leads(),
+                                 'p2_grants': [sid for sid, ov in _ROSTER_OVERRIDES.items() if ov.get('p2')],
                                  'equipment_units': EQUIPMENT_UNITS, 'equipment_types': EQUIPMENT_TYPE_LABELS})
 
     def handle_camera_assets(self):
@@ -1483,6 +1489,7 @@ class Handler(BaseHTTPRequestHandler):
             'teacher': r.get('teacher', ''),
             'course': r.get('course', ''),
             'pool': _pool_for(r.get('teacher', '')),
+            'p2_ok': (str(r.get('period', '')).lstrip('0') == '4' or bool(r.get('p2'))),
             'student_cell': r.get('student_cell', ''),
             'parent_guardian': r.get('parent_guardian', ''),
             'parent_cell': r.get('parent_cell', ''),
@@ -1705,12 +1712,13 @@ class Handler(BaseHTTPRequestHandler):
                 self.json_response(409, {'error': 'That camera is missing its memory card right now. Please pick another.'})
                 return
             if camera in ('Cam 16', 'Cam 17', 'Cam 18'):
-                per = str(resolve_student(sid).get('period', '')).lstrip('0')
-                if per != '4':
-                    # Photo-1 student on a Photo-2 camera: allowed only when the teacher enters the
-                    # override code on the student's device. Validated here; the code never leaves the server.
+                rs = resolve_student(sid)
+                per = str(rs.get('period', '')).lstrip('0')
+                # Allowed for Period-4 Photo-2 students, OR a student Mr. Silva granted Photo-2 access
+                # (from their profile), OR when the teacher enters the override code on the device.
+                if per != '4' and not rs.get('p2'):
                     if str(data.get('override', '')).strip() != CAMERA_OVERRIDE_CODE:
-                        self.json_response(403, {'error': 'That camera is for Photography 2. Ask Mr. Silva to enter the teacher code to unlock it for you.', 'override_required': True})
+                        self.json_response(403, {'error': 'That camera is for Photography 2. Ask Mr. Silva to unlock it for you.', 'override_required': True})
                         return
             if self._camera_busy(camera, out, due):
                 self.json_response(409, {'error': 'That camera is already booked for those days. Please pick another.'})

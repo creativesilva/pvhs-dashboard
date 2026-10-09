@@ -1232,16 +1232,30 @@ class Handler(BaseHTTPRequestHandler):
                     c['course'] = r.get('course', '')
                     c['teacher'] = r.get('teacher', '')
             cards[slot] = c
+        # Gear (equipment) reservations as their OWN sanitized array, mirroring the public feed, so the
+        # embedded console calendar can draw gear bars the same way it draws cameras. Without this the
+        # authed calendar shows NO reservations for a gear-only pool (e.g. Mankin's iPad styluses).
+        _assets = load_assets()
+        equip = []
+        for c in items:
+            if c.get('kind') != 'equipment':
+                continue
+            est = status_of(c)
+            equip.append({'id': c.get('id'), 'item': c.get('item', ''), 'out': c.get('out', ''),
+                          'due': c.get('due', ''), 'returned': (est == 'returned'),
+                          'returned_date': c.get('returned_date', ''), 'status': est})
+        equip_oos = [u for u in EQUIPMENT_UNIT_IDS if (_assets.get(u) or {}).get('oos')]
         # Teacher console gets ALL cameras (01-21) so the Silva/Garcia/Mankin view toggle can show each
         # pool; the console filters to the selected pool with DATA.pools. (Public feed stays 01-18.)
         self.json_response(200, {'cameras': ALL_CAMERAS, 'checkouts': items,
-                                 'assets': load_assets(), 'cards': cards,
+                                 'assets': _assets, 'cards': cards,
                                  'blackouts': _blackout_list(),
                                  'missing_limit': MISSING_LIMIT,
                                  'pools': CAMERA_POOLS, 'equipment_pools': EQUIPMENT_POOLS,
                                  'approval_required': APPROVAL_REQUIRED,
                                  'class_leads': _build_class_leads(),
                                  'p2_grants': [sid for sid, ov in _ROSTER_OVERRIDES.items() if ov.get('p2')],
+                                 'equipment': equip, 'equipment_oos': equip_oos,
                                  'equipment_units': EQUIPMENT_UNITS, 'equipment_types': EQUIPMENT_TYPE_LABELS})
 
     def handle_camera_assets(self):

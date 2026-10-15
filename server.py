@@ -1766,14 +1766,25 @@ class Handler(BaseHTTPRequestHandler):
         return False
 
     def _equipment_unit_busy(self, item, out, due):
-        """True if this specific gear unit (item = unit id) has a non-returned reservation overlapping
-        [out, due) (half-open, so a same-day handoff is allowed). Mirrors _camera_busy for per-unit gear."""
+        """True if this specific gear unit (item = unit id) is unavailable over the requested span.
+        A unit that is physically OUT (picked up, not yet checked in) is unavailable for EVERY day
+        from its pickup forward, even past its stored due date, until it is returned, so an
+        already-checked-out unit can never be re-reserved while it is still out (Mankin pencil
+        double-book fix). A unit only RESERVED (not picked up yet) blocks just its own [out, due)
+        window (half-open, so a same-day handoff is allowed). Mirrors _camera_busy for per-unit gear."""
         for c in load_checkouts():
             if c.get('kind') != 'equipment' or c.get('item') != item:
                 continue
-            if status_of(c) == 'returned':
+            st = status_of(c)
+            if st == 'returned':
                 continue
             eo = str(c.get('out', '')); ed = str(c.get('due', '')) or eo
+            if st == 'out':
+                # Physically out and not back: unavailable for any requested span that reaches its
+                # pickup day or later (ignore the stale due date), until it is checked in.
+                if eo and due > eo:
+                    return True
+                continue
             if eo and ed and eo < due and out < ed:
                 return True
         return False

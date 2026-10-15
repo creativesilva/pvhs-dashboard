@@ -645,6 +645,7 @@ footer { text-align: center; color: var(--text-faint); font-size: 0.72rem; paddi
           <span class="sub" style="align-self:center;">Applies to Class Roster and Missing Work.</span>
         </div>
         <div class="rep-grid">
+          <div class="rep-card"><h3>Class Roll Sheet <span id="rollsheet-date" class="sub" style="display:block;font-size:0.72rem;margin-top:2px;"></span></h3><p>The full take-roll PDF: every period on its own sheet, names sorted by seat, with the day grid for marking attendance by hand.</p><div style="display:flex;gap:8px;"><button class="btn" id="rollsheet-view-btn" onclick="viewRollsheet()" disabled>View</button><button class="btn ghost" id="rollsheet-dl-btn" onclick="downloadRollsheet()" disabled>Download</button></div></div>
           <div class="rep-card"><h3>Class Roster</h3><p>Every student with period, seat, support flags, and missing-work count.</p><button class="btn" onclick="printReport('roster',document.getElementById('rep-period').value)">Print / PDF</button></div>
           <div class="rep-card"><h3>Missing Work</h3><p>Every student with missing assignments, ranked by how many, with points at risk.</p><button class="btn" onclick="printReport('missing',document.getElementById('rep-period').value)">Print / PDF</button></div>
           <div class="rep-card"><h3>Missing Work by Period</h3><p>Missing-work students grouped under each class period.</p><button class="btn" onclick="printReport('missingByPeriod')">Print / PDF</button></div>
@@ -920,6 +921,7 @@ async function loadDashboard(){
       document.getElementById('studentRows').innerHTML='<tr><td colspan="8" class="empty">No roster data uploaded yet.</td></tr>';
     }
   } catch(e){ console.error('Roster load error:',e); }
+  loadRollsheetMeta();
   showLoading('Loading Canvas data...');
   try {
     coursesCache=await canvasFetch('/courses?enrollment_type=teacher&state[]=available&include[]=term&include[]=total_students');
@@ -935,6 +937,41 @@ async function loadDashboard(){
     await loadAllCanvasData();
   } catch(e){ console.error('Canvas load error:',e); }
   hideLoading();
+}
+
+// ---- Class Roll Sheet (authed PDF: roster + seat numbers) ----
+async function loadRollsheetMeta(){
+  const dateEl=document.getElementById('rollsheet-date');
+  const viewBtn=document.getElementById('rollsheet-view-btn');
+  const dlBtn=document.getElementById('rollsheet-dl-btn');
+  try {
+    const r=await api('/api/documents/rollsheet/meta');
+    const meta=await r.json();
+    if(meta.exists){
+      dateEl.textContent=`Updated ${meta.label}`;
+      viewBtn.disabled=false; dlBtn.disabled=false;
+    } else {
+      dateEl.textContent='Not uploaded yet';
+    }
+  } catch(e){ console.error('Roll sheet meta error:',e); }
+}
+async function _fetchRollsheetBlob(){
+  const r=await api('/api/documents/rollsheet');
+  if(!r.ok) throw new Error('Roll sheet fetch failed: '+r.status);
+  return r.blob();
+}
+async function viewRollsheet(){
+  try { const blob=await _fetchRollsheetBlob(); window.open(URL.createObjectURL(blob),'_blank'); }
+  catch(e){ alert('Could not open the roll sheet: '+e.message); }
+}
+async function downloadRollsheet(){
+  try {
+    const blob=await _fetchRollsheetBlob();
+    const a=document.createElement('a');
+    a.href=URL.createObjectURL(blob);
+    a.download='PVHS Class Roll Sheet.pdf';
+    document.body.appendChild(a); a.click(); a.remove();
+  } catch(e){ alert('Could not download the roll sheet: '+e.message); }
 }
 
 // ---- Stat cards ----

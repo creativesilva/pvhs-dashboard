@@ -15,3 +15,5 @@ aeries_substitute_credentials.json
 aeries_*.json
 .env
 inbox_cards.json
+class_roll_sheet.pdf
+class_roll_sheet.meta.json

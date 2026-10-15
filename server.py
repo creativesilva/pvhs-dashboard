@@ -222,6 +222,23 @@ def _load_mankin():
 _load_garcia()
 _load_mankin()
 
+# Class Roll Sheet PDF (roster + seat numbers, printable take-roll document). Intended to live on
+# the persistent disk, outside SERVE_DIR, reachable only through the authed /api/documents/rollsheet
+# route below -- but see _NEVER_SERVE_STATIC in serve_file() for why that isn't relied on alone.
+ROLLSHEET_PATH = os.path.join(_data_dir(), 'class_roll_sheet.pdf')
+ROLLSHEET_META_PATH = os.path.join(_data_dir(), 'class_roll_sheet.meta.json')
+
+# Filenames that must never be handed out by the static-file catch-all (serve_file), no matter
+# which directory they actually resolve to. All of these hold student PII or credentials and are
+# meant to be reached only through their own authed /api/ routes.
+_NEVER_SERVE_STATIC = {
+    'roster_data.json', 'roster_overrides.json', 'class_leads.json', 'leaderboard.json',
+    'garcia_roster.json', 'mankin_roster.json', 'camera_assets.json', 'checkouts.json',
+    'checkouts.json.tmp', 'memory_cards.json', 'aeries_substitute_accounts.json',
+    'aeries_substitute_credentials.json', 'inbox_cards.json', 'blackout_days.json',
+    'photo_walk_logs.json', 'class_roll_sheet.pdf', 'class_roll_sheet.meta.json',
+}
+
 # Persistent student-contact OVERRIDES (student self-edits + teacher edits). Kept on the disk,
 # separate from the base rosters, and merged on top in _student_result so a correction sticks
 # across redeploys and is fully reversible (delete the entry to revert to the roster value).
@@ -914,6 +931,14 @@ class Handler(BaseHTTPRequestHandler):
             if not self.require_auth():
                 return
             self.handle_roster()
+        elif path == '/api/documents/rollsheet':
+            if not self.require_auth():
+                return
+            self.handle_rollsheet_download()
+        elif path == '/api/documents/rollsheet/meta':
+            if not self.require_auth():
+                return
+            self.handle_rollsheet_meta()
         elif path == '/api/inbox/list':
             if not self.require_camera_auth():
                 return
@@ -1013,6 +1038,8 @@ class Handler(BaseHTTPRequestHandler):
             self.handle_aeries_sub_password()      # authed: one account's password, on explicit reveal
         elif path == '/api/roster/upload':
             self.handle_roster_upload()
+        elif path == '/api/documents/rollsheet/upload':
+            self.handle_rollsheet_upload()
         elif path == '/api/batch/grades':
             self.handle_batch_grades()
         elif path == '/api/batch/comments':
@@ -1105,6 +1132,60 @@ class Handler(BaseHTTPRequestHandler):
             'students': len(data['students']),
             'sections': len(data['sections']),
         })
+
+    # -- Class Roll Sheet (authed PDF: roster + seat numbers) ---------------
+    # Replaces the old curriculum.html Teacher Resources file:// link, which GitHub Pages can't
+    # actually gate behind the catalog's sign-in (any static file in that repo is public to anyone
+    # with the URL). This one lives on the Render persistent disk and requires real auth to fetch.
+
+    def handle_rollsheet_meta(self):
+        if not os.path.exists(ROLLSHEET_META_PATH):
+            self.json_response(200, {'exists': False})
+            return
+        with open(ROLLSHEET_META_PATH, 'r') as f:
+            meta = json.load(f)
+        meta['exists'] = os.path.exists(ROLLSHEET_PATH)
+        self.json_response(200, meta)
+
+    def handle_rollsheet_download(self):
+        if not os.path.exists(ROLLSHEET_PATH):
+            self.json_response(404, {'error': 'No roll sheet uploaded yet'})
+            return
+        qs = parse_qs(urlparse(self.path).query)
+        attachment = qs.get('dl', ['0'])[0] == '1'
+        with open(ROLLSHEET_PATH, 'rb') as f:
+            body = f.read()
+        self.send_response(200)
+        self.send_header('Content-Type', 'application/pdf')
+        self.send_header('Cache-Control', 'no-store')
+        disp = 'attachment' if attachment else 'inline'
+        self.send_header('Content-Disposition', f'{disp}; filename="PVHS Class Roll Sheet.pdf"')
+        self.send_header('Content-Length', len(body))
+        self._cors_headers()
+        self.end_headers()
+        self.wfile.write(body)
+
+    def handle_rollsheet_upload(self):
+        length = int(self.headers.get('Content-Length', 0))
+        if length > 20_000_000:
+            self.json_response(413, {'error': 'Roll sheet too large'})
+            return
+        if length == 0:
+            self.json_response(400, {'error': 'Empty body'})
+            return
+        body = self.rfile.read(length)
+        if not body.startswith(b'%PDF-'):
+            self.json_response(400, {'error': 'Not a PDF'})
+            return
+        os.makedirs(_data_dir(), exist_ok=True)
+        with open(ROLLSHEET_PATH, 'wb') as f:
+            f.write(body)
+        label = self.headers.get('X-Doc-Label', '').strip() or time.strftime('%Y-%m-%d')
+        meta = {'label': label, 'uploaded_at': time.strftime('%Y-%m-%d %H:%M:%S'), 'bytes': len(body)}
+        with open(ROLLSHEET_META_PATH, 'w') as f:
+            json.dump(meta, f)
+        print(f'[rollsheet] Uploaded: {len(body)} bytes, label={label}')
+        self.json_response(200, {'ok': True, **meta})
 
     # -- Aeries substitute accounts (authenticated; confidential) -----------
 
@@ -2087,6 +2168,14 @@ class Handler(BaseHTTPRequestHandler):
         path = urlparse(self.path).path.lstrip('/')
         if '..' in path:
             self.send_error(403)
+            return
+        # Defense in depth: these hold student PII/credentials and must only ever be reachable
+        # through their authed /api/ routes. render.yaml declares no persistent disk, so _data_dir()
+        # may fall back to SERVE_DIR in production exactly like it does locally, which would put
+        # them back in reach of this static catch-all -- block by filename regardless of where they
+        # actually resolve on disk, so that assumption is never load-bearing for access control.
+        if os.path.basename(path) in _NEVER_SERVE_STATIC:
+            self.send_error(404)
             return
         filepath = os.path.join(SERVE_DIR, path)
         if not os.path.isfile(filepath):

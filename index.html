@@ -773,6 +773,7 @@ async function initFirebase(){
       document.getElementById('dashboard').style.display='block';
       setupAccordions();
       loadDashboard();
+      openTabFromHash();
     } else {
       firebaseToken=null; currentUser=null;
       document.getElementById('hdr-user').style.display='none';
@@ -844,6 +845,15 @@ function showLoading(msg){ document.getElementById('loading-text').textContent=m
 function hideLoading(){ document.getElementById('loading-overlay').classList.remove('visible'); }
 
 // ---- Tab switching ----
+// Deep link from an external page, e.g. command.creativesilva.com/#reports opens straight to
+// the Reports tab (used by the curriculum catalog's Teacher Resources > Class Roll Sheet link).
+function openTabFromHash(){
+  const tab=(location.hash||'').replace('#','');
+  const target=document.getElementById('tab-'+tab);
+  if(!tab || !target) return;
+  switchTab(tab);
+  target.querySelectorAll('.panel.cc-collapsed').forEach(p=>p.classList.remove('cc-collapsed'));
+}
 function switchTab(tab){
   var curBtn=document.querySelector('.tab-btn.active');
   if(curBtn && curBtn.dataset.tab==='subs' && tab!=='subs' && typeof subsOnLeave==='function') subsOnLeave();

@@ -1577,9 +1577,12 @@ class Handler(BaseHTTPRequestHandler):
         # A blocked student gets NO contact info back: they never reach the review screen.
         elig = camera_eligibility(sid)
         if not elig['eligible']:
+            # Blocked students get NO contact back, but DO get pool + teacher so the store can show
+            # them their correct pickup room (Chris 2026-10-16: the room shows once the ID is entered).
             self.json_response(200, {
                 'found': True, 'eligible': False, 'label': label,
                 'missing_count': elig.get('missing'), 'missing_limit': MISSING_LIMIT,
+                'pool': _pool_for(r.get('teacher', '')), 'teacher': r.get('teacher', ''),
             })
             return
         self.json_response(200, {

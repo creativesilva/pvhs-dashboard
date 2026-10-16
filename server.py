@@ -36,7 +36,11 @@ MISSING_LIMIT = int(os.environ.get('MISSING_LIMIT', '6'))
 # (not Canvas, grades, or the full roster) so another teacher (e.g. Ms. Garcia)
 # can run the standalone camera calendar without a Command Center login.
 CAMERA_PIN   = os.environ.get('CAMERA_PIN', '').strip()
-CAMERA_OVERRIDE_CODE = os.environ.get('CAMERA_OVERRIDE_CODE', '3duc4t10n').strip()   # teacher code to unlock a Photo-2 camera for a Photo-1 student
+CAMERA_OVERRIDE_CODE = os.environ.get('CAMERA_OVERRIDE_CODE', '3duc4t10n').strip()   # teacher GEAR code: unlock a course-mismatch item (e.g. a Photo-2 camera for a Photo-1 student)
+# SEPARATE, more-guarded teacher code to lift a student's MISSING-ASSIGNMENT hold in the store. Kept
+# distinct from the gear code on purpose (Chris 2026-10-16): a student who sees the gear-unlock code
+# used should NOT be able to reuse it to bypass their own missing-work gate. Set a real value in Render env.
+MISSING_OVERRIDE_CODE = os.environ.get('MISSING_OVERRIDE_CODE', 'cl34rw0rk').strip()
 # Reservation approval is SHELVED by default (Chris 2026-10-03): student reservations auto-confirm and
 # the console shows a Recent Reservations list instead of an approval queue. Set APPROVAL_REQUIRED=1 in
 # the environment to bring the approve/deny workflow back; nothing else needs to change.
@@ -1000,6 +1004,9 @@ class Handler(BaseHTTPRequestHandler):
         if path == '/api/camera/student_update':
             self.handle_camera_student_update()# PUBLIC: a student corrects their own contact -> overrides store
             return
+        if path == '/api/camera/override':
+            self.handle_camera_override()      # PUBLIC: validate a teacher override code (gear-unlock or missing-work) for the store
+            return
         # Camera management: full login OR the shared camera password (scoped to cameras only)
         if path in ('/api/camera/return', '/api/camera/status', '/api/camera/update', '/api/camera/delete', '/api/camera/asset', '/api/camera/garcia_roster', '/api/camera/mankin_roster', '/api/camera/card_hold', '/api/camera/card_return', '/api/camera/student_override', '/api/camera/blackout', '/api/camera/seatmap', '/api/camera/photowalk'):
             if not self.require_camera_auth():
@@ -1615,6 +1622,24 @@ class Handler(BaseHTTPRequestHandler):
             'parent_guardian': r.get('parent_guardian', ''),
             'parent_cell': r.get('parent_cell', ''),
         })
+
+    def handle_camera_override(self):
+        """PUBLIC (rate-limited): validate a teacher override code for the store, so the codes never
+        live in the public page source. kind='missing' checks the SEPARATE guarded missing-assignment
+        code; anything else checks the gear-unlock code (a course-mismatch item). Returns {ok:bool}."""
+        if not _rate_ok(self._client_ip(), limit=20):
+            self.json_response(429, {'ok': False, 'error': 'Too many tries, slow down.'})
+            return
+        data = self._read_json_body()
+        if data is None:
+            return
+        code = str(data.get('code', '')).strip()
+        kind = str(data.get('kind', '')).strip().lower()
+        if kind == 'missing':
+            ok = bool(MISSING_OVERRIDE_CODE) and code == MISSING_OVERRIDE_CODE
+        else:
+            ok = bool(CAMERA_OVERRIDE_CODE) and code == CAMERA_OVERRIDE_CODE
+        self.json_response(200, {'ok': ok})
 
     def handle_camera_student_override(self):
         """CAMERA-SCOPED (teacher): correct a student's contact -> persistent overrides store, so the

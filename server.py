@@ -142,7 +142,7 @@ EQUIPMENT_TYPES = {
     # Godox AD200 Pro II flash kits (Photo 2): flash + Canon trigger + light stand. Photo-2 gating is
     # enforced client-side in the reserve store (p2 flag); these units live in the shared photo pool.
     "godox": {"label": "Godox AD200 Pro II Kit", "unit": "Godox AD200 Pro II", "count": 3, "pool": "shared",
-                  "kit": ["AD200 Pro II flash", "Godox XProC Canon trigger", "Light stand", "Speedlite + bare-bulb heads", "Carry case"]},
+                  "kit": ["AD200 Pro II flash body", "Speedlite flash head", "Bare-bulb head", "Godox XProC Canon trigger", "Light stand", "Carry case"]},
     "mankin_tripod": {"label": "Tripod (Mankin)", "unit": "Mankin Tripod", "count": 3, "pool": "mankin",
                   "kit": ["Quick-release plate", "Carry bag"]},
     "apple_pencil":  {"label": "iPad Stylus", "unit": "iPad Stylus", "count": 38, "pool": "mankin", "start": 31},

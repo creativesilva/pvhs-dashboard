@@ -644,6 +644,18 @@ def _demo_teacher_result():
         'parent_cell': '(805) 555-0101', 'demo': True,
     }
 
+DEMO_ARIELLA_ID = '123456'    # Mr. Silva's test student (Ariella Silva). A clean, real-looking student
+                              # (Period 1, Photography 1, Silva pool) that is NOT on Canvas, so the
+                              # missing-work gate never applies and the reserve flow runs end to end.
+
+def _demo_ariella_result():
+    return {
+        'found': True, 'name': 'Silva, Ariella', 'first': 'Ariella', 'last': 'Silva',
+        'period': '1', 'course': 'Photography 1', 'teacher': 'Mr. Silva',
+        'student_cell': '(805) 631-0001', 'parent_guardian': 'Chris Silva',
+        'parent_cell': '(805) 720-2123', 'demo': True,
+    }
+
 def resolve_student(student_id):
     """Look a student up for CAMERA CHECKOUT. Resolves photography students only (Silva Photo +
     Garcia Photo); Silva's Digital Arts students are intentionally not in the camera system.
@@ -651,6 +663,8 @@ def resolve_student(student_id):
     sid = str(student_id).strip()
     if sid.lower() == DEMO_TEACHER_ID:
         return _demo_teacher_result()
+    if sid == DEMO_ARIELLA_ID:
+        return _demo_ariella_result()
     for s in _camera_students():
         if str(s.get('student_id', '')).strip() == sid:
             return _student_result(s)

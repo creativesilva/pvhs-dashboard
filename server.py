@@ -1714,8 +1714,13 @@ class Handler(BaseHTTPRequestHandler):
             'returned_date': '',
             'note': str(data.get('note', '')),  # condition note (missing cap, lost plate, etc.)
             # Student self-reservations arrive with pending=true and need teacher approval; teacher-made
-            # reservations (from the console) are approved on creation.
-            'approved': (False if (APPROVAL_REQUIRED and data.get('pending')) else True),  # auto-confirm while approval is shelved
+            # reservations (from the console) are approved on creation. A targeted "request anyway"
+            # (student bypassing an override-able gate) is approved:false regardless of the shelved
+            # global APPROVAL_REQUIRED flag, so it always queues for the teacher. request_reason tells
+            # the console WHY it is pending ('missing' = missing-work hold, 'photo2' = course mismatch).
+            'approved': (False if (bool(data.get('request')) or (APPROVAL_REQUIRED and data.get('pending'))) else True),
+            'request_reason': (str(data.get('request_reason', ''))[:24] if data.get('request') else ''),
+            'request_note': (str(data.get('request_note', ''))[:300] if data.get('request') else ''),
             'created': time.strftime('%Y-%m-%dT%H:%M:%SZ', time.gmtime()),
             'flag': '; '.join(flags),
             '_ip': self._client_ip(),
@@ -1786,6 +1791,12 @@ class Handler(BaseHTTPRequestHandler):
         if not is_teacher and not _rate_ok(self._client_ip()):
             self.json_response(429, {'error': 'Too many tries, slow down.'})
             return
+        # A student may explicitly "request anyway" past an OVERRIDE-ABLE gate (too much missing work,
+        # or a Photo-2 item they are not cleared for). Such a submit carries request=true and lands as
+        # a PENDING (approved:false) reservation for the teacher to approve or deny, instead of a 403.
+        # The hard gates (blackout day, out-of-service, missing memory card, unknown or already-booked
+        # unit) still apply to a request. _new_checkout_rec stamps approved:false + the reason.
+        is_request = (not is_teacher) and bool(data.get('request'))
         sid = str(data.get('student_id', '')).strip()
         kind = (str(data.get('kind', 'camera')).strip().lower() or 'camera')
         due = str(data.get('due', '')).strip()
@@ -1807,7 +1818,7 @@ class Handler(BaseHTTPRequestHandler):
             # exactly like a camera: a unit is available if it is not out of service and not already
             # booked over the requested span.
             if not is_teacher:
-                if not camera_eligibility(sid)['eligible']:
+                if not is_request and not camera_eligibility(sid)['eligible']:
                     self.json_response(403, {'error': 'You are not eligible to reserve equipment right now because you have more than %d missing assignments. Please turn in your missing work and try again later.' % MISSING_LIMIT})
                     return
                 if _is_blackout(out):
@@ -1834,8 +1845,9 @@ class Handler(BaseHTTPRequestHandler):
         # Student-facing guards (the teacher console is trusted to override these).
         if not is_teacher:
             # Defense in depth: the client blocks ineligible students at ID entry, but re-check
-            # here so the gate can't be skipped by calling the API directly. Fails open.
-            if not camera_eligibility(sid)['eligible']:
+            # here so the gate can't be skipped by calling the API directly. Fails open. A student
+            # who chose "request anyway" skips this (the reservation queues for teacher approval).
+            if not is_request and not camera_eligibility(sid)['eligible']:
                 self.json_response(403, {'error': 'You are not eligible to reserve a camera right now because you have more than %d missing assignments. Please turn in your missing work and try again later.' % MISSING_LIMIT})
                 return
             # Teacher-closed (blackout) day: not available for student checkouts. No reason shown.
@@ -1852,7 +1864,9 @@ class Handler(BaseHTTPRequestHandler):
             if a.get('no_card'):
                 self.json_response(409, {'error': 'That camera is missing its memory card right now. Please pick another.'})
                 return
-            if camera in ('Cam 16', 'Cam 17', 'Cam 18'):
+            # A student who chose "request anyway" skips the Photo-2 gate (the reservation queues for
+            # teacher approval); otherwise the gate stands.
+            if not is_request and camera in ('Cam 16', 'Cam 17', 'Cam 18'):
                 rs = resolve_student(sid)
                 per = str(rs.get('period', '')).lstrip('0')
                 # Allowed for Period-4 Photo-2 students, OR a student Mr. Silva granted Photo-2 access

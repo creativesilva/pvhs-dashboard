@@ -36,11 +36,12 @@ MISSING_LIMIT = int(os.environ.get('MISSING_LIMIT', '6'))
 # (not Canvas, grades, or the full roster) so another teacher (e.g. Ms. Garcia)
 # can run the standalone camera calendar without a Command Center login.
 CAMERA_PIN   = os.environ.get('CAMERA_PIN', '').strip()
-CAMERA_OVERRIDE_CODE = os.environ.get('CAMERA_OVERRIDE_CODE', '3duc4t10n').strip()   # teacher GEAR code: unlock a course-mismatch item (e.g. a Photo-2 camera for a Photo-1 student)
-# SEPARATE, more-guarded teacher code to lift a student's MISSING-ASSIGNMENT hold in the store. Kept
-# distinct from the gear code on purpose (Chris 2026-10-16): a student who sees the gear-unlock code
-# used should NOT be able to reuse it to bypass their own missing-work gate. Set a real value in Render env.
-MISSING_OVERRIDE_CODE = os.environ.get('MISSING_OVERRIDE_CODE', 'cl34rw0rk').strip()
+CAMERA_OVERRIDE_CODE = os.environ.get('CAMERA_OVERRIDE_CODE', '322331').strip()   # teacher GEAR code: unlock a course-mismatch item (e.g. a Photo-2 camera for a Photo-1 student)
+# Teacher code to lift a student's MISSING-ASSIGNMENT hold in the store. Chris wanted ONE override code
+# (322331, 2026-10-22), so this matches the gear code by default; the two are still validated separately
+# by `kind`, so a code only does the action for the box it is typed into. To re-split for extra safety
+# (so a leaked gear code can't also lift a hold), set a different MISSING_OVERRIDE_CODE in Render env.
+MISSING_OVERRIDE_CODE = os.environ.get('MISSING_OVERRIDE_CODE', '322331').strip()
 # Reservation approval is SHELVED by default (Chris 2026-10-03): student reservations auto-confirm and
 # the console shows a Recent Reservations list instead of an approval queue. Set APPROVAL_REQUIRED=1 in
 # the environment to bring the approve/deny workflow back; nothing else needs to change.

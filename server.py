@@ -1288,6 +1288,9 @@ class Handler(BaseHTTPRequestHandler):
                 'returned': (st == 'returned'),
                 'returned_date': c.get('returned_date', ''),
                 'status': st,
+                # Class period only (a group, not a person). The student store's day view can show
+                # "a Period 3 student has this out"; still NO name, ID, or phone, ever.
+                'period': str(c.get('period', '')),
             })
         # Out-of-service and no-card cameras (names only, no PII) so the public reserve flow can block them.
         assets = load_assets()
@@ -1304,7 +1307,8 @@ class Handler(BaseHTTPRequestHandler):
             est = status_of(c)
             equip.append({'id': c.get('id'), 'item': c.get('item', ''), 'out': c.get('out', ''),
                           'due': c.get('due', ''), 'returned': (est == 'returned'),
-                          'returned_date': c.get('returned_date', ''), 'status': est})
+                          'returned_date': c.get('returned_date', ''), 'status': est,
+                          'period': str(c.get('period', ''))})
         # Per-unit gear out-of-service + kit (missing-item) lists, mirroring the camera oos/kits above.
         equip_oos = [u for u in EQUIPMENT_UNIT_IDS if (assets.get(u) or {}).get('oos')]
         equip_kits = {u: (assets.get(u) or {}).get('kit', []) for u in EQUIPMENT_UNIT_IDS if (assets.get(u) or {}).get('kit')}

@@ -148,6 +148,9 @@ EQUIPMENT_TYPES = {
     # students can clamp the light to anything to light a scene or a product photo. Full RGB. 4 units.
     "smallrig": {"label": "SmallRig RGB LED Panel", "unit": "SmallRig Panel", "count": 4, "pool": "shared",
                   "kit": ["SmallRig RM 25C RGB LED panel", "Magic Arm clamp (attached)", "USB-C charging cable"]},
+    # Canon BR-E1 Bluetooth remotes (Photo 1 + Photo 2 shared pool; NOT a Photo-2-only item, NOT Digital Arts).
+    "bluetooth": {"label": "Bluetooth Remote", "unit": "Bluetooth Remote", "count": 4, "pool": "shared",
+                  "kit": ["Canon BR-E1 remote", "CR2032 battery"]},
     "mankin_tripod": {"label": "Tripod (Mankin)", "unit": "Mankin Tripod", "count": 3, "pool": "mankin",
                   "kit": ["Quick-release plate", "Carry bag"]},
     "apple_pencil":  {"label": "iPad Stylus", "unit": "iPad Stylus", "count": 38, "pool": "mankin", "start": 31},

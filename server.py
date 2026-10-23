@@ -1931,7 +1931,7 @@ class Handler(BaseHTTPRequestHandler):
                 return True
         return False
 
-    def _equipment_unit_busy(self, item, out, due):
+    def _equipment_unit_busy(self, item, out, due, exclude_ids=None):
         """True if this specific gear unit (item = unit id) is unavailable over the requested span.
         A unit that is physically OUT (picked up, not yet checked in) is unavailable for EVERY day
         from its pickup forward, even past its stored due date, until it is returned, so an

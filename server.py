@@ -1039,6 +1039,9 @@ class Handler(BaseHTTPRequestHandler):
         if path == '/api/camera/cancel':
             self.handle_camera_cancel()        # PUBLIC: a student cancels their own reservation before pickup
             return
+        if path == '/api/camera/modify':
+            self.handle_camera_modify()        # PUBLIC: a student edits their own reservation (dates/items) before pickup
+            return
         # Camera management: full login OR the shared camera password (scoped to cameras only)
         if path in ('/api/camera/return', '/api/camera/status', '/api/camera/update', '/api/camera/delete', '/api/camera/asset', '/api/camera/garcia_roster', '/api/camera/mankin_roster', '/api/camera/card_hold', '/api/camera/card_return', '/api/camera/student_override', '/api/camera/blackout', '/api/camera/seatmap', '/api/camera/photowalk'):
             if not self.require_camera_auth():
@@ -1911,10 +1914,14 @@ class Handler(BaseHTTPRequestHandler):
             save_checkouts(items)
         self.json_response(200, {'ok': True, 'id': rec['id'], 'message': 'Reserved. See Mr. Silva to pick up your camera.'})
 
-    def _camera_busy(self, camera, out, due):
+    def _camera_busy(self, camera, out, due, exclude_ids=None):
         """True if a non-returned checkout for this camera overlaps [out, due) (half-open, so a
-        same-day handoff where one returns on the day the next picks up is allowed)."""
+        same-day handoff where one returns on the day the next picks up is allowed). exclude_ids
+        skips a reservation being modified so it does not conflict with its own records."""
+        exclude_ids = exclude_ids or set()
         for c in load_checkouts():
+            if c.get('id') in exclude_ids:
+                continue
             if c.get('kind') == 'equipment' or c.get('camera') != camera:
                 continue
             if status_of(c) == 'returned':
@@ -1930,8 +1937,12 @@ class Handler(BaseHTTPRequestHandler):
         from its pickup forward, even past its stored due date, until it is returned, so an
         already-checked-out unit can never be re-reserved while it is still out (Mankin pencil
         double-book fix). A unit only RESERVED (not picked up yet) blocks just its own [out, due)
-        window (half-open, so a same-day handoff is allowed). Mirrors _camera_busy for per-unit gear."""
+        window (half-open, so a same-day handoff is allowed). Mirrors _camera_busy for per-unit gear.
+        exclude_ids skips a reservation being modified so it does not conflict with its own records."""
+        exclude_ids = exclude_ids or set()
         for c in load_checkouts():
+            if c.get('id') in exclude_ids:
+                continue
             if c.get('kind') != 'equipment' or c.get('item') != item:
                 continue
             st = status_of(c)
@@ -2065,7 +2076,8 @@ class Handler(BaseHTTPRequestHandler):
                      'approved': bool(c.get('approved', True)), 'request_reason': c.get('request_reason', ''),
                      'items': [], '_st': []}
                 groups[key] = g
-            g['items'].append({'label': self._reservation_label(c), 'kind': c.get('kind', 'camera')})
+            g['items'].append({'label': self._reservation_label(c), 'kind': c.get('kind', 'camera'),
+                               'unit': (c.get('item') if c.get('kind') == 'equipment' else c.get('camera'))})
             g['_st'].append(status_of(c))
         out = []
         for g in groups.values():
@@ -2102,6 +2114,83 @@ class Handler(BaseHTTPRequestHandler):
                 return
             keep = [c for c in items if not (c.get('id') == rid or c.get('group') == rid)]
             save_checkouts(keep)
+        self.json_response(200, {'ok': True})
+
+    def handle_camera_modify(self):
+        """PUBLIC: a student edits their OWN reservation BEFORE pickup, sending the COMPLETE desired
+        unit set + dates. Availability is re-checked EXCLUDING this reservation's own records (so
+        keeping a unit while changing the date does not self-conflict), then the group's records are
+        replaced atomically. Verifies ownership and that nothing has been picked up yet."""
+        data = self._read_json_body()
+        if data is None:
+            return
+        sid = str(data.get('student_id') or data.get('sid') or '').strip()
+        rid = str(data.get('id', '')).strip()
+        units = data.get('units') if isinstance(data.get('units'), list) else None
+        if not sid or not rid or not units:
+            self.json_response(400, {'error': 'Missing reservation or items'})
+            return
+        with _checkouts_lock:
+            items = load_checkouts()
+            grp = [c for c in items if c.get('id') == rid or c.get('group') == rid]
+            if not grp:
+                self.json_response(404, {'error': 'Reservation not found'}); return
+            if any(str(c.get('student_id', '')).strip() != sid for c in grp):
+                self.json_response(403, {'error': 'Not your reservation'}); return
+            if any(status_of(c) in ('out', 'returned') for c in grp):
+                self.json_response(409, {'error': 'Already picked up. See your teacher to change it.'}); return
+            out = str(data.get('out', '')).strip() or str(grp[0].get('out', ''))
+            due = str(data.get('due', '')).strip() or str(grp[0].get('due', ''))
+            if not out or not due or due <= out:
+                self.json_response(400, {'error': 'Those dates are not valid.'}); return
+            if _is_blackout(out):
+                self.json_response(409, {'error': 'That pickup day is closed. Pick another day.'}); return
+            grp_ids = set(c.get('id') for c in grp)
+            assets = load_assets()
+            norm = []
+            for u in units:
+                k = 'equipment' if str(u.get('kind')) == 'equipment' else 'camera'
+                v = str(u.get('unit', '')).strip()
+                if not v:
+                    continue
+                if k == 'camera':
+                    if v not in CAMERAS:
+                        self.json_response(400, {'error': 'Unknown camera.'}); return
+                    if (assets.get(v) or {}).get('oos'):
+                        self.json_response(409, {'error': v + ' is out of service right now.'}); return
+                    if self._camera_busy(v, out, due, grp_ids):
+                        self.json_response(409, {'error': v + ' is not free for those dates.'}); return
+                else:
+                    if v not in EQUIPMENT_UNITS:
+                        self.json_response(400, {'error': 'Unknown item.'}); return
+                    if (assets.get(v) or {}).get('oos'):
+                        self.json_response(409, {'error': 'An item is out of service right now.'}); return
+                    if self._equipment_unit_busy(v, out, due, grp_ids):
+                        self.json_response(409, {'error': 'An item is not free for those dates.'}); return
+                norm.append((k, v))
+            if not norm:
+                self.json_response(400, {'error': 'Keep at least one item, or cancel the reservation instead.'}); return
+            # Preserve a pending (unapproved request) state across the edit.
+            was_pending = any(c.get('approved') is False for c in grp)
+            base = {'student_id': sid}
+            if was_pending:
+                base['request'] = True
+                base['request_reason'] = grp[0].get('request_reason', '')
+            cams = [v for (k, v) in norm if k == 'camera']
+            gear = [v for (k, v) in norm if k == 'equipment']
+            new_recs = []
+            if cams:
+                anchor = self._new_checkout_rec(base, 'camera', '', cams[0], out, due)
+                new_recs.append(anchor)
+                for g in gear:
+                    new_recs.append(self._new_checkout_rec(base, 'equipment', g, '', out, due, anchor['id']))
+                for c in cams[1:]:
+                    new_recs.append(self._new_checkout_rec(base, 'camera', '', c, out, due))
+            else:
+                for g in gear:
+                    new_recs.append(self._new_checkout_rec(base, 'equipment', g, '', out, due))
+            kept = [c for c in items if c.get('id') not in grp_ids]
+            save_checkouts(kept + new_recs)
         self.json_response(200, {'ok': True})
 
     # -- Canvas proxy -------------------------------------------------------

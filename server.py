@@ -1030,6 +1030,12 @@ class Handler(BaseHTTPRequestHandler):
         if path == '/api/camera/override':
             self.handle_camera_override()      # PUBLIC: validate a teacher override code (gear-unlock or missing-work) for the store
             return
+        if path == '/api/camera/my_reservations':
+            self.handle_camera_my_reservations()  # PUBLIC: a student's own reservations (grouped), for My Account
+            return
+        if path == '/api/camera/cancel':
+            self.handle_camera_cancel()        # PUBLIC: a student cancels their own reservation before pickup
+            return
         # Camera management: full login OR the shared camera password (scoped to cameras only)
         if path in ('/api/camera/return', '/api/camera/status', '/api/camera/update', '/api/camera/delete', '/api/camera/asset', '/api/camera/garcia_roster', '/api/camera/mankin_roster', '/api/camera/card_hold', '/api/camera/card_return', '/api/camera/student_override', '/api/camera/blackout', '/api/camera/seatmap', '/api/camera/photowalk'):
             if not self.require_camera_auth():
@@ -2023,6 +2029,76 @@ class Handler(BaseHTTPRequestHandler):
         with _checkouts_lock:
             items = [x for x in load_checkouts() if x.get('id') != cid]
             save_checkouts(items)
+        self.json_response(200, {'ok': True})
+
+    def _reservation_label(self, c):
+        """Human label for one checkout record (camera number or gear unit label)."""
+        if c.get('kind') == 'equipment':
+            u = EQUIPMENT_UNITS.get(c.get('item'))
+            if u:
+                return u['label']
+            t = EQUIPMENT_TYPE_LABELS.get(c.get('item'))
+            return (t or {}).get('label') or c.get('item', '')
+        return c.get('camera', '')
+
+    def handle_camera_my_reservations(self):
+        """PUBLIC: a student's OWN reservations, grouped (camera + its linked gear = one booking).
+        Returns only enough to display + cancel; keyed by the student number as identity (soft gate,
+        same trust level as /student_info). No other student's data is returned."""
+        data = self._read_json_body()
+        if data is None:
+            return
+        sid = str(data.get('student_id') or data.get('sid') or '').strip()
+        if not sid:
+            self.json_response(400, {'error': 'Missing student id'})
+            return
+        mine = [c for c in load_checkouts() if str(c.get('student_id', '')).strip() == sid]
+        groups = {}
+        for c in mine:
+            key = c.get('group') or c.get('id')   # a camera's extras carry group = camera id; standalone gear groups by its own id
+            g = groups.get(key)
+            if not g:
+                g = {'id': key, 'out': c.get('out', ''), 'due': c.get('due', ''),
+                     'approved': bool(c.get('approved', True)), 'request_reason': c.get('request_reason', ''),
+                     'items': [], '_st': []}
+                groups[key] = g
+            g['items'].append({'label': self._reservation_label(c), 'kind': c.get('kind', 'camera')})
+            g['_st'].append(status_of(c))
+        out = []
+        for g in groups.values():
+            sts = g.pop('_st')
+            g['status'] = 'returned' if all(s == 'returned' for s in sts) else ('out' if 'out' in sts else 'reserved')
+            out.append(g)
+        out.sort(key=lambda g: str(g.get('out', '')), reverse=True)
+        active = [g for g in out if g['status'] != 'returned']
+        history = [g for g in out if g['status'] == 'returned'][:12]
+        self.json_response(200, {'active': active, 'history': history})
+
+    def handle_camera_cancel(self):
+        """PUBLIC: a student cancels their OWN reservation (the whole group) BEFORE pickup.
+        Verifies every record in the group belongs to this student number and is still 'reserved'."""
+        data = self._read_json_body()
+        if data is None:
+            return
+        sid = str(data.get('student_id') or data.get('sid') or '').strip()
+        rid = str(data.get('id', '')).strip()
+        if not sid or not rid:
+            self.json_response(400, {'error': 'Missing id'})
+            return
+        with _checkouts_lock:
+            items = load_checkouts()
+            grp = [c for c in items if c.get('id') == rid or c.get('group') == rid]
+            if not grp:
+                self.json_response(404, {'error': 'Reservation not found'})
+                return
+            if any(str(c.get('student_id', '')).strip() != sid for c in grp):
+                self.json_response(403, {'error': 'Not your reservation'})
+                return
+            if any(status_of(c) in ('out', 'returned') for c in grp):
+                self.json_response(409, {'error': 'Already picked up. See your teacher to return it.'})
+                return
+            keep = [c for c in items if not (c.get('id') == rid or c.get('group') == rid)]
+            save_checkouts(keep)
         self.json_response(200, {'ok': True})
 
     # -- Canvas proxy -------------------------------------------------------

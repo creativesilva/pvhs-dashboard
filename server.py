@@ -144,11 +144,10 @@ EQUIPMENT_TYPES = {
     # enforced client-side in the reserve store (p2 flag); these units live in the shared photo pool.
     "godox": {"label": "Godox AD200 Pro II Kit", "unit": "Godox AD200 Pro II", "count": 3, "pool": "shared",
                   "kit": ["AD200 Pro II flash body", "Speedlite flash head", "Bare-bulb head", "Godox XProC Canon trigger", "Light stand", "Carry case"]},
-    # SmallRig overhead kits (shared photo lighting): a 22-inch Magic Arm overhead phone/camera mount
-    # paired with a SmallRig RM 25C portable RGB LED light. Not Photo-2 gated (beginner-friendly content
-    # gear); units live in the shared photo pool.
-    "smallrig": {"label": "SmallRig Overhead Light Kit", "unit": "SmallRig Kit", "count": 3, "pool": "shared",
-                  "kit": ["SmallRig RM 25C RGB LED light", "22-inch Magic Arm clamp", "Overhead phone / camera mount", "USB-C charging cable", "Carry pouch"]},
+    # SmallRig RM 25C RGB LED panels (shared photo lighting): each panel has a Magic Arm clamp ATTACHED, so
+    # students can clamp the light to anything to light a scene or a product photo. Full RGB. 4 units.
+    "smallrig": {"label": "SmallRig RGB LED Panel", "unit": "SmallRig Panel", "count": 4, "pool": "shared",
+                  "kit": ["SmallRig RM 25C RGB LED panel", "Magic Arm clamp (attached)", "USB-C charging cable"]},
     "mankin_tripod": {"label": "Tripod (Mankin)", "unit": "Mankin Tripod", "count": 3, "pool": "mankin",
                   "kit": ["Quick-release plate", "Carry bag"]},
     "apple_pencil":  {"label": "iPad Stylus", "unit": "iPad Stylus", "count": 38, "pool": "mankin", "start": 31},

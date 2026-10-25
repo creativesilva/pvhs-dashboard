@@ -484,6 +484,38 @@ def status_of(c):
         return s
     return 'returned' if c.get('returned') else 'out'
 
+def _single_camera_group(items, sid, out, due):
+    """Record id of the student's ONE non-returned camera reservation for these exact dates, or '' when
+    there is none or more than one (ambiguous). Used to fold a-la-carte gear into the right kit so a unit
+    reserved separately for the same dates still travels with the camera."""
+    sid = str(sid).strip(); out = str(out); due = str(due)
+    cams = [c for c in items if c.get('kind') != 'equipment'
+            and str(c.get('student_id', '')).strip() == sid
+            and str(c.get('out', '')) == out and str(c.get('due', '')) == due
+            and status_of(c) != 'returned']
+    return str(cams[0].get('id', '')) if len(cams) == 1 else ''
+
+def repair_orphan_gear_links():
+    """One-time heal (runs on startup, idempotent): link any orphaned gear (kind=equipment, no group, not
+    returned) to its same-student, same-dates single camera, so it folds into that kit instead of floating
+    a-la-carte. Only SETS a missing group; never unsets or moves one, so it is safe to re-run. This is the
+    fix for reservations whose gear was reserved separately from the camera (the Jayden case)."""
+    try:
+        items = load_checkouts()
+        n = 0
+        for c in items:
+            if c.get('kind') != 'equipment' or str(c.get('group', '')).strip() or status_of(c) == 'returned':
+                continue
+            gid = _single_camera_group(items, c.get('student_id', ''), c.get('out', ''), c.get('due', ''))
+            if gid:
+                c['group'] = gid
+                n += 1
+        if n:
+            save_checkouts(items)
+        print('[repair] linked %d orphaned gear record(s) to their camera kit' % n)
+    except Exception as e:
+        print('[repair] skipped (error): %s' % e)
+
 # Set a checkout's status and keep the pickup/return date stamps consistent.
 def stamp_status(c, new):
     new = (new or '').strip().lower()
@@ -1851,9 +1883,13 @@ class Handler(BaseHTTPRequestHandler):
                 if self._equipment_unit_busy(item, out, due):
                     self.json_response(409, {'error': 'That unit is already booked for those days. Please pick another day or unit.'})
                     return
-            rec = self._new_checkout_rec(data, 'equipment', item, '', out, due, str(data.get('group', '')))
             with _checkouts_lock:
-                items = load_checkouts(); items.append(rec); save_checkouts(items)
+                items = load_checkouts()
+                grp = str(data.get('group', '')).strip()
+                if not grp:
+                    grp = _single_camera_group(items, sid, out, due)   # a-la-carte gear folds into the student's same-dates camera kit
+                rec = self._new_checkout_rec(data, 'equipment', item, '', out, due, grp)
+                items.append(rec); save_checkouts(items)
             self.json_response(200, {'ok': True, 'id': rec['id'], 'message': 'Reserved.'})
             return
         camera = str(data.get('camera', '')).strip()
@@ -2597,6 +2633,7 @@ if __name__ == '__main__':
                 print(f'  Canvas token test: OK ({r.status})')
         except Exception as e:
             print(f'  Canvas token test: FAILED ({e})')
+    repair_orphan_gear_links()   # one-time heal of gear whose camera link was lost (idempotent)
     server = ThreadedHTTPServer(('0.0.0.0', PORT), Handler)
     server.serve_forever()
 

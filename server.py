@@ -636,17 +636,41 @@ def _is_photo(s):
     v = ((s.get('course_code') or '') + ' ' + (s.get('course') or '')).lower()
     return 'photo' in v
 
+def _is_da_course(course_str):
+    """True for a Digital Arts course label. Mr. Silva's only non-Photo class is Digital Arts 1A, so
+    matching 'digital' or 'art' (and never 'photo') identifies it even if the roster abbreviates the
+    name. Ms. Mankin's own Digital Arts courses match too, which is correct (they share the pool)."""
+    v = (course_str or '').lower()
+    return ('digital' in v or 'art' in v) and 'photo' not in v
+
+def _is_silva_da(s):
+    """A Mr. Silva Digital Arts student. His Digital Arts 1A class meets in Ms. Mankin's room (331),
+    so for equity these students share HER Digital Arts pool (R50 V cameras + iPad styluses + her gear)
+    with Photo gear locked, exactly like Mankin's own students."""
+    return _is_da_course((s.get('course_code') or '') + ' ' + (s.get('course') or ''))
+
 def _camera_students():
-    """Roster the camera checkout resolves against: PHOTOGRAPHY students only.
-    = Silva's Photo classes (Digital Arts EXCLUDED, handled on paper) + Garcia's Photo roster.
-    Garcia is listed first so a student in both (Silva DA + Garcia Photo) resolves as Photo."""
-    return list(_GARCIA_STUDENTS) + list(_MANKIN_STUDENTS) + [s for s in _roster_students() if _is_photo(s)]
+    """Roster the camera checkout resolves against: Mr. Silva's Photo classes + his Digital Arts 1A
+    (DA 1A meets in Mankin's room, so it shares her Digital Arts pool) + Garcia's + Mankin's Photo
+    rosters. Garcia/Mankin are listed first so a student in two lists resolves to the external one."""
+    return (list(_GARCIA_STUDENTS) + list(_MANKIN_STUDENTS)
+            + [s for s in _roster_students() if _is_photo(s) or _is_silva_da(s)])
 
 def _pool_for(teacher):
     """Map a resolved teacher name to a camera-pool key (silva / garcia / mankin)."""
     t = (teacher or '').lower()
     if 'garcia' in t: return 'garcia'
     if 'mankin' in t: return 'mankin'
+    return 'silva'
+
+def _pool_for_student(r):
+    """Camera pool for a RESOLVED student record. Garcia/Mankin students map by teacher name; Mr. Silva's
+    Digital Arts students share Ms. Mankin's pool (same room, equity): her R50 V cameras + iPad styluses
+    + gear, Photo gear locked. His Photo students use the Silva pool."""
+    tl = (r.get('teacher') or '').lower()
+    if 'garcia' in tl: return 'garcia'
+    if 'mankin' in tl: return 'mankin'
+    if _is_da_course(r.get('course') or ''): return 'mankin'
     return 'silva'
 
 def _student_result(s):
@@ -700,13 +724,27 @@ def _demo_ariella_result():
         'parent_cell': '(805) 720-2123', 'demo': True,
     }
 
+DEMO_DA_ID = 'digitalarts'    # Typing "digitalarts" as the student ID resolves to a labeled demo
+                              # Digital Arts student (Mankin pool: R50 V cameras + iPad styluses) so
+                              # Mr. Silva can walk DA 1A through reserving, without a real student ID.
+
+def _demo_da_result():
+    return {
+        'found': True, 'name': 'Demo, Dee', 'first': 'Dee', 'last': 'Demo',
+        'period': '3', 'course': 'Digital Arts 1A (Demo)', 'teacher': 'Mr. Silva',
+        'student_cell': '(805) 555-0130', 'parent_guardian': 'Demo Parent',
+        'parent_cell': '(805) 555-0131', 'demo': True,
+    }
+
 def resolve_student(student_id):
-    """Look a student up for CAMERA CHECKOUT. Resolves photography students only (Silva Photo +
-    Garcia Photo); Silva's Digital Arts students are intentionally not in the camera system.
-    Never exposed on public endpoints; used server-side only."""
+    """Look a student up for CAMERA CHECKOUT. Resolves Mr. Silva's Photo students, his Digital Arts 1A
+    students (they share Ms. Mankin's Digital Arts pool, same room), and Garcia's + Mankin's Photo
+    rosters. Never exposed on public endpoints; used server-side only."""
     sid = str(student_id).strip()
     if sid.lower() == DEMO_TEACHER_ID:
         return _demo_teacher_result()
+    if sid.lower() == DEMO_DA_ID:
+        return _demo_da_result()
     if sid == DEMO_ARIELLA_ID:
         return _demo_ariella_result()
     for s in _camera_students():
@@ -1653,7 +1691,7 @@ class Handler(BaseHTTPRequestHandler):
             self.json_response(200, {
                 'found': True, 'eligible': False, 'label': label,
                 'missing_count': elig.get('missing'), 'missing_limit': MISSING_LIMIT,
-                'pool': _pool_for(r.get('teacher', '')), 'teacher': r.get('teacher', ''),
+                'pool': _pool_for_student(r), 'teacher': r.get('teacher', ''),
             })
             return
         self.json_response(200, {
@@ -1664,7 +1702,7 @@ class Handler(BaseHTTPRequestHandler):
             'period': str(r.get('period', '')),
             'teacher': r.get('teacher', ''),
             'course': r.get('course', ''),
-            'pool': _pool_for(r.get('teacher', '')),
+            'pool': _pool_for_student(r),
             'p2_ok': (str(r.get('period', '')).lstrip('0') == '4' or bool(r.get('p2'))),
             'student_cell': r.get('student_cell', ''),
             'parent_guardian': r.get('parent_guardian', ''),

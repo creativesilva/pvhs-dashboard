@@ -1668,8 +1668,8 @@ class Handler(BaseHTTPRequestHandler):
         if data is None:
             return
         raw = str(data.get('student_id', '')).strip()
-        if raw.lower() == DEMO_TEACHER_ID:
-            sid = DEMO_TEACHER_ID   # Mr. Silva's demo account: skip the digits-only requirement.
+        if raw.lower() in (DEMO_TEACHER_ID, DEMO_DA_ID):
+            sid = raw.lower()   # Mr. Silva's demo accounts ("teacher", "digitalarts"): skip the digits-only requirement.
         else:
             sid = ''.join(ch for ch in raw if ch.isdigit())
             if len(sid) < 5:

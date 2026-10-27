@@ -1799,6 +1799,11 @@ class Handler(BaseHTTPRequestHandler):
             'camera': camera,
             'out': out,
             'due': due,
+            # The student's chosen pickup + return windows from the store (label + start time), shown on the teacher's reservation card.
+            'pickup_label': str(data.get('pickup_label', ''))[:40],
+            'pickup_time': str(data.get('pickup_time', ''))[:16],
+            'return_label': str(data.get('return_label', ''))[:40],
+            'return_time': str(data.get('return_time', ''))[:16],
             'status': 'reserved',
             'picked_up_date': '',
             'returned': False,

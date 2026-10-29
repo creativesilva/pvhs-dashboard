@@ -296,6 +296,14 @@ def _write_override(sid, data, ip=''):
     # Teacher grant (Mr. Silva, from a student's profile): may take the Photo-2 cameras 16-18 even
     # though they are not a Period-4 Photo-2 student. Stored on the student so it sticks.
     if 'p2' in data:              fields['p2'] = bool(data.get('p2'))
+    # Multi-pool grant (Mr. Silva, from a student's profile): a dual-enrolled student (e.g. Photo with
+    # Mr. Silva or Ms. Garcia AND Digital Arts in Ms. Mankin's room) may use more than one equipment
+    # pool in the store. Stored as the FULL set of pool keys the student may access; an empty list
+    # clears it back to their single resolved pool. Only valid keys are kept, so a stray value can
+    # never silently widen access.
+    if 'pools' in data:
+        valid = {'silva', 'garcia', 'mankin'}
+        fields['pools'] = sorted({str(p).strip().lower() for p in (data.get('pools') or [])} & valid)
     if not fields:
         return False
     with _overrides_lock:
@@ -696,6 +704,8 @@ def _student_result(s):
                 res[k] = ov[k]
         if ov.get('p2'):
             res['p2'] = True   # Mr. Silva granted this student the Photo-2 cameras
+        if ov.get('pools'):
+            res['pools'] = list(ov['pools'])   # dual-enrolled: the full set of equipment pools this student may use
     return res
 
 DEMO_TEACHER_ID = 'teacher'   # Mr. Silva's self-demo account. Typing "teacher" as the student ID
@@ -1691,7 +1701,8 @@ class Handler(BaseHTTPRequestHandler):
             self.json_response(200, {
                 'found': True, 'eligible': False, 'label': label,
                 'missing_count': elig.get('missing'), 'missing_limit': MISSING_LIMIT,
-                'pool': _pool_for_student(r), 'teacher': r.get('teacher', ''),
+                'pool': _pool_for_student(r), 'pools': r.get('pools') or [_pool_for_student(r)],
+                'teacher': r.get('teacher', ''),
             })
             return
         self.json_response(200, {
@@ -1703,6 +1714,7 @@ class Handler(BaseHTTPRequestHandler):
             'teacher': r.get('teacher', ''),
             'course': r.get('course', ''),
             'pool': _pool_for_student(r),
+            'pools': r.get('pools') or [_pool_for_student(r)],
             'p2_ok': (str(r.get('period', '')).lstrip('0') == '4' or bool(r.get('p2'))),
             'student_cell': r.get('student_cell', ''),
             'parent_guardian': r.get('parent_guardian', ''),

@@ -1873,6 +1873,22 @@ class Handler(BaseHTTPRequestHandler):
             return
         self.json_response(400, {'error': 'Unknown action.'})
 
+    def _contact_ok(self, sid, data):
+        """Student checkouts require reachable contact ON FILE: the student's cell, a parent/guardian
+        name, and a parent/guardian cell (each a 10-digit number). The browser already blocks this, but
+        enforce it server-side so a direct or crafted call cannot walk off with gear while uncontactable.
+        A COMPLETE, valid contact set sent with the reservation is persisted first (covers a dropped
+        student_update save, so a legit student is never locked out); then the on-file contact is checked.
+        Returns '' when OK, else a student-facing error message. Teacher checkouts skip this entirely."""
+        def dig(v): return ''.join(ch for ch in str(v or '') if ch.isdigit())
+        p_cell, p_pg, p_pc = dig(data.get('student_cell')), str(data.get('parent_guardian') or '').strip(), dig(data.get('parent_cell'))
+        if len(p_cell) == 10 and p_pg and len(p_pc) == 10:
+            _write_override(sid, {'student_cell': p_cell, 'parent_guardian': p_pg, 'parent_cell': p_pc}, self._client_ip())
+        r = resolve_student(sid)
+        if len(dig(r.get('student_cell'))) == 10 and str(r.get('parent_guardian') or '').strip() and len(dig(r.get('parent_cell'))) == 10:
+            return ''
+        return 'We need your contact info before you can check out: your cell number, a parent or guardian name, and a parent or guardian cell number. Open My Account to add them, then try again.'
+
     def handle_camera_checkout(self):
         """PUBLIC submit. Student enters ID + camera + dates (+ optional accessories). We resolve
         the ID to a name/phones server-side and store it, returning a generic ack with NO name
@@ -1914,6 +1930,10 @@ class Handler(BaseHTTPRequestHandler):
             # exactly like a camera: a unit is available if it is not out of service and not already
             # booked over the requested span.
             if not is_teacher:
+                _cerr = self._contact_ok(sid, data)
+                if _cerr:
+                    self.json_response(403, {'error': _cerr})
+                    return
                 if not is_request and not camera_eligibility(sid)['eligible']:
                     self.json_response(403, {'error': 'You are not eligible to reserve equipment right now because you have more than %d missing assignments. Please turn in your missing work and try again later.' % MISSING_LIMIT})
                     return
@@ -1944,6 +1964,11 @@ class Handler(BaseHTTPRequestHandler):
             return
         # Student-facing guards (the teacher console is trusted to override these).
         if not is_teacher:
+            # Reachable contact on file is mandatory for a student self-checkout (gear protection).
+            _cerr = self._contact_ok(sid, data)
+            if _cerr:
+                self.json_response(403, {'error': _cerr})
+                return
             # Defense in depth: the client blocks ineligible students at ID entry, but re-check
             # here so the gate can't be skipped by calling the API directly. Fails open. A student
             # who chose "request anyway" skips this (the reservation queues for teacher approval).

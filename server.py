@@ -1955,9 +1955,12 @@ class Handler(BaseHTTPRequestHandler):
                 if (load_assets().get(item) or {}).get('oos'):
                     self.json_response(409, {'error': 'That unit is out of service right now. Please pick another.'})
                     return
-                if self._equipment_unit_busy(item, out, due):
-                    self.json_response(409, {'error': 'That unit is already booked for those days. Please pick another day or unit.'})
-                    return
+            # No double-booking, ever (the teacher too): a unit can't be reserved over a span that
+            # overlaps another live booking. Half-open, so a same-day handoff is fine. Hard stop
+            # (Chris 2026-11-02: silent overbook on a multi-day extend was the bug this closes).
+            if self._equipment_unit_busy(item, out, due):
+                self.json_response(409, {'error': 'That unit is already booked for those dates. Please pick another unit or a shorter return.'})
+                return
             with _checkouts_lock:
                 items = load_checkouts()
                 grp = str(data.get('group', '')).strip()
@@ -2012,9 +2015,12 @@ class Handler(BaseHTTPRequestHandler):
                     if str(data.get('override', '')).strip() != CAMERA_OVERRIDE_CODE:
                         self.json_response(403, {'error': 'That camera is for Photography 2. Ask Mr. Silva to unlock it for you.', 'override_required': True})
                         return
-            if self._camera_busy(camera, out, due):
-                self.json_response(409, {'error': 'That camera is already booked for those days. Please pick another.'})
-                return
+        # No double-booking, ever (the teacher too): a camera can't be reserved over a span that
+        # overlaps another live booking. Half-open, so a same-day handoff is fine. Hard stop
+        # (Chris 2026-11-02: silent overbook on a multi-day extend was the bug this closes).
+        if self._camera_busy(camera, out, due):
+            self.json_response(409, {'error': camera + ' is already booked for those dates. Please pick another camera or a shorter return.'})
+            return
         rec = self._new_checkout_rec(data, 'camera', '', camera, out, due)
         extras = data.get('extras') or []
         extra_recs = []
@@ -2130,6 +2136,29 @@ class Handler(BaseHTTPRequestHandler):
             if not c:
                 self.json_response(404, {'error': 'Checkout not found'})
                 return
+            # Hard stop on double-booking: if this edit changes the unit or the dates on a still-active
+            # reservation, the new unit+span must be free (excluding this booking's own records, so
+            # extending or re-linking its own kit never self-conflicts). Pure status / student /
+            # gear-link edits (same unit, same dates) skip the check so returns and kit re-links work.
+            # The teacher is held to this too: no silent overbook (Chris 2026-11-02).
+            _nout = (str(data.get('out', '')).strip() or str(c.get('out', '')))
+            _ndue = (str(data.get('due', '')).strip() or str(c.get('due', '')))
+            _nkind = (str(data.get('kind', c.get('kind', 'camera'))).strip().lower() or 'camera')
+            _ncam = str(data.get('camera', c.get('camera', ''))).strip()
+            _nitem = str(data.get('item', c.get('item', ''))).strip()
+            _span_changed = (_nout != str(c.get('out', '')) or _ndue != str(c.get('due', '')))
+            _unit_changed = (_ncam != str(c.get('camera', '')) or _nitem != str(c.get('item', '')))
+            if status_of(c) != 'returned' and (_span_changed or _unit_changed) and _nout and _ndue:
+                _gid = c.get('group') or c.get('id')
+                _grp = set(x.get('id') for x in items
+                           if x.get('id') == _gid or x.get('group') == _gid or x.get('id') == c.get('id'))
+                if _nkind == 'equipment':
+                    if _nitem and self._equipment_unit_busy(_nitem, _nout, _ndue, _grp):
+                        self.json_response(409, {'error': 'That unit is already booked for part of those dates. Pick another unit or a shorter return.'})
+                        return
+                elif _ncam and self._camera_busy(_ncam, _nout, _ndue, _grp):
+                    self.json_response(409, {'error': (_ncam or 'That camera') + ' is already booked for part of those dates. Pick another camera or a shorter return.'})
+                    return
             for k in ('camera', 'out', 'due', 'status', 'picked_up_date', 'returned', 'returned_date',
                       'student_name', 'student_id', 'period', 'course',
                       'student_cell', 'parent_guardian', 'parent_cell', 'flag',

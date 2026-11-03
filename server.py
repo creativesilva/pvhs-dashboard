@@ -1851,6 +1851,7 @@ class Handler(BaseHTTPRequestHandler):
             d = load_photowalks()
             rows = [{'key': k, 'date': v.get('date'), 'period': v.get('period'),
                      'course': v.get('course'), 'saved_at': v.get('saved_at'),
+                     'locked': bool(v.get('locked')),
                      'kits': len(v.get('kits', []))} for k, v in d.items() if isinstance(v, dict)]
             rows.sort(key=lambda r: (str(r.get('date', '')), str(r.get('period', ''))), reverse=True)
             self.json_response(200, {'logs': rows})
@@ -1867,6 +1868,7 @@ class Handler(BaseHTTPRequestHandler):
                 return
             rec = {'date': date, 'period': period, 'course': str(data.get('course', '')),
                    'saved_at': time.strftime('%Y-%m-%dT%H:%M:%S'),
+                   'locked': bool(data.get('locked')),   # period "locked in" (view-only) at the end of class
                    'kits': data.get('kits') if isinstance(data.get('kits'), list) else []}
             with _photowalk_lock:
                 d = load_photowalks()

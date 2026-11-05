@@ -457,6 +457,30 @@ def save_memcards(data):
         json.dump(data, f)
     os.replace(tmp, MEMCARDS_PATH)
 
+def held_cards_for(sid):
+    """A student's OWN memory cards sitting in the wallet, for the public My Account view in the
+    rental store: the slot, when it was held, and the camera it came from. Never the teacher's note,
+    the name on file, or anyone else's card. Matched on the digits of the student number, so a
+    hold typed as 'STU_123', '123 ' or '123' all match the bare number the student signs in with."""
+    want = ''.join(ch for ch in str(sid or '') if ch.isdigit())
+    if not want:
+        return []
+    out = []
+    for key, rec in load_memcards().items():
+        if not isinstance(rec, dict):
+            continue
+        have = ''.join(ch for ch in str(rec.get('student_id', '')) if ch.isdigit())
+        if have != want:
+            continue
+        try:
+            slot = int(rec.get('slot') or key)
+        except (TypeError, ValueError):
+            continue
+        out.append({'slot': slot, 'held_at': str(rec.get('held_at', '')),
+                    'from_camera': str(rec.get('from_camera', ''))})
+    out.sort(key=lambda r: r['slot'])
+    return out
+
 # Teacher-declared BLACKOUT days: days the teacher closes to student camera checkouts (e.g. an
 # absence). Keyed by ISO date "YYYY-MM-DD" -> {added}. NO reason is stored or shown to students;
 # a closed day is simply grayed and not reservable. Exposed on both feeds.
@@ -2234,7 +2258,8 @@ class Handler(BaseHTTPRequestHandler):
         out.sort(key=lambda g: str(g.get('out', '')), reverse=True)
         active = [g for g in out if g['status'] != 'returned']
         history = [g for g in out if g['status'] == 'returned'][:12]
-        self.json_response(200, {'active': active, 'history': history})
+        # their own memory card(s) held in the wallet (slot + date + camera only), shown in My Account
+        self.json_response(200, {'active': active, 'history': history, 'held_cards': held_cards_for(sid)})
 
     def handle_camera_cancel(self):
         """PUBLIC: a student cancels their OWN reservation (the whole group) BEFORE pickup.

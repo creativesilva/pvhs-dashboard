@@ -278,6 +278,29 @@ def _save_overrides():
     with open(OVERRIDES_PATH, 'w') as f:
         json.dump(_ROSTER_OVERRIDES, f)
 
+def _ban_status(sid):
+    """Reservation lockout for one student, read from the overrides store. 'ban_until' is a YYYY-MM-DD
+    date (the day the lockout lifts), the string 'permanent', or empty. A date in the past counts as
+    expired (not banned), so a timed lockout clears itself with no teacher action and no cron. Returns
+    {banned, until, days_left, permanent}."""
+    rec = _ROSTER_OVERRIDES.get(str(sid).strip()) or {}
+    until = str(rec.get('ban_until') or '').strip()
+    if not until:
+        return {'banned': False}
+    if until == 'permanent':
+        return {'banned': True, 'permanent': True, 'until': 'permanent', 'days_left': None}
+    today = time.strftime('%Y-%m-%d')
+    if until <= today:
+        return {'banned': False, 'until': until, 'expired': True}
+    try:
+        import datetime
+        y0, m0, d0 = (int(x) for x in today.split('-'))
+        y1, m1, d1 = (int(x) for x in until.split('-'))
+        days_left = (datetime.date(y1, m1, d1) - datetime.date(y0, m0, d0)).days
+    except Exception:
+        days_left = None
+    return {'banned': True, 'permanent': False, 'until': until, 'days_left': days_left}
+
 def _clean_phone(v):
     return ''.join(ch for ch in str(v or '') if ch in '0123456789 ()+-.').strip()[:20]
 
@@ -893,12 +916,16 @@ def _missing_count(sid):
     course_ids = _silva_photo_course_ids()
     if not course_ids:
         return None
+    # District SIS user ids are "STU_<student number>", while the roster/login id is the bare
+    # number the student types to sign in. Query Canvas by the real SIS id or the lookup 401s
+    # ("user not authorized"), which upstream reads as undetermined and fails OPEN for everyone.
+    sis = sid if str(sid).upper().startswith('STU_') else f'STU_{sid}'
     total, saw_ok = 0, False
     for cid in course_ids:
         # Teacher-scoped submissions for this ONE student; Canvas's 'missing' flag mirrors
         # exactly what the student sees as missing in that course.
         path = (f'/api/v1/courses/{cid}/students/submissions'
-                f'?student_ids[]=sis_user_id:{sid}&per_page=100')
+                f'?student_ids[]=sis_user_id:{sis}&per_page=100')
         _status, subs, _link = _canvas_get_json(path)
         if isinstance(subs, list):
             saw_ok = True
@@ -1147,7 +1174,7 @@ class Handler(BaseHTTPRequestHandler):
             self.handle_camera_modify()        # PUBLIC: a student edits their own reservation (dates/items) before pickup
             return
         # Camera management: full login OR the shared camera password (scoped to cameras only)
-        if path in ('/api/camera/return', '/api/camera/status', '/api/camera/update', '/api/camera/delete', '/api/camera/asset', '/api/camera/garcia_roster', '/api/camera/mankin_roster', '/api/camera/card_hold', '/api/camera/card_return', '/api/camera/student_override', '/api/camera/blackout', '/api/camera/seatmap', '/api/camera/photowalk'):
+        if path in ('/api/camera/return', '/api/camera/status', '/api/camera/update', '/api/camera/delete', '/api/camera/asset', '/api/camera/garcia_roster', '/api/camera/mankin_roster', '/api/camera/card_hold', '/api/camera/card_return', '/api/camera/student_override', '/api/camera/student_ban', '/api/camera/blackout', '/api/camera/seatmap', '/api/camera/photowalk'):
             if not self.require_camera_auth():
                 return
             if path == '/api/camera/seatmap':  self.handle_camera_seatmap();  return
@@ -1162,6 +1189,7 @@ class Handler(BaseHTTPRequestHandler):
             elif path == '/api/camera/card_hold':   self.handle_camera_card_hold()    # student left card -> wallet slot + flag camera
             elif path == '/api/camera/card_return': self.handle_camera_card_return()  # card returned to student -> free slot
             elif path == '/api/camera/student_override': self.handle_camera_student_override()  # teacher edits a student's contact -> profile
+            elif path == '/api/camera/student_ban': self.handle_camera_student_ban()  # teacher sets/clears a reservation lockout
             elif path == '/api/camera/blackout': self.handle_camera_blackout()  # teacher closes/opens a day to checkouts
             return
         if path in ('/api/inbox/upsert', '/api/inbox/resolve', '/api/inbox/move'):
@@ -1486,6 +1514,7 @@ class Handler(BaseHTTPRequestHandler):
                                  'approval_required': APPROVAL_REQUIRED,
                                  'class_leads': _build_class_leads(),
                                  'p2_grants': [sid for sid, ov in _ROSTER_OVERRIDES.items() if ov.get('p2')],
+                                 'bans': {sid: _ban_status(sid) for sid, ov in _ROSTER_OVERRIDES.items() if ov.get('ban_until')},
                                  'equipment': equip, 'equipment_oos': equip_oos,
                                  'equipment_units': EQUIPMENT_UNITS, 'equipment_types': EQUIPMENT_TYPE_LABELS})
 
@@ -1716,6 +1745,12 @@ class Handler(BaseHTTPRequestHandler):
         first = (r.get('first') or '').strip()
         last = (r.get('last') or '').strip()
         label = (first + ' ' + (last[:1] + '.' if last else '')).strip()
+        # Reservation lockout (late-return penalty): a locked-out student is stopped here, before anything
+        # else, and gets only the ban status back so the store can show the hold notice.
+        _b = _ban_status(sid)
+        if _b.get('banned'):
+            self.json_response(200, {'found': True, 'banned': True, 'ban': _b, 'label': label, 'pool': _pool_for_student(r)})
+            return
         # Missing-assignment gate (Silva Photo students only; live Canvas; fails open).
         # A blocked student gets NO contact info back: they never reach the review screen.
         elig = camera_eligibility(sid)
@@ -1807,6 +1842,40 @@ class Handler(BaseHTTPRequestHandler):
             'parent_guardian': r.get('parent_guardian', ''),
             'parent_cell': r.get('parent_cell', ''),
         })
+
+    def handle_camera_student_ban(self):
+        """CAMERA-SCOPED (teacher): set or clear a student's reservation lockout (a late-return penalty).
+        Body: {student_id, days: 15|30|60|'permanent'|0}. 0 or '' clears it. Stored in the overrides store,
+        so it survives redeploys and lifts itself on its date (no cron needed)."""
+        data = self._read_json_body()
+        if data is None:
+            return
+        sid = ''.join(ch for ch in str(data.get('student_id', '')) if ch.isdigit())
+        if len(sid) < 5 or not resolve_student(sid)['found']:
+            self.json_response(200, {'ok': False, 'error': 'We could not find that ID.'})
+            return
+        days = str(data.get('days', '')).strip().lower()
+        until = ''
+        if days in ('perm', 'permanent'):
+            until = 'permanent'
+        else:
+            try:
+                n = int(float(days))
+            except Exception:
+                n = 0
+            if n > 0:
+                until = time.strftime('%Y-%m-%d', time.localtime(time.time() + n * 86400))
+        with _overrides_lock:
+            rec = dict(_ROSTER_OVERRIDES.get(sid) or {})
+            if until:
+                rec['ban_until'] = until
+                rec['ban_set'] = time.strftime('%Y-%m-%d')
+            else:
+                rec.pop('ban_until', None)
+                rec.pop('ban_set', None)
+            _ROSTER_OVERRIDES[sid] = rec
+            _save_overrides()
+        self.json_response(200, {'ok': True, 'ban': _ban_status(sid)})
 
     def _new_checkout_rec(self, data, kind, item, camera, out, due, group=''):
         """Build one checkout record (camera OR equipment), resolving the student server-side."""
@@ -1951,6 +2020,11 @@ class Handler(BaseHTTPRequestHandler):
         kind = (str(data.get('kind', 'camera')).strip().lower() or 'camera')
         due = str(data.get('due', '')).strip()
         out = str(data.get('out', '')).strip() or time.strftime('%Y-%m-%d')
+        sid_digits = ''.join(ch for ch in sid if ch.isdigit())
+        # Reservation lockout (late-return penalty): a locked-out student cannot reserve anything in the store.
+        if not is_teacher and _ban_status(sid_digits).get('banned'):
+            self.json_response(403, {'error': 'Your reservations are on hold right now. Please see Mr. Silva in class.', 'banned': True, 'ban': _ban_status(sid_digits)})
+            return
         if kind == 'equipment':
             item = str(data.get('item', '')).strip()
             if not sid or not item or not due:
@@ -1987,6 +2061,11 @@ class Handler(BaseHTTPRequestHandler):
             if self._equipment_unit_busy(item, out, due):
                 self.json_response(409, {'error': 'That unit is already booked for those dates. Please pick another unit or a shorter return.'})
                 return
+            if not is_teacher:
+                _dup = self._one_per_day_conflict(sid_digits, 'equipment', item, '', out, due)
+                if _dup:
+                    self.json_response(409, {'error': 'You can only reserve one ' + _dup + ' per day. You already have one for that day.'})
+                    return
             with _checkouts_lock:
                 items = load_checkouts()
                 grp = str(data.get('group', '')).strip()
@@ -2047,6 +2126,11 @@ class Handler(BaseHTTPRequestHandler):
         if self._camera_busy(camera, out, due):
             self.json_response(409, {'error': camera + ' is already booked for those dates. Please pick another camera or a shorter return.'})
             return
+        if not is_teacher:
+            _dup = self._one_per_day_conflict(sid_digits, 'camera', '', camera, out, due)
+            if _dup:
+                self.json_response(409, {'error': 'You can only reserve one camera per day. You already have one for that day.'})
+                return
         rec = self._new_checkout_rec(data, 'camera', '', camera, out, due)
         extras = data.get('extras') or []
         extra_recs = []
@@ -2061,6 +2145,37 @@ class Handler(BaseHTTPRequestHandler):
             items.extend(extra_recs)
             save_checkouts(items)
         self.json_response(200, {'ok': True, 'id': rec['id'], 'message': 'Reserved. See Mr. Silva to pick up your camera.'})
+
+    def _one_per_day_conflict(self, sid, kind, item, camera, out, due):
+        """One-per-type-per-day rule (students only; the teacher console overrides it). At most ONE camera
+        and ONE of each gear TYPE per student over an overlapping span (inclusive by day). SmallRig LED
+        panels are exempt, so a student may reserve several. Returns a human label of the type the student
+        already holds for an overlapping day, or None when the new reservation is allowed."""
+        if kind == 'equipment':
+            t = (EQUIPMENT_UNITS.get(item) or {}).get('type') or ''
+            if t == 'smallrig':
+                return None
+            want = 'gear:' + t
+            label = (EQUIPMENT_TYPE_LABELS.get(t) or {}).get('label') or 'item'
+        else:
+            want = 'camera'
+            label = 'camera'
+        nd = due or out
+        for c in load_checkouts():
+            if status_of(c) == 'returned':
+                continue
+            if str(c.get('student_id', '')) != str(sid):
+                continue
+            if c.get('kind') == 'equipment':
+                ck = 'gear:' + ((EQUIPMENT_UNITS.get(c.get('item')) or {}).get('type') or '')
+            else:
+                ck = 'camera'
+            if ck != want:
+                continue
+            eo = str(c.get('out', '')); ed = str(c.get('due', '')) or eo
+            if eo and eo <= nd and out <= ed:   # inclusive day overlap
+                return label
+        return None
 
     def _camera_busy(self, camera, out, due, exclude_ids=None):
         """True if a non-returned checkout for this camera overlaps [out, due) (half-open, so a

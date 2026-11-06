@@ -253,6 +253,7 @@ _NEVER_SERVE_STATIC = {
     'checkouts.json.tmp', 'memory_cards.json', 'aeries_substitute_accounts.json',
     'aeries_substitute_credentials.json', 'inbox_cards.json', 'blackout_days.json',
     'photo_walk_logs.json', 'class_roll_sheet.pdf', 'class_roll_sheet.meta.json',
+    'camera_events.json',
 }
 
 # Persistent student-contact OVERRIDES (student self-edits + teacher edits). Kept on the disk,
@@ -277,6 +278,88 @@ def _load_overrides():
 def _save_overrides():
     with open(OVERRIDES_PATH, 'w') as f:
         json.dump(_ROSTER_OVERRIDES, f)
+
+# ---- Event History: a rolling, pool-tagged log of teacher-console actions (read-only audit, no undo;
+# Chris 2026-11-06). Best-effort persistence to the data dir (ephemeral on Render without a disk, which
+# is fine for a recent-activity view), capped so it never grows without bound, reached only through the
+# authed /api/camera/events route. Logging never raises: an audit line must never break a real action.
+EVENTS_PATH = os.path.join(_data_dir(), 'camera_events.json')
+_events_lock = threading.Lock()
+_CAMERA_EVENTS = []
+_EVENTS_CAP = 400       # keep at most this many across all pools
+_EVENTS_RETURN = 50     # return at most this many for the requested pool
+
+def _load_events():
+    global _CAMERA_EVENTS
+    d = []
+    if os.path.exists(EVENTS_PATH):
+        try:
+            d = json.load(open(EVENTS_PATH))
+        except Exception as e:
+            print(f'[events] load failed: {e}')
+    _CAMERA_EVENTS = d if isinstance(d, list) else []
+    print(f'[events] {len(_CAMERA_EVENTS)} audit events loaded')
+    return _CAMERA_EVENTS
+
+def _save_events():
+    try:
+        with open(EVENTS_PATH, 'w') as f:
+            json.dump(_CAMERA_EVENTS, f)
+    except Exception as e:
+        print(f'[events] save failed: {e}')
+
+def _event_pool(c):
+    """Best-effort camera pool for a checkout record (its stored teacher/course, else resolve the student)."""
+    try:
+        r = {'teacher': c.get('teacher') or '', 'course': c.get('course') or ''}
+        if not r['teacher']:
+            sid = str(c.get('student_id') or '').strip()
+            if sid:
+                rr = resolve_student(sid)
+                if rr and rr.get('found'):
+                    r = rr
+        return _pool_for_student(r)
+    except Exception:
+        return 'silva'
+
+def _event_label(c):
+    """Human label for one checkout record (camera number or gear unit label)."""
+    try:
+        if c.get('kind') == 'equipment':
+            u = EQUIPMENT_UNITS.get(c.get('item'))
+            if u:
+                return u.get('label') or c.get('item', '')
+            t = EQUIPMENT_TYPE_LABELS.get(c.get('item'))
+            return (t or {}).get('label') or c.get('item', '')
+        return c.get('camera', '')
+    except Exception:
+        return ''
+
+def _log_event(pool, action, item='', student='', detail=''):
+    """Append one audit event. Never raises."""
+    try:
+        ev = {
+            't': int(time.time()),
+            'pool': ((pool or '').strip() or 'silva'),
+            'action': str(action or '').strip(),
+            'item': str(item or '').strip(),
+            'student': str(student or '').strip(),
+            'detail': str(detail or '').strip(),
+        }
+        with _events_lock:
+            _CAMERA_EVENTS.append(ev)
+            if len(_CAMERA_EVENTS) > _EVENTS_CAP:
+                del _CAMERA_EVENTS[0:len(_CAMERA_EVENTS) - _EVENTS_CAP]
+            _save_events()
+    except Exception as e:
+        print(f'[events] log failed: {e}')
+
+def _log_checkout_event(c, action, detail=''):
+    """Log an audit event derived from a checkout record. Never raises."""
+    try:
+        _log_event(_event_pool(c), action, _event_label(c), (c.get('student_name') or ''), detail)
+    except Exception as e:
+        print(f'[events] log_checkout failed: {e}')
 
 def _ban_status(sid):
     """Reservation lockout for one student, read from the overrides store. 'ban_until' is a YYYY-MM-DD
@@ -340,6 +423,7 @@ def _write_override(sid, data, ip=''):
     return True
 
 _load_overrides()
+_load_events()
 
 def load_checkouts():
     try:
@@ -1124,6 +1208,10 @@ class Handler(BaseHTTPRequestHandler):
             if not self.require_camera_auth():
                 return
             self.handle_camera_assets()            # per-camera standing notes + out-of-service
+        elif path == '/api/camera/events':
+            if not self.require_camera_auth():
+                return
+            self.handle_camera_events()            # rolling audit log of teacher-console actions (read-only)
         elif path == '/api/leaderboard':
             self.handle_leaderboard()              # PUBLIC: period aggregates only (no names)
         elif path == '/api/verify_student':
@@ -1522,6 +1610,17 @@ class Handler(BaseHTTPRequestHandler):
         """Camera-scoped: the per-camera standing notes + out-of-service flags."""
         self.json_response(200, {'assets': load_assets()})
 
+    def handle_camera_events(self):
+        """Camera-scoped (teacher): the rolling audit log of console actions, newest first. Scoped to the
+        requested pool (?pool=silva|garcia|mankin); omit pool for everything. Read-only, no undo."""
+        pool = (parse_qs(urlparse(self.path).query).get('pool', [''])[0] or '').strip().lower()
+        with _events_lock:
+            evs = list(_CAMERA_EVENTS)
+        if pool:
+            evs = [e for e in evs if (e.get('pool') or '') == pool]
+        evs = list(reversed(evs[-_EVENTS_RETURN:]))   # last N, newest first
+        self.json_response(200, {'events': evs})
+
     def handle_camera_garcia_roster(self):
         """Camera-scoped: replace Garcia's camera-only roster (persisted to disk). Body:
         {students:[...]}. These are used ONLY for camera resolution, never the dashboard roster."""
@@ -1875,6 +1974,14 @@ class Handler(BaseHTTPRequestHandler):
                 rec.pop('ban_set', None)
             _ROSTER_OVERRIDES[sid] = rec
             _save_overrides()
+        try:
+            _r = resolve_student(sid)
+            _nm = (_r.get('name') if _r else '') or ''
+            _pl = _pool_for_student(_r) if (_r and _r.get('found')) else 'silva'
+            _log_event(_pl, ('lock' if until else 'unlock'), '', _nm,
+                       (('permanent' if until == 'permanent' else ('until ' + until)) if until else 'lifted'))
+        except Exception:
+            pass
         self.json_response(200, {'ok': True, 'ban': _ban_status(sid)})
 
     def _new_checkout_rec(self, data, kind, item, camera, out, due, group=''):
@@ -2243,6 +2350,7 @@ class Handler(BaseHTTPRequestHandler):
             c['returned_date'] = (data.get('returned_date') or
                                   (time.strftime('%Y-%m-%d') if c['returned'] else ''))
             save_checkouts(items)
+        _log_checkout_event(c, 'return' if c.get('returned') else 'reserve', '' if c.get('returned') else 'return undone')
         self.json_response(200, {'ok': True})
 
     def handle_camera_status(self):
@@ -2264,6 +2372,7 @@ class Handler(BaseHTTPRequestHandler):
                 return
             stamp_status(c, new)
             save_checkouts(items)
+        _log_checkout_event(c, {'out': 'pickup', 'returned': 'return', 'reserved': 'reserve'}.get(new, 'edit'))
         self.json_response(200, {'ok': True, 'status': new})
 
     def handle_camera_update(self):
@@ -2319,6 +2428,7 @@ class Handler(BaseHTTPRequestHandler):
                 c['parent_cell'] = r['parent_cell']
                 c['flag'] = '' if r['found'] else 'unknown student id'
             save_checkouts(items)
+        _log_checkout_event(c, 'edit', 'out ' + str(c.get('out', '')) + ' due ' + str(c.get('due', '')))
         self.json_response(200, {'ok': True})
 
     def handle_camera_delete(self):
@@ -2327,8 +2437,12 @@ class Handler(BaseHTTPRequestHandler):
             return
         cid = str(data.get('id', ''))
         with _checkouts_lock:
-            items = [x for x in load_checkouts() if x.get('id') != cid]
+            _all = load_checkouts()
+            _gone = next((x for x in _all if x.get('id') == cid), None)
+            items = [x for x in _all if x.get('id') != cid]
             save_checkouts(items)
+        if _gone:
+            _log_checkout_event(_gone, 'delete')
         self.json_response(200, {'ok': True})
 
     def _reservation_label(self, c):

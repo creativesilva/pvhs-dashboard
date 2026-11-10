@@ -998,6 +998,23 @@ def _canvas_get_json(path, timeout=8):
         except Exception:
             pass
 
+# Canvas token HEALTH probe: `canvas_connected` only means the token is SET; this actually calls Canvas
+# (the token owner's OWN profile - no student data) so we can tell a LIVE token from an expired/revoked one.
+# An expired token makes the eligibility gate fail OPEN and the missing counts go stale while still looking
+# "connected". Cached 60s so /api/status can't be used to hammer Canvas. (Chris 2026-11-11)
+_canvas_health = {'ok': None, 'status': None, 'exp': 0}
+_canvas_health_lock = threading.Lock()
+def _canvas_health_check():
+    now = time.time()
+    with _canvas_health_lock:
+        if now < _canvas_health['exp'] and _canvas_health['ok'] is not None:
+            return (_canvas_health['ok'], _canvas_health['status'])
+    st, body, _ = _canvas_get_json('/api/v1/users/self?per_page=1', timeout=8)
+    ok = (st == 200 and isinstance(body, dict))
+    with _canvas_health_lock:
+        _canvas_health['ok'] = ok; _canvas_health['status'] = st; _canvas_health['exp'] = now + 60
+    return (ok, st)
+
 def _silva_photo_course_ids():
     """Silva's available PHOTO course IDs (the Canvas token is Silva's). Cached 1h.
     Returns a list of course-id strings, or [] if none/undetermined."""
@@ -1379,10 +1396,14 @@ class Handler(BaseHTTPRequestHandler):
     # -- Status (unauthenticated) -------------------------------------------
 
     def handle_status(self):
+        _cok, _cst = _canvas_health_check()
         self.json_response(200, {
             'ok': True,
             'canvas_host': CANVAS_HOST,
-            'canvas_connected': bool(CANVAS_TOKEN),
+            'canvas_connected': bool(CANVAS_TOKEN),   # token is SET (env var present)
+            'canvas_ok': _cok,                        # token actually WORKS (live Canvas call succeeded)
+            'canvas_api_status': _cst,                # Canvas HTTP status (401 => expired/revoked token)
+            'missing_limit': MISSING_LIMIT,
         })
 
     # -- Roster data (authenticated) ----------------------------------------

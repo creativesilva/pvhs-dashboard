@@ -251,7 +251,7 @@ _NEVER_SERVE_STATIC = {
     'roster_data.json', 'roster_overrides.json', 'class_leads.json', 'leaderboard.json',
     'garcia_roster.json', 'mankin_roster.json', 'camera_assets.json', 'checkouts.json',
     'checkouts.json.tmp', 'memory_cards.json', 'aeries_substitute_accounts.json',
-    'aeries_substitute_credentials.json', 'inbox_cards.json', 'blackout_days.json',
+    'aeries_substitute_credentials.json', 'inbox_cards.json', 'blackout_days.json', 'canceled_reservations.json',
     'photo_walk_logs.json', 'class_roll_sheet.pdf', 'class_roll_sheet.meta.json',
     'camera_events.json',
 }
@@ -613,6 +613,30 @@ def _blackout_list():
 
 def _is_blackout(iso):
     return str(iso or '') in _load_blackouts()
+
+# ---- Canceled reservations: when a teacher locks a day and chooses Cancel, each affected reservation
+# is snapshotted here (kept until "Notified") and its original is deleted so the camera frees up. Additive
+# + isolated like blackouts; it never touches the core reservation/availability/status logic. It drives the
+# console's conditional, glowing Cancellations tab (student to notify). (Chris 2026-11-11)
+CANCELED_PATH = os.path.join(_data_dir(), 'canceled_reservations.json')
+_canceled_lock = threading.Lock()
+
+def _load_canceled():
+    try:
+        with open(CANCELED_PATH) as f:
+            d = json.load(f)
+            return d if isinstance(d, list) else []
+    except Exception:
+        return []
+
+def _save_canceled(data):
+    tmp = CANCELED_PATH + '.tmp'
+    with open(tmp, 'w') as f:
+        json.dump(data, f)
+    os.replace(tmp, CANCELED_PATH)
+
+def _canceled_list():
+    return _load_canceled()
 
 # Lifecycle: reserved -> out (picked up) -> returned. Records saved before this
 # field existed have no 'status', so derive it: returned => returned, else out
@@ -1262,7 +1286,7 @@ class Handler(BaseHTTPRequestHandler):
             self.handle_camera_modify()        # PUBLIC: a student edits their own reservation (dates/items) before pickup
             return
         # Camera management: full login OR the shared camera password (scoped to cameras only)
-        if path in ('/api/camera/return', '/api/camera/status', '/api/camera/update', '/api/camera/delete', '/api/camera/asset', '/api/camera/garcia_roster', '/api/camera/mankin_roster', '/api/camera/card_hold', '/api/camera/card_return', '/api/camera/student_override', '/api/camera/student_ban', '/api/camera/blackout', '/api/camera/seatmap', '/api/camera/photowalk'):
+        if path in ('/api/camera/return', '/api/camera/status', '/api/camera/update', '/api/camera/delete', '/api/camera/asset', '/api/camera/garcia_roster', '/api/camera/mankin_roster', '/api/camera/card_hold', '/api/camera/card_return', '/api/camera/student_override', '/api/camera/student_ban', '/api/camera/blackout', '/api/camera/cancel_resv', '/api/camera/seatmap', '/api/camera/photowalk'):
             if not self.require_camera_auth():
                 return
             if path == '/api/camera/seatmap':  self.handle_camera_seatmap();  return
@@ -1279,6 +1303,7 @@ class Handler(BaseHTTPRequestHandler):
             elif path == '/api/camera/student_override': self.handle_camera_student_override()  # teacher edits a student's contact -> profile
             elif path == '/api/camera/student_ban': self.handle_camera_student_ban()  # teacher sets/clears a reservation lockout
             elif path == '/api/camera/blackout': self.handle_camera_blackout()  # teacher closes/opens a day to checkouts
+            elif path == '/api/camera/cancel_resv': self.handle_camera_cancel_resv()  # lock+Cancel prior reservations / mark Notified
             return
         if path in ('/api/inbox/upsert', '/api/inbox/resolve', '/api/inbox/move'):
             if not self.require_camera_auth():
@@ -1597,6 +1622,7 @@ class Handler(BaseHTTPRequestHandler):
         self.json_response(200, {'cameras': ALL_CAMERAS, 'checkouts': items,
                                  'assets': _assets, 'cards': cards,
                                  'blackouts': _blackout_list(),
+                                 'canceled': _canceled_list(),
                                  'missing_limit': MISSING_LIMIT,
                                  'pools': CAMERA_POOLS, 'equipment_pools': EQUIPMENT_POOLS,
                                  'approval_required': APPROVAL_REQUIRED,
@@ -1677,6 +1703,61 @@ class Handler(BaseHTTPRequestHandler):
                 b.pop(date, None)
             _save_blackouts(b)
         self.json_response(200, {'ok': True, 'blackouts': sorted(_load_blackouts().keys())})
+
+    def handle_camera_cancel_resv(self):
+        """Teacher locked a day and chose Cancel: snapshot the named reservations into the canceled store
+        (so they stay on the dashboard until 'Notified') and delete the originals so the camera frees up.
+        Body {action:'cancel', ids:[...]} snapshots + deletes; {action:'notified', id:'...'} clears one.
+        Additive + isolated: never touches availability or status logic. The console sends only its own
+        pool's reservation ids, so this cancels exactly what the teacher chose."""
+        data = self._read_json_body()
+        if data is None:
+            return
+        action = str(data.get('action', 'cancel')).strip().lower()
+        if action == 'notified':
+            cid = str(data.get('id', ''))
+            with _canceled_lock:
+                _save_canceled([x for x in _load_canceled() if str(x.get('id')) != cid])
+            self.json_response(200, {'ok': True, 'canceled': _load_canceled()})
+            return
+        ids = data.get('ids')
+        if not isinstance(ids, list) or not ids:
+            self.json_response(400, {'error': 'Provide ids as a non-empty list.'})
+            return
+        ids = set(str(i) for i in ids)
+        now = time.strftime('%Y-%m-%dT%H:%M:%SZ', time.gmtime())
+        snapped = []
+        with _checkouts_lock, _canceled_lock:
+            keep = []
+            for x in load_checkouts():
+                if str(x.get('id')) in ids and status_of(x) != 'returned':
+                    snap = {k: v for k, v in x.items() if k != '_ip'}
+                    sid = str(snap.get('student_id', '')).strip()
+                    if sid:
+                        r = resolve_student(sid)
+                        if r.get('found'):
+                            if not snap.get('student_name'):
+                                snap['student_name'] = r.get('name', '')
+                            snap['student_cell'] = r.get('student_cell', '')
+                            snap['period'] = snap.get('period') or r.get('period', '')
+                            snap['course'] = snap.get('course') or r.get('course', '')
+                            if not snap.get('teacher'):
+                                snap['teacher'] = r.get('teacher', '')
+                    snap['canceled_at'] = now
+                    snapped.append(snap)
+                else:
+                    keep.append(x)
+            if snapped:
+                save_checkouts(keep)
+                cur = _load_canceled()
+                have = set(str(s.get('id')) for s in cur)
+                for s in snapped:
+                    if str(s.get('id')) not in have:
+                        cur.append(s)
+                _save_canceled(cur)
+        for s in snapped:
+            _log_checkout_event(s, 'cancel', 'day locked')
+        self.json_response(200, {'ok': True, 'canceled': _load_canceled(), 'count': len(snapped)})
 
     def handle_camera_asset(self):
         """Camera-scoped: set a camera's (or gear unit's) standing note, out-of-service flag, and kit.

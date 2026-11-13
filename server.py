@@ -1616,8 +1616,10 @@ class Handler(BaseHTTPRequestHandler):
             if sid:
                 r = resolve_student(sid)
                 if r.get('found'):
-                    if not c.get('student_name'):
-                        c['student_name'] = r.get('name', '')
+                    # Always show the FULL roster name (Last, First), even if a partial or first-only name was
+                    # saved on the card when it was held (Chris 2026-11-13: last names were not showing on the
+                    # wallet because a non-empty stored name was kept instead of the roster's full name).
+                    c['student_name'] = r.get('name', '') or c.get('student_name', '')
                     c['student_cell'] = r.get('student_cell', '')
                     c['parent_guardian'] = r.get('parent_guardian', '')
                     c['parent_cell'] = r.get('parent_cell', '')

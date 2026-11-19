@@ -253,7 +253,7 @@ _NEVER_SERVE_STATIC = {
     'checkouts.json.tmp', 'memory_cards.json', 'aeries_substitute_accounts.json',
     'aeries_substitute_credentials.json', 'inbox_cards.json', 'blackout_days.json', 'canceled_reservations.json',
     'photo_walk_logs.json', 'class_roll_sheet.pdf', 'class_roll_sheet.meta.json',
-    'camera_events.json',
+    'camera_events.json', 'attendance.json', 'attendance.json.tmp',
 }
 
 # Persistent student-contact OVERRIDES (student self-edits + teacher edits). Kept on the disk,
@@ -614,6 +614,26 @@ def _blackout_list():
 def _is_blackout(iso):
     return str(iso or '') in _load_blackouts()
 
+# Attendance (Mr. Silva's roll-taker): per period + date A/T/L marks, kept all semester. Keyed by
+# {date: {period: {student_id: 'A'|'T'|'L'}}}. Unmarked = Present. Additive + isolated like blackouts;
+# never touches reservation/checkout logic.
+ATTENDANCE_PATH = os.path.join(_data_dir(), 'attendance.json')
+_attendance_lock = threading.Lock()
+
+def _load_attendance():
+    try:
+        with open(ATTENDANCE_PATH) as f:
+            d = json.load(f)
+            return d if isinstance(d, dict) else {}
+    except Exception:
+        return {}
+
+def _save_attendance(data):
+    tmp = ATTENDANCE_PATH + '.tmp'
+    with open(tmp, 'w') as f:
+        json.dump(data, f)
+    os.replace(tmp, ATTENDANCE_PATH)
+
 # ---- Canceled reservations: when a teacher locks a day and chooses Cancel, each affected reservation
 # is snapshotted here (kept until "Notified") and its original is deleted so the camera frees up. Additive
 # + isolated like blackouts; it never touches the core reservation/availability/status logic. It drives the
@@ -936,6 +956,26 @@ def _photowalk_seatmap():
         label = (first + ' ' + (last[:1] + '.' if last else '')).strip()
         rec = out.setdefault(period, {'course': s.get('course') or s.get('course_code') or '', 'seats': {}})
         rec['seats'][seat] = {'id': sid, 'label': label}
+    return out
+
+def _attendance_roster():
+    """For the Attendance Manager: {period: [{sid, seat, first, last}]} across all of Mr. Silva's
+    classes, with FULL last names (the 2-line tile, the Aeries alphabetical order, and the log all
+    need the whole surname). Period normalized to 2 digits. Authenticated use only."""
+    out = {}
+    for s in _roster_students():
+        if not isinstance(s, dict):
+            continue
+        period = str(s.get('period', '')).strip().lstrip('0')
+        if period:
+            period = ('0' + period)[-2:]
+        seat = str(s.get('Seat', '')).strip().lstrip('0')
+        sid = str(s.get('student_id', '')).strip()
+        if not period or not seat or not sid:
+            continue
+        first = (s.get('preferred_name') or s.get('call_name') or s.get('first_name') or '').strip()
+        last = (s.get('last_name') or '').strip()
+        out.setdefault(period, []).append({'sid': sid, 'seat': seat, 'first': first, 'last': last})
     return out
 
 # ---------------------------------------------------------------------------
@@ -1303,11 +1343,12 @@ class Handler(BaseHTTPRequestHandler):
             self.handle_camera_modify()        # PUBLIC: a student edits their own reservation (dates/items) before pickup
             return
         # Camera management: full login OR the shared camera password (scoped to cameras only)
-        if path in ('/api/camera/return', '/api/camera/status', '/api/camera/update', '/api/camera/delete', '/api/camera/asset', '/api/camera/garcia_roster', '/api/camera/mankin_roster', '/api/camera/card_hold', '/api/camera/card_return', '/api/camera/student_override', '/api/camera/student_ban', '/api/camera/blackout', '/api/camera/cancel_resv', '/api/camera/seatmap', '/api/camera/photowalk'):
+        if path in ('/api/camera/return', '/api/camera/status', '/api/camera/update', '/api/camera/delete', '/api/camera/asset', '/api/camera/garcia_roster', '/api/camera/mankin_roster', '/api/camera/card_hold', '/api/camera/card_return', '/api/camera/student_override', '/api/camera/student_ban', '/api/camera/blackout', '/api/camera/cancel_resv', '/api/camera/seatmap', '/api/camera/photowalk', '/api/camera/attendance'):
             if not self.require_camera_auth():
                 return
             if path == '/api/camera/seatmap':  self.handle_camera_seatmap();  return
             if path == '/api/camera/photowalk': self.handle_camera_photowalk(); return
+            if path == '/api/camera/attendance': self.handle_camera_attendance(); return
             if path == '/api/camera/return':   self.handle_camera_return()   # mark returned
             elif path == '/api/camera/status': self.handle_camera_status()   # reserved -> out -> returned
             elif path == '/api/camera/update': self.handle_camera_update()   # edit a checkout
@@ -2143,6 +2184,46 @@ class Handler(BaseHTTPRequestHandler):
     def handle_camera_seatmap(self):
         """AUTHED (camera key). Seat -> student per period for the Photo Walk Log. Server-side only."""
         self.json_response(200, {'periods': _photowalk_seatmap()})
+
+    def handle_camera_attendance(self):
+        """AUTHED (camera key). Mr. Silva's roll-taker. POST body:
+          {op:'get', date?}  -> {date, roster, marks, dates}  (roster = seat/student per period;
+                                 marks = that day's A/T/L; dates = every day with any marks, for the calendar)
+          {op:'set', date, period, sid, mark}  -> set/clear one mark ('' or non-A/T/L clears -> Present)
+        Isolated store; never touches reservation/checkout logic."""
+        body = self._read_json_body()
+        if body is None:
+            return
+        op = str(body.get('op', 'get')).strip().lower()
+        if op == 'set':
+            date = str(body.get('date', '')).strip()
+            period = str(body.get('period', '')).strip()
+            sid = str(body.get('sid', '')).strip()
+            mark = str(body.get('mark', '')).strip().upper()
+            p = date.split('-')
+            if len(date) != 10 or len(p) != 3 or not (p[0].isdigit() and p[1].isdigit() and p[2].isdigit()) or not period or not sid:
+                self.json_response(400, {'error': 'Provide date (YYYY-MM-DD), period, and student id.'})
+                return
+            with _attendance_lock:
+                d = _load_attendance()
+                day = d.setdefault(date, {})
+                per = day.setdefault(period, {})
+                if mark in ('A', 'T', 'L'):
+                    per[sid] = mark
+                else:
+                    per.pop(sid, None)
+                if not per:
+                    day.pop(period, None)
+                if not day:
+                    d.pop(date, None)
+                _save_attendance(d)
+            self.json_response(200, {'ok': True})
+            return
+        # op == 'get' (default)
+        date = str(body.get('date', '')).strip() or time.strftime('%Y-%m-%d')
+        d = _load_attendance()
+        self.json_response(200, {'date': date, 'roster': _attendance_roster(),
+                                 'marks': d.get(date, {}), 'dates': sorted(d.keys())})
 
     def handle_camera_photowalk(self):
         """AUTHED (camera key). Photo Walk Log store: action = save | list | get.

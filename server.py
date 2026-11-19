@@ -938,6 +938,19 @@ def resolve_student(student_id):
     return {'found': False, 'name': '', 'first': '', 'last': '', 'period': '', 'course': '',
             'teacher': '', 'student_cell': '', 'parent_guardian': '', 'parent_cell': ''}
 
+def _silva_period(student_id):
+    """Mr. Silva's OWN class period for a student, from HIS roster, or '' if the student is not his.
+    The memory-card wallet is his, so a card shows HIS period even for a student who is cross-listed
+    on another teacher's roster: resolve_student returns the external record first (deliberate, for
+    camera-pool resolution), which would otherwise put the wrong class period on the card."""
+    sid = str(student_id).strip()
+    if not sid:
+        return ''
+    for s in _roster_students():
+        if isinstance(s, dict) and str(s.get('student_id', '')).strip() == sid:
+            return str(s.get('period', '')).strip()
+    return ''
+
 def _photowalk_seatmap():
     """For the Photo Walk Log: {period: {'course':..., 'seats': {seatNo: {'id':..., 'label':...}}}}.
     Built from Mr. Silva's roster (period + Seat + student_id), covering ALL his classes including
@@ -1664,7 +1677,9 @@ class Handler(BaseHTTPRequestHandler):
                     c['student_cell'] = r.get('student_cell', '')
                     c['parent_guardian'] = r.get('parent_guardian', '')
                     c['parent_cell'] = r.get('parent_cell', '')
-                    c['period'] = r.get('period', '')
+                    # His wallet shows HIS class period: prefer Mr. Silva's roster so a student who is
+                    # cross-listed on another teacher's roster (e.g. Mankin) shows his period, not theirs.
+                    c['period'] = _silva_period(sid) or r.get('period', '')
                     c['course'] = r.get('course', '')
                     c['teacher'] = r.get('teacher', '')
             cards[slot] = c

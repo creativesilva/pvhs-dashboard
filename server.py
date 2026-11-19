@@ -2187,25 +2187,36 @@ class Handler(BaseHTTPRequestHandler):
 
     def handle_camera_attendance(self):
         """AUTHED (camera key). Mr. Silva's roll-taker. POST body:
-          {op:'get', date?}  -> {date, roster, marks, dates}  (roster = seat/student per period;
-                                 marks = that day's A/T/L; dates = every day with any marks, for the calendar)
-          {op:'set', date, period, sid, mark}  -> set/clear one mark ('' or non-A/T/L clears -> Present)
-        Isolated store; never touches reservation/checkout logic."""
+          {op:'get', date?}  -> {date, roster, marks, locks, dates}  (roster = seat/student per period;
+                                 marks = that day's A/T/L; locks = {period: epoch_ms} finalized periods;
+                                 dates = every day with any marks, for the semester history calendar)
+          {op:'set', date, period, sid, mark}  -> set/clear one mark ('' or non-A/T/L clears -> Present).
+                                 Rejected 423 if that period+date is locked (roll finalized).
+          {op:'lock'|'unlock', date, period}  -> finalize / reopen one period's roll.
+        Lock state lives under the reserved top-level key '__locks__' so it never collides with a
+        student-id key inside a period. Isolated store; never touches reservation/checkout logic."""
         body = self._read_json_body()
         if body is None:
             return
         op = str(body.get('op', 'get')).strip().lower()
+
+        def _valid_date(s):
+            q = s.split('-')
+            return len(s) == 10 and len(q) == 3 and q[0].isdigit() and q[1].isdigit() and q[2].isdigit()
+
         if op == 'set':
             date = str(body.get('date', '')).strip()
             period = str(body.get('period', '')).strip()
             sid = str(body.get('sid', '')).strip()
             mark = str(body.get('mark', '')).strip().upper()
-            p = date.split('-')
-            if len(date) != 10 or len(p) != 3 or not (p[0].isdigit() and p[1].isdigit() and p[2].isdigit()) or not period or not sid:
+            if not _valid_date(date) or not period or not sid:
                 self.json_response(400, {'error': 'Provide date (YYYY-MM-DD), period, and student id.'})
                 return
             with _attendance_lock:
                 d = _load_attendance()
+                if d.get('__locks__', {}).get(date, {}).get(period):
+                    self.json_response(423, {'error': 'Roll is locked.', 'locked': True})
+                    return
                 day = d.setdefault(date, {})
                 per = day.setdefault(period, {})
                 if mark in ('A', 'T', 'L'):
@@ -2219,11 +2230,38 @@ class Handler(BaseHTTPRequestHandler):
                 _save_attendance(d)
             self.json_response(200, {'ok': True})
             return
+
+        if op in ('lock', 'unlock'):
+            date = str(body.get('date', '')).strip()
+            period = str(body.get('period', '')).strip()
+            if not _valid_date(date) or not period:
+                self.json_response(400, {'error': 'Provide date (YYYY-MM-DD) and period.'})
+                return
+            with _attendance_lock:
+                d = _load_attendance()
+                locks = d.setdefault('__locks__', {})
+                day = locks.setdefault(date, {})
+                at = 0
+                if op == 'lock':
+                    at = int(time.time() * 1000)
+                    day[period] = at
+                else:
+                    day.pop(period, None)
+                if not day:
+                    locks.pop(date, None)
+                if not locks:
+                    d.pop('__locks__', None)
+                _save_attendance(d)
+            self.json_response(200, {'ok': True, 'locked': (op == 'lock'), 'at': at})
+            return
+
         # op == 'get' (default)
         date = str(body.get('date', '')).strip() or time.strftime('%Y-%m-%d')
         d = _load_attendance()
+        locks = d.get('__locks__', {})
         self.json_response(200, {'date': date, 'roster': _attendance_roster(),
-                                 'marks': d.get(date, {}), 'dates': sorted(d.keys())})
+                                 'marks': d.get(date, {}), 'locks': locks.get(date, {}),
+                                 'dates': sorted(k for k in d.keys() if k != '__locks__')})
 
     def handle_camera_photowalk(self):
         """AUTHED (camera key). Photo Walk Log store: action = save | list | get.

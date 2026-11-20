@@ -20,6 +20,10 @@ import time
 import base64
 import gzip
 import threading
+import re
+import zipfile
+import shutil
+import tempfile
 
 sys.stdout.reconfigure(line_buffering=True)
 
@@ -248,6 +252,15 @@ _load_mankin()
 # route below -- but see _NEVER_SERVE_STATIC in serve_file() for why that isn't relied on alone.
 ROLLSHEET_PATH = os.path.join(_data_dir(), 'class_roll_sheet.pdf')
 ROLLSHEET_META_PATH = os.path.join(_data_dir(), 'class_roll_sheet.meta.json')
+
+# Critique galleries (teacher projects student photos for in-class critique). The images ARE student
+# work tied to full names, so they are FERPA PII: they live on the persistent disk, OUTSIDE SERVE_DIR,
+# and are reachable only through the authed /api/critique/* routes below (never the static catch-all,
+# which is additionally blocked from the 'critique/' path prefix in serve_file). One subfolder per
+# gallery: critique/<slug>/manifest.json + thumb/<id>.jpg + full/<id>.jpg. index.json lists them.
+CRITIQUE_DIR = os.path.join(_data_dir(), 'critique')
+_SLUG_RE = re.compile(r'^[a-z0-9][a-z0-9-]{0,63}$')
+_PID_RE  = re.compile(r'^[a-z0-9_]{1,64}$')
 
 # Filenames that must never be handed out by the static-file catch-all (serve_file), no matter
 # which directory they actually resolve to. All of these hold student PII or credentials and are
@@ -1283,6 +1296,18 @@ class Handler(BaseHTTPRequestHandler):
             if not self.require_auth():
                 return
             self.handle_rollsheet_meta()
+        elif path == '/api/critique/index':
+            if not self.require_auth():
+                return
+            self.handle_critique_index()
+        elif path == '/api/critique/manifest':
+            if not self.require_auth():
+                return
+            self.handle_critique_manifest()
+        elif path == '/api/critique/photo':
+            if not self.require_auth():
+                return
+            self.handle_critique_photo()
         elif path == '/api/inbox/list':
             if not self.require_camera_auth():
                 return
@@ -1318,6 +1343,9 @@ class Handler(BaseHTTPRequestHandler):
         elif path == '/leaderboard':
             self.path = '/leaderboard.html'
             self.serve_file()                      # PUBLIC: classroom-screen standings page
+        elif path == '/critique':
+            self.path = '/critique.html'
+            self.serve_file()                      # page is public; its data is gated behind /api/critique/*
         elif path in ('/', ''):
             self.path = '/index.html'
             self.serve_file()
@@ -1403,6 +1431,10 @@ class Handler(BaseHTTPRequestHandler):
             self.handle_roster_upload()
         elif path == '/api/documents/rollsheet/upload':
             self.handle_rollsheet_upload()
+        elif path == '/api/critique/upload':
+            self.handle_critique_upload()
+        elif path == '/api/critique/delete':
+            self.handle_critique_delete()
         elif path == '/api/batch/grades':
             self.handle_batch_grades()
         elif path == '/api/batch/comments':
@@ -1553,6 +1585,173 @@ class Handler(BaseHTTPRequestHandler):
             json.dump(meta, f)
         print(f'[rollsheet] Uploaded: {len(body)} bytes, label={label}')
         self.json_response(200, {'ok': True, **meta})
+
+    # -- Critique galleries (authed; student photos + names = FERPA PII) -----
+    # A gallery is a folder on the persistent disk: critique/<slug>/manifest.json + thumb/<id>.jpg +
+    # full/<id>.jpg. The build step (tools/build-class-critique.py in creativesilva-site) matches each
+    # Canvas photo to the roster, makes projector-sized copies, and uploads one gallery as a ZIP.
+    # critique.html reads these authed routes and projects the gallery in class.
+
+    def _critique_index(self):
+        p = os.path.join(CRITIQUE_DIR, 'index.json')
+        if os.path.exists(p):
+            try:
+                with open(p) as f:
+                    return json.load(f)
+            except Exception:
+                pass
+        return {'galleries': []}
+
+    def _write_critique_index(self):
+        """Rebuild index.json by scanning the gallery folders on disk."""
+        gals = []
+        if os.path.isdir(CRITIQUE_DIR):
+            for slug in sorted(os.listdir(CRITIQUE_DIR)):
+                mpath = os.path.join(CRITIQUE_DIR, slug, 'manifest.json')
+                if not os.path.isfile(mpath):
+                    continue
+                try:
+                    with open(mpath) as f:
+                        m = json.load(f)
+                except Exception:
+                    continue
+                periods = m.get('periods', [])
+                gals.append({
+                    'slug': slug,
+                    'title': m.get('title', slug),
+                    'subtitle': m.get('subtitle', ''),
+                    'updated': m.get('updated', ''),
+                    'periods': len(periods),
+                    'photos': sum(len(p.get('photos', [])) for p in periods),
+                })
+        gals.sort(key=lambda g: g.get('updated', ''), reverse=True)
+        os.makedirs(CRITIQUE_DIR, exist_ok=True)
+        with open(os.path.join(CRITIQUE_DIR, 'index.json'), 'w') as f:
+            json.dump({'galleries': gals}, f)
+        return gals
+
+    def handle_critique_index(self):
+        self.json_response(200, self._critique_index())
+
+    def handle_critique_manifest(self):
+        slug = parse_qs(urlparse(self.path).query).get('g', [''])[0]
+        if not _SLUG_RE.match(slug):
+            self.json_response(400, {'error': 'bad slug'}); return
+        mpath = os.path.join(CRITIQUE_DIR, slug, 'manifest.json')
+        if not os.path.isfile(mpath):
+            self.json_response(404, {'error': 'no such gallery'}); return
+        with open(mpath) as f:
+            self.json_response(200, json.load(f))
+
+    def handle_critique_photo(self):
+        qs = parse_qs(urlparse(self.path).query)
+        slug = qs.get('g', [''])[0]
+        size = qs.get('s', ['full'])[0]
+        pid  = qs.get('f', [''])[0]
+        if not (_SLUG_RE.match(slug) and size in ('thumb', 'full') and _PID_RE.match(pid)):
+            self.json_response(400, {'error': 'bad request'}); return
+        fpath = os.path.join(CRITIQUE_DIR, slug, size, pid + '.jpg')
+        # realpath containment check: never escape the gallery dir
+        base = os.path.realpath(os.path.join(CRITIQUE_DIR, slug))
+        if not os.path.realpath(fpath).startswith(base + os.sep) or not os.path.isfile(fpath):
+            self.json_response(404, {'error': 'not found'}); return
+        with open(fpath, 'rb') as f:
+            body = f.read()
+        self.send_response(200)
+        self.send_header('Content-Type', 'image/jpeg')
+        self.send_header('Cache-Control', 'private, max-age=86400')
+        self.send_header('Content-Length', len(body))
+        self._cors_headers()
+        self.end_headers()
+        self.wfile.write(body)
+
+    def handle_critique_upload(self):
+        """Receive one gallery as a ZIP (manifest.json + thumb/<id>.jpg + full/<id>.jpg) and replace
+        it atomically. Authed (API key or Firebase). Members are strictly validated: no absolute paths,
+        no '..', only the expected shapes."""
+        slug = parse_qs(urlparse(self.path).query).get('g', [''])[0]
+        if not _SLUG_RE.match(slug):
+            self.json_response(400, {'error': 'bad slug'}); return
+        length = int(self.headers.get('Content-Length', 0))
+        if length <= 0:
+            self.json_response(400, {'error': 'empty body'}); return
+        if length > 400_000_000:
+            self.json_response(413, {'error': 'gallery too large'}); return
+        # stream the upload to a temp file so a big gallery never sits fully in memory
+        tmp_zip = tempfile.NamedTemporaryFile(prefix='critique_', suffix='.zip', delete=False)
+        try:
+            remaining = length
+            while remaining > 0:
+                chunk = self.rfile.read(min(remaining, 1 << 20))
+                if not chunk:
+                    break
+                tmp_zip.write(chunk)
+                remaining -= len(chunk)
+            tmp_zip.close()
+            staging = os.path.join(CRITIQUE_DIR, slug + '__new')
+            if os.path.isdir(staging):
+                shutil.rmtree(staging, ignore_errors=True)
+            os.makedirs(staging, exist_ok=True)
+            member_re = re.compile(r'^(manifest\.json|(thumb|full)/[a-z0-9_]{1,64}\.jpg)$')
+            n_photos = 0
+            with zipfile.ZipFile(tmp_zip.name) as zf:
+                names = zf.namelist()
+                if 'manifest.json' not in names:
+                    shutil.rmtree(staging, ignore_errors=True)
+                    self.json_response(400, {'error': 'missing manifest.json'}); return
+                for name in names:
+                    if name.endswith('/'):
+                        continue
+                    if not member_re.match(name):
+                        shutil.rmtree(staging, ignore_errors=True)
+                        self.json_response(400, {'error': f'illegal member: {name}'}); return
+                    dest = os.path.join(staging, name)
+                    os.makedirs(os.path.dirname(dest), exist_ok=True)
+                    with zf.open(name) as src, open(dest, 'wb') as out:
+                        shutil.copyfileobj(src, out)
+                    if name.startswith('full/'):
+                        n_photos += 1
+            # validate manifest parses
+            with open(os.path.join(staging, 'manifest.json')) as f:
+                manifest = json.load(f)
+            manifest['slug'] = slug
+            manifest.setdefault('updated', time.strftime('%Y-%m-%d %H:%M:%S'))
+            with open(os.path.join(staging, 'manifest.json'), 'w') as f:
+                json.dump(manifest, f)
+            # atomic-ish swap
+            final = os.path.join(CRITIQUE_DIR, slug)
+            old = os.path.join(CRITIQUE_DIR, slug + '__old')
+            if os.path.isdir(old):
+                shutil.rmtree(old, ignore_errors=True)
+            if os.path.isdir(final):
+                os.rename(final, old)
+            os.rename(staging, final)
+            if os.path.isdir(old):
+                shutil.rmtree(old, ignore_errors=True)
+            self._write_critique_index()
+            print(f'[critique] Uploaded gallery {slug}: {n_photos} photos, {length} bytes')
+            self.json_response(200, {'ok': True, 'slug': slug, 'photos': n_photos,
+                                     'title': manifest.get('title', slug)})
+        except zipfile.BadZipFile:
+            self.json_response(400, {'error': 'not a zip'})
+        except Exception as e:
+            print(f'[critique] upload failed: {e}')
+            self.json_response(500, {'error': 'upload failed'})
+        finally:
+            try:
+                os.unlink(tmp_zip.name)
+            except Exception:
+                pass
+
+    def handle_critique_delete(self):
+        slug = parse_qs(urlparse(self.path).query).get('g', [''])[0]
+        if not _SLUG_RE.match(slug):
+            self.json_response(400, {'error': 'bad slug'}); return
+        target = os.path.join(CRITIQUE_DIR, slug)
+        if os.path.isdir(target):
+            shutil.rmtree(target, ignore_errors=True)
+        self._write_critique_index()
+        self.json_response(200, {'ok': True, 'deleted': slug})
 
     # -- Aeries substitute accounts (authenticated; confidential) -----------
 
@@ -3056,6 +3255,12 @@ class Handler(BaseHTTPRequestHandler):
         # them back in reach of this static catch-all -- block by filename regardless of where they
         # actually resolve on disk, so that assumption is never load-bearing for access control.
         if os.path.basename(path) in _NEVER_SERVE_STATIC:
+            self.send_error(404)
+            return
+        # Critique photos + manifests are FERPA PII served only via the authed /api/critique/* routes.
+        # If a deploy ever lacked the persistent disk, _data_dir() would fall back to SERVE_DIR and put
+        # critique/<slug>/... back in reach of this catch-all; block the whole prefix so it never is.
+        if path == 'critique' or path.startswith('critique/'):
             self.send_error(404)
             return
         filepath = os.path.join(SERVE_DIR, path)

@@ -1,0 +1,420 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Critique | PVHS Photography</title>
+<style>
+  :root{
+    --teal:#007474; --teal-bright:#0a9a9a; --gold:#f5b301;
+    --bg:#0b0e0e; --bg-bar:#0e1212; --line:rgba(255,255,255,0.10);
+    --txt:#f4f6f6; --muted:#9aa6a6; --muted-dim:#6f7b7b;
+  }
+  *{box-sizing:border-box;margin:0;padding:0}
+  html,body{height:100%}
+  body{background:var(--bg);color:var(--txt);
+    font-family:-apple-system,BlinkMacSystemFont,"SF Pro Display","Segoe UI",Roboto,Helvetica,Arial,sans-serif;
+    -webkit-font-smoothing:antialiased;overflow-x:hidden}
+
+  /* ---------- Sign-in gate ---------- */
+  #login{position:fixed;inset:0;display:grid;place-items:center;z-index:200;
+    background:radial-gradient(120% 90% at 50% 12%, rgba(0,116,116,0.35), rgba(7,10,10,0) 60%), var(--bg)}
+  .login-card{text-align:center;max-width:380px;padding:40px 34px}
+  .login-card h1{font-size:26px;font-weight:700;letter-spacing:-0.01em}
+  .login-card .sub{color:var(--muted);font-size:12px;font-weight:600;letter-spacing:0.18em;text-transform:uppercase;margin-top:7px}
+  .login-card p{color:var(--muted);font-size:14px;margin:18px 0 24px;line-height:1.5}
+  .signin-btn{appearance:none;border:1px solid var(--line);background:rgba(255,255,255,0.03);color:var(--txt);
+    font-size:15px;font-weight:600;padding:13px 26px;border-radius:12px;cursor:pointer;display:inline-flex;align-items:center;gap:10px;transition:all .16s}
+  .signin-btn:hover{border-color:rgba(10,154,154,0.6);background:rgba(10,154,154,0.12)}
+  #login-error{color:#ff8787;font-size:13px;margin-top:16px;display:none}
+
+  /* ---------- Top bar ---------- */
+  #app{display:none}
+  .bar{position:sticky;top:0;z-index:20;background:linear-gradient(180deg,rgba(14,18,18,0.98),rgba(14,18,18,0.92));
+    border-bottom:1px solid var(--line);backdrop-filter:saturate(140%) blur(10px);-webkit-backdrop-filter:saturate(140%) blur(10px);
+    padding:16px clamp(20px,3vw,44px) 0}
+  .bar-top{display:flex;align-items:flex-start;justify-content:space-between;gap:24px}
+  .g-title{font-size:clamp(21px,2.3vw,33px);font-weight:700;letter-spacing:-0.01em;line-height:1.05}
+  .g-sub{margin-top:5px;font-size:11px;font-weight:600;letter-spacing:0.18em;text-transform:uppercase;color:var(--muted)}
+  .bar-actions{display:flex;align-items:center;gap:10px;padding-top:4px;flex-shrink:0}
+  select.gal-switch{appearance:none;background:rgba(255,255,255,0.04);color:var(--txt);border:1px solid var(--line);
+    border-radius:10px;padding:8px 30px 8px 12px;font-size:13px;font-weight:600;cursor:pointer;
+    background-image:url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 24 24' fill='none' stroke='%239aa6a6' stroke-width='2'><path d='M6 9l6 6 6-6'/></svg>");
+    background-repeat:no-repeat;background-position:right 10px center}
+  .icon-btn{width:40px;height:40px;border-radius:999px;border:1px solid var(--line);background:rgba(255,255,255,0.02);
+    color:var(--muted);display:grid;place-items:center;cursor:pointer;transition:all .18s}
+  .icon-btn:hover{color:var(--txt);border-color:rgba(10,154,154,0.5);background:rgba(10,154,154,0.10)}
+  .icon-btn svg{width:18px;height:18px;fill:none;stroke:currentColor;stroke-width:1.7}
+
+  .tabs{display:flex;gap:4px;margin-top:14px;overflow-x:auto;scrollbar-width:none}
+  .tabs::-webkit-scrollbar{display:none}
+  .tab{position:relative;appearance:none;background:none;border:none;cursor:pointer;color:var(--muted);
+    font-size:14px;font-weight:600;padding:10px 16px 15px;white-space:nowrap;transition:color .16s}
+  .tab:hover{color:var(--txt)} .tab.active{color:var(--txt)}
+  .tab.active::after{content:"";position:absolute;left:14px;right:14px;bottom:0;height:2px;border-radius:2px;
+    background:var(--teal-bright);box-shadow:0 0 12px rgba(10,154,154,0.6)}
+  .tab .count{display:inline-block;margin-left:8px;font-size:11px;font-weight:600;color:var(--muted-dim);
+    background:rgba(255,255,255,0.05);border-radius:999px;padding:1px 7px;vertical-align:1px}
+  .tab.active .count{color:var(--teal-bright);background:rgba(10,154,154,0.14)}
+
+  /* ---------- Grid ---------- */
+  .stage{padding:clamp(16px,2.2vw,30px) clamp(20px,3vw,44px) 60px}
+  .sec-label{display:flex;align-items:center;gap:12px;margin:6px 0 14px;color:var(--muted);
+    font-size:11px;font-weight:700;letter-spacing:0.16em;text-transform:uppercase}
+  .sec-label.miss{color:var(--gold)}
+  .sec-label::after{content:"";flex:1;height:1px;background:var(--line)}
+  .grid{display:flex;flex-direction:column;gap:10px;margin-bottom:34px}
+  .row{display:flex;gap:10px}
+  .cell{position:relative;overflow:hidden;border-radius:6px;cursor:pointer;background:#111515;flex:0 0 auto;
+    transition:transform .22s cubic-bezier(.2,.7,.3,1),box-shadow .22s ease}
+  .cell img{display:block;width:100%;height:100%;object-fit:cover;opacity:0;transition:opacity .35s}
+  .cell img.loaded{opacity:1}
+  .cell::after{content:"";position:absolute;inset:0;border-radius:6px;box-shadow:inset 0 0 0 1.5px rgba(10,154,154,0);transition:box-shadow .2s;pointer-events:none}
+  .cell:hover{transform:translateY(-3px);box-shadow:0 14px 34px rgba(0,0,0,0.5)}
+  .cell:hover::after{box-shadow:inset 0 0 0 2px rgba(10,154,154,0.9)}
+  .cell.miss:hover::after{box-shadow:inset 0 0 0 2px rgba(245,179,1,0.9)}
+  .cell .name-chip{position:absolute;left:0;right:0;bottom:0;padding:26px 12px 10px;font-size:13px;font-weight:600;color:#fff;
+    background:linear-gradient(180deg,transparent,rgba(0,0,0,0.78));opacity:0;transform:translateY(6px);transition:all .2s;text-shadow:0 1px 3px rgba(0,0,0,0.6)}
+  .cell:hover .name-chip{opacity:1;transform:translateY(0)}
+  .cell.miss .name-chip{opacity:1;transform:none}
+  .miss-badge{position:absolute;top:8px;left:8px;background:rgba(245,179,1,0.92);color:#231a00;
+    font-size:9px;font-weight:800;letter-spacing:0.1em;text-transform:uppercase;padding:3px 7px;border-radius:5px}
+  .cell.miss img{filter:saturate(0.6) brightness(0.82)}
+  .empty{display:grid;place-items:center;min-height:50vh;text-align:center;color:var(--muted-dim);gap:10px}
+  .empty svg{width:40px;height:40px;stroke:var(--muted-dim);stroke-width:1.4;fill:none}
+
+  /* ---------- Fullscreen critique ---------- */
+  .viewer{position:fixed;inset:0;z-index:100;display:none;opacity:0;transition:opacity .28s;
+    background:radial-gradient(130% 95% at 50% 8%, rgba(0,116,116,0.60), rgba(0,116,116,0.14) 42%, rgba(7,10,10,0) 70%),
+      radial-gradient(90% 70% at 85% 95%, rgba(0,116,116,0.16), rgba(7,10,10,0) 60%),
+      linear-gradient(180deg,#0a1313 0%, #070a0a 55%, #050707 100%)}
+  .viewer.miss{background:radial-gradient(130% 95% at 50% 8%, rgba(245,179,1,0.34), rgba(245,179,1,0.07) 44%, rgba(7,10,10,0) 70%),
+      linear-gradient(180deg,#141005 0%, #0a0803 55%, #060503 100%)}
+  .viewer.open{display:block;opacity:1}
+  .viewer-stage{position:absolute;inset:0;display:flex;flex-direction:column}
+  .photo-wrap{position:relative;flex:1 1 auto;min-height:0;display:flex;align-items:center;justify-content:center;overflow:hidden;
+    padding:clamp(36px,5vh,70px) clamp(60px,8vw,150px) clamp(10px,1.5vh,18px)}
+  .photo-wrap img{max-width:100%;max-height:100%;width:auto;height:auto;object-fit:contain;border-radius:3px;
+    box-shadow:0 30px 90px rgba(0,0,0,0.65), 0 2px 0 rgba(255,255,255,0.04);
+    opacity:0;transform:scale(.985);transition:opacity .3s,transform .3s}
+  .viewer.show-photo .photo-wrap img{opacity:1;transform:scale(1)}
+  .info{flex:0 0 auto;padding:0 clamp(28px,5vw,80px) clamp(22px,4vh,48px);display:flex;align-items:flex-end;justify-content:space-between;gap:30px}
+  .info-left{display:flex;align-items:flex-end;gap:18px;min-width:0}
+  .info-accent{width:3px;align-self:stretch;min-height:46px;border-radius:3px;margin-bottom:4px;
+    background:linear-gradient(180deg,var(--teal-bright),rgba(10,154,154,0.15))}
+  .viewer.miss .info-accent{background:linear-gradient(180deg,var(--gold),rgba(245,179,1,0.15))}
+  .info-eyebrow{font-size:11px;font-weight:700;letter-spacing:0.22em;text-transform:uppercase;color:var(--teal-bright)}
+  .viewer.miss .info-eyebrow{color:var(--gold)}
+  .info-name{font-size:clamp(26px,3.3vw,44px);font-weight:700;letter-spacing:-0.01em;line-height:1.08;margin-top:4px;color:#fff;text-shadow:0 2px 20px rgba(0,0,0,0.5)}
+  .info-meta{font-size:clamp(13px,1.1vw,15px);color:var(--muted);margin-top:7px;font-weight:500}
+  .info-right{display:flex;align-items:center;gap:16px;flex-shrink:0;padding-bottom:4px}
+  .counter{font-size:14px;color:var(--muted);letter-spacing:0.08em;font-variant-numeric:tabular-nums}
+  .counter b{color:#fff;font-weight:700}
+  .v-top{position:absolute;top:0;left:0;right:0;z-index:5;display:flex;align-items:center;justify-content:space-between;padding:clamp(18px,3vh,30px) clamp(22px,4vw,46px)}
+  .v-back{display:inline-flex;align-items:center;gap:9px;cursor:pointer;color:var(--txt);font-size:14px;font-weight:600;border:none;background:none;opacity:.85;transition:opacity .16s}
+  .v-back:hover{opacity:1} .v-back svg{width:20px;height:20px;stroke:currentColor;stroke-width:1.8;fill:none}
+  .v-tools{display:flex;align-items:center;gap:10px}
+  .v-chip{width:42px;height:42px;border-radius:999px;border:1px solid rgba(255,255,255,0.14);background:rgba(0,0,0,0.25);
+    color:#e9f1f1;display:grid;place-items:center;cursor:pointer;transition:all .16s;backdrop-filter:blur(6px)}
+  .v-chip:hover{background:rgba(10,154,154,0.22);border-color:rgba(10,154,154,0.6)}
+  .v-chip svg{width:19px;height:19px;stroke:currentColor;stroke-width:1.8;fill:none}
+  .nav-arrow{position:absolute;top:50%;transform:translateY(-50%);z-index:5;width:clamp(48px,4.5vw,66px);height:clamp(48px,4.5vw,66px);
+    border-radius:999px;border:1px solid rgba(255,255,255,0.12);background:rgba(0,0,0,0.22);color:#fff;display:grid;place-items:center;
+    cursor:pointer;opacity:.55;transition:all .18s;backdrop-filter:blur(6px)}
+  .nav-arrow:hover{opacity:1;background:rgba(10,154,154,0.26);border-color:rgba(10,154,154,0.6);transform:translateY(-50%) scale(1.06)}
+  .nav-arrow svg{width:26px;height:26px;stroke:currentColor;stroke-width:2;fill:none}
+  .nav-prev{left:clamp(14px,2.5vw,34px)} .nav-next{right:clamp(14px,2.5vw,34px)}
+  .nav-arrow.disabled{opacity:0;pointer-events:none}
+  .spin{width:34px;height:34px;border-radius:50%;border:3px solid rgba(255,255,255,0.15);border-top-color:var(--teal-bright);animation:sp 0.8s linear infinite;position:absolute}
+  @keyframes sp{to{transform:rotate(360deg)}}
+  @media (max-width:760px){.info{flex-direction:column;align-items:flex-start;gap:14px}.info-right{align-self:flex-start}}
+</style>
+</head>
+<body>
+
+  <div id="login">
+    <div class="login-card">
+      <h1>Critique</h1>
+      <div class="sub">PVHS Photography</div>
+      <p>Sign in with your school Google account to open the critique gallery.</p>
+      <button class="signin-btn" onclick="googleSignIn()">
+        <svg width="18" height="18" viewBox="0 0 24 24"><path fill="#fff" d="M12 11v2.8h4a3.9 3.9 0 0 1-3.9 2.9 4.7 4.7 0 1 1 3-8.3l2-2A7.6 7.6 0 1 0 19.5 12H12z"/></svg>
+        Sign in with Google
+      </button>
+      <div id="login-error"></div>
+    </div>
+  </div>
+
+  <div id="app">
+    <header class="bar">
+      <div class="bar-top">
+        <div class="title-block">
+          <div class="g-title" id="galTitle">Critique</div>
+          <div class="g-sub" id="galSub">Pioneer Valley High School</div>
+        </div>
+        <div class="bar-actions">
+          <select class="gal-switch" id="galSwitch" style="display:none" onchange="selectGallery(this.value)"></select>
+          <button class="icon-btn" id="slideshowBtn" title="Play slideshow" aria-label="Play slideshow">
+            <svg viewBox="0 0 24 24"><polygon points="7 5 19 12 7 19 7 5" fill="currentColor" stroke="none"/></svg>
+          </button>
+        </div>
+      </div>
+      <nav class="tabs" id="tabs"></nav>
+    </header>
+    <main class="stage">
+      <div id="grids"></div>
+      <div class="empty" id="empty" style="display:none">
+        <svg viewBox="0 0 24 24"><rect x="3" y="5" width="18" height="14" rx="2"/><circle cx="8.5" cy="10" r="1.6"/><path d="M4 17l5-5 4 4 3-3 4 4"/></svg>
+        <p>No photos for this period yet.</p>
+      </div>
+    </main>
+  </div>
+
+  <section class="viewer" id="viewer" aria-hidden="true">
+    <div class="v-top">
+      <button class="v-back" id="backBtn"><svg viewBox="0 0 24 24"><path d="M15 18l-6-6 6-6"/></svg> Back to gallery</button>
+      <div class="v-tools">
+        <button class="v-chip" id="playChip" title="Auto-advance"><svg viewBox="0 0 24 24"><polygon points="7 5 19 12 7 19 7 5" fill="currentColor" stroke="none"/></svg></button>
+        <button class="v-chip" id="fsChip" title="Full screen"><svg viewBox="0 0 24 24"><path d="M4 9V4h5M20 9V4h-5M4 15v5h5M20 15v5h-5"/></svg></button>
+      </div>
+    </div>
+    <button class="nav-arrow nav-prev" id="prevBtn" aria-label="Previous"><svg viewBox="0 0 24 24"><path d="M15 18l-6-6 6-6"/></svg></button>
+    <button class="nav-arrow nav-next" id="nextBtn" aria-label="Next"><svg viewBox="0 0 24 24"><path d="M9 18l6-6-6-6"/></svg></button>
+    <div class="viewer-stage">
+      <div class="photo-wrap"><div class="spin" id="vSpin"></div><img id="vImg" alt=""></div>
+      <div class="info">
+        <div class="info-left">
+          <div class="info-accent"></div>
+          <div class="info-text">
+            <div class="info-eyebrow" id="vEyebrow">Photographer</div>
+            <div class="info-name" id="vName">Student Name</div>
+            <div class="info-meta" id="vMeta"></div>
+          </div>
+        </div>
+        <div class="info-right"><div class="counter"><b id="vIndex">1</b> / <span id="vTotal">1</span></div></div>
+      </div>
+    </div>
+  </section>
+
+<script>
+/* ===== dev vs production data source =====
+   Production: gated by Firebase Google sign-in; manifest + photos come from the authed Command Center.
+   Dev preview (localhost + ?dev=1): loads manifest.json + thumb/full/<id>.jpg sitting next to this file. */
+const PARAMS = new URLSearchParams(location.search);
+const DEV = /^(localhost|127\.0\.0\.1)$/.test(location.hostname) && PARAMS.get('dev') === '1';
+const WANT_SLUG = PARAMS.get('g') || '';
+
+let firebaseToken=null, currentUser=null;
+const firebaseConfig = { apiKey:"AIzaSyCXVzzAeh3U-RwYaKzCXOTBiNAarHWNqVo", authDomain:"girl-scouts-silva.firebaseapp.com", projectId:"girl-scouts-silva" };
+
+async function initFirebase(){
+  const {initializeApp}=await import('https://www.gstatic.com/firebasejs/10.12.0/firebase-app.js');
+  const {getAuth,GoogleAuthProvider,onAuthStateChanged}=await import('https://www.gstatic.com/firebasejs/10.12.0/firebase-auth.js');
+  const app=initializeApp(firebaseConfig); const auth=getAuth(app);
+  window._fbAuth=auth; window._fbProvider=new GoogleAuthProvider();
+  onAuthStateChanged(auth, async user=>{
+    if(user){ firebaseToken=await user.getIdToken(); currentUser=user;
+      document.getElementById('login').style.display='none'; document.getElementById('app').style.display='block'; boot(); }
+    else { firebaseToken=null; currentUser=null;
+      document.getElementById('login').style.display='grid'; document.getElementById('app').style.display='none'; }
+  });
+}
+async function googleSignIn(){
+  try{ const {signInWithPopup}=await import('https://www.gstatic.com/firebasejs/10.12.0/firebase-auth.js'); await signInWithPopup(window._fbAuth,window._fbProvider); }
+  catch(e){ const el=document.getElementById('login-error'); el.textContent=e.message; el.style.display='block'; }
+}
+async function apiFetch(path){
+  if(!firebaseToken && currentUser) firebaseToken=await currentUser.getIdToken(true);
+  let res=await fetch(path,{headers:{'Authorization':`Bearer ${firebaseToken}`}});
+  if(res.status===401 && currentUser){ firebaseToken=await currentUser.getIdToken(true); res=await fetch(path,{headers:{'Authorization':`Bearer ${firebaseToken}`}}); }
+  return res;
+}
+
+/* data layer: returns a URL/objectURL for an image, with a small cache */
+const blobCache=new Map();
+function photoKey(sz,id){ return GAL.slug+'|'+sz+'|'+id; }
+async function photoURL(sz,id){
+  if(DEV) return `./${sz}/${id}.jpg`;
+  const k=photoKey(sz,id);
+  if(blobCache.has(k)) return blobCache.get(k);
+  const res=await apiFetch(`/api/critique/photo?g=${encodeURIComponent(GAL.slug)}&s=${sz}&f=${encodeURIComponent(id)}`);
+  if(!res.ok) throw new Error('photo '+res.status);
+  const url=URL.createObjectURL(await res.blob());
+  blobCache.set(k,url); return url;
+}
+function clearBlobCache(){ for(const u of blobCache.values()) URL.revokeObjectURL(u); blobCache.clear(); }
+
+/* ---- state ---- */
+let GALLERIES=[], GAL=null, activePeriod=0, flat=[], viewIndex=0, slideTimer=null;
+
+async function boot(){
+  try{
+    if(DEV){ GALLERIES=[{slug:(WANT_SLUG||'dev')}]; }
+    else {
+      const res=await apiFetch('/api/critique/index');
+      if(!res.ok){ showFatal('Could not load galleries ('+res.status+').'); return; }
+      GALLERIES=(await res.json()).galleries||[];
+      if(!GALLERIES.length){ showFatal('No critique galleries have been built yet.'); return; }
+    }
+    const sw=document.getElementById('galSwitch');
+    if(GALLERIES.length>1){
+      sw.innerHTML=GALLERIES.map(g=>`<option value="${g.slug}">${g.title}</option>`).join('');
+      sw.style.display='';
+    }
+    const start=(WANT_SLUG && GALLERIES.find(g=>g.slug===WANT_SLUG)) ? WANT_SLUG : GALLERIES[0].slug;
+    if(GALLERIES.length>1) sw.value=start;
+    await selectGallery(start);
+  }catch(e){ showFatal('Error: '+e.message); }
+}
+function showFatal(msg){ document.getElementById('empty').style.display='grid';
+  document.getElementById('empty').querySelector('p').textContent=msg; document.getElementById('tabs').innerHTML=''; document.getElementById('grids').innerHTML=''; }
+
+async function selectGallery(slug){
+  clearBlobCache();
+  let manifest;
+  if(DEV){ manifest=await (await fetch('./manifest.json')).json(); manifest.slug=slug; }
+  else { const res=await apiFetch(`/api/critique/manifest?g=${encodeURIComponent(slug)}`);
+    if(!res.ok){ showFatal('Could not load gallery ('+res.status+').'); return; } manifest=await res.json(); }
+  GAL=manifest; activePeriod=0;
+  document.getElementById('galTitle').textContent=GAL.title||'Critique';
+  document.getElementById('galSub').textContent=GAL.subtitle||'Pioneer Valley High School';
+  document.title='Critique | '+(GAL.title||'PVHS');
+  renderTabs(); renderPeriod();
+}
+
+/* ---- tabs ---- */
+function renderTabs(){
+  const el=document.getElementById('tabs'); el.innerHTML='';
+  (GAL.periods||[]).forEach((p,i)=>{
+    const total=(p.photos||[]).length;
+    const b=document.createElement('button');
+    b.className='tab'+(i===activePeriod?' active':'');
+    b.innerHTML=(p.label||('Period '+p.key))+(total?`<span class="count">${total}</span>`:'');
+    b.onclick=()=>{ activePeriod=i; renderTabs(); renderPeriod(); window.scrollTo({top:0,behavior:'smooth'}); };
+    el.appendChild(b);
+  });
+}
+
+/* ---- justified grid, split into "submitted" + "missing" sections ---- */
+const grids=document.getElementById('grids'), emptyEl=document.getElementById('empty');
+function currentPhotos(){ return (GAL.periods[activePeriod]||{}).photos||[]; }
+function renderPeriod(){
+  const photos=currentPhotos();
+  grids.innerHTML='';
+  if(!photos.length){ emptyEl.style.display='grid'; emptyEl.querySelector('p').textContent='No photos for this period yet.'; return; }
+  emptyEl.style.display='none';
+  const wrap=document.createElement('div'); wrap.className='grid'; grids.appendChild(wrap);
+  layoutJustified(wrap, photos);   // one unified gallery; placeholders are mixed in by the build
+  lazyObserve();
+}
+function layoutJustified(wrap, items){
+  const containerW=wrap.clientWidth||(document.querySelector('.stage').clientWidth-2);
+  const gap=10, targetH=window.innerWidth<760?170:(window.innerWidth<1400?230:280);
+  // we don't know aspect ratios until thumbs load; assume portrait 3:4 for layout, correct on load is not needed
+  // (placeholders/photos vary) -> use the manifest's ratio if present, else a pleasing default per item hash
+  let row=[], ratioSum=0;
+  const DEF=[0.75,0.8,0.67,1.0,0.75,0.8];  // fallback if a photo has no stored dimensions
+  const ratioOf=(p)=> (p.w && p.h) ? (p.w/p.h) : DEF[Math.abs(hashStr(p.id))%DEF.length];
+  const flush=(isLast)=>{
+    if(!row.length) return;
+    const rowEl=document.createElement('div'); rowEl.className='row';
+    let h=(containerW-(row.length-1)*gap)/ratioSum; if(isLast) h=Math.min(h,targetH*1.12);
+    row.forEach(it=>{
+      const w=it.ratio*h;
+      const cell=document.createElement('div');
+      cell.className='cell';
+      cell.style.width=w+'px'; cell.style.height=h+'px';
+      cell.dataset.sz='thumb'; cell.dataset.id=it.p.id;
+      cell.innerHTML=`<img alt=""><div class="name-chip">${it.p.student}</div>`;
+      cell.onclick=()=>openViewer(it.gi);
+      rowEl.appendChild(cell);
+    });
+    wrap.appendChild(rowEl); row=[]; ratioSum=0;
+  };
+  const all=currentPhotos();
+  items.forEach((p)=>{
+    const gi=all.indexOf(p);
+    const ratio=ratioOf(p);
+    row.push({p,gi,ratio}); ratioSum+=ratio;
+    if(ratioSum*targetH+(row.length-1)*gap>=containerW) flush(false);
+  });
+  flush(true);
+}
+function hashStr(s){ let h=0; for(let i=0;i<s.length;i++){h=(h*31+s.charCodeAt(i))|0;} return h; }
+
+/* lazy-load thumbnails as they scroll in, and correct the cell aspect to the real image */
+let io=null;
+function lazyObserve(){
+  if(io) io.disconnect();
+  io=new IntersectionObserver((ents)=>{
+    ents.forEach(async e=>{
+      if(!e.isIntersecting) return;
+      const cell=e.target; io.unobserve(cell);
+      try{
+        const url=await photoURL('thumb',cell.dataset.id);
+        const img=cell.querySelector('img');
+        img.onload=()=>img.classList.add('loaded');
+        img.src=url;
+      }catch(err){}
+    });
+  },{rootMargin:'600px'});
+  document.querySelectorAll('.cell').forEach(c=>io.observe(c));
+}
+
+/* ---- fullscreen critique ---- */
+const viewer=document.getElementById('viewer'), vImg=document.getElementById('vImg'), vSpin=document.getElementById('vSpin');
+const vName=document.getElementById('vName'), vMeta=document.getElementById('vMeta'), vEyebrow=document.getElementById('vEyebrow');
+const vIndex=document.getElementById('vIndex'), vTotal=document.getElementById('vTotal');
+const prevBtn=document.getElementById('prevBtn'), nextBtn=document.getElementById('nextBtn');
+
+function openViewer(i){ viewIndex=i; viewer.classList.add('open'); viewer.setAttribute('aria-hidden','false'); document.body.style.overflow='hidden'; showPhoto(); }
+async function showPhoto(){
+  const photos=currentPhotos(), p=photos[viewIndex]; if(!p) return;
+  viewer.classList.remove('miss','show-photo'); vSpin.style.display='block';
+  vEyebrow.textContent='Photographer';
+  vName.textContent=p.student;
+  vMeta.textContent=`${GAL.title}  ·  ${GAL.periods[activePeriod].label}`;
+  vIndex.textContent=viewIndex+1; vTotal.textContent=photos.length;
+  prevBtn.classList.toggle('disabled', viewIndex===0);
+  nextBtn.classList.toggle('disabled', viewIndex===photos.length-1);
+  try{
+    const url=await photoURL('full',p.id);
+    const probe=new Image();
+    probe.onload=()=>{ vImg.src=url; vSpin.style.display='none'; requestAnimationFrame(()=>viewer.classList.add('show-photo')); };
+    probe.onerror=()=>{ vSpin.style.display='none'; };
+    probe.src=url;
+  }catch(e){ vSpin.style.display='none'; }
+  // preload neighbors
+  [viewIndex-1,viewIndex+1].forEach(j=>{ if(photos[j]) photoURL('full',photos[j].id).catch(()=>{}); });
+}
+function nextPhoto(){ const n=currentPhotos().length; if(viewIndex<n-1){viewIndex++;showPhoto();} else stopSlides(); }
+function prevPhoto(){ if(viewIndex>0){viewIndex--;showPhoto();} }
+function closeViewer(){ stopSlides(); viewer.classList.remove('open','show-photo'); viewer.setAttribute('aria-hidden','true'); document.body.style.overflow=''; }
+
+const playChip=document.getElementById('playChip');
+function startSlides(){ stopSlides(); slideTimer=setInterval(nextPhoto,4000);
+  playChip.innerHTML='<svg viewBox="0 0 24 24"><rect x="6" y="5" width="4" height="14" fill="currentColor" stroke="none"/><rect x="14" y="5" width="4" height="14" fill="currentColor" stroke="none"/></svg>'; }
+function stopSlides(){ if(slideTimer){clearInterval(slideTimer);slideTimer=null;}
+  playChip.innerHTML='<svg viewBox="0 0 24 24"><polygon points="7 5 19 12 7 19 7 5" fill="currentColor" stroke="none"/></svg>'; }
+playChip.onclick=()=> slideTimer?stopSlides():startSlides();
+document.getElementById('slideshowBtn').onclick=()=>{ if(!currentPhotos().length)return; openViewer(0); startSlides(); };
+document.getElementById('fsChip').onclick=()=>{ if(!document.fullscreenElement) document.documentElement.requestFullscreen?.(); else document.exitFullscreen?.(); };
+prevBtn.onclick=prevPhoto; nextBtn.onclick=nextPhoto;
+document.getElementById('backBtn').onclick=closeViewer;
+viewer.addEventListener('click',e=>{ if(e.target===viewer||e.target.classList.contains('viewer-stage')||e.target.classList.contains('photo-wrap')) closeViewer(); });
+document.addEventListener('keydown',e=>{
+  if(!viewer.classList.contains('open'))return;
+  if(e.key==='ArrowRight'||e.key===' '){e.preventDefault();nextPhoto();}
+  else if(e.key==='ArrowLeft'){e.preventDefault();prevPhoto();}
+  else if(e.key==='Escape'){closeViewer();}
+  else if(e.key==='f'||e.key==='F'){document.getElementById('fsChip').click();}
+});
+let rsTimer=null;
+window.addEventListener('resize',()=>{ clearTimeout(rsTimer); rsTimer=setTimeout(()=>{ if(GAL) renderPeriod(); },150); });
+
+/* ---- start ---- */
+if(DEV){ document.getElementById('login').style.display='none'; document.getElementById('app').style.display='block'; boot(); }
+else { initFirebase(); }
+</script>
+</body>
+</html>

@@ -82,6 +82,13 @@
     background:linear-gradient(180deg,transparent,rgba(0,0,0,0.78));opacity:0;transform:translateY(6px);transition:all .2s;text-shadow:0 1px 3px rgba(0,0,0,0.6)}
   .cell:hover .name-chip{opacity:1;transform:translateY(0)}
   .cell.miss .name-chip{opacity:1;transform:none}
+  .cell .del-btn{position:absolute;top:7px;right:7px;z-index:4;width:28px;height:28px;border-radius:999px;
+    border:1px solid rgba(255,255,255,0.22);background:rgba(10,12,12,0.62);color:#fff;display:grid;place-items:center;
+    cursor:pointer;opacity:0;transform:scale(.88);transition:opacity .15s,transform .15s,background .15s,border-color .15s;
+    -webkit-backdrop-filter:blur(4px);backdrop-filter:blur(4px)}
+  .cell:hover .del-btn,.cell:focus-within .del-btn{opacity:1;transform:scale(1)}
+  .cell .del-btn:hover{background:#e62429;border-color:#e62429}
+  .cell .del-btn svg{width:15px;height:15px;stroke:currentColor;stroke-width:2.4;fill:none}
   .miss-tag{position:absolute;top:8px;left:8px;background:rgba(0,0,0,0.62);color:#d6dcdc;
     font-size:10px;font-weight:600;letter-spacing:0.02em;padding:3px 8px;border-radius:6px;backdrop-filter:blur(4px)}
   .v-misstag{display:inline-block;margin-top:10px;background:rgba(255,255,255,0.07);border:1px solid rgba(255,255,255,0.14);
@@ -293,10 +300,12 @@ async function googleSignIn(){
   try{ const {signInWithPopup}=await import('https://www.gstatic.com/firebasejs/10.12.0/firebase-auth.js'); await signInWithPopup(window._fbAuth,window._fbProvider); }
   catch(e){ const el=document.getElementById('login-error'); el.textContent=e.message; el.style.display='block'; }
 }
-async function apiFetch(path){
+async function apiFetch(path, opts){
+  opts=opts||{};
   if(!firebaseToken && currentUser) firebaseToken=await currentUser.getIdToken(true);
-  let res=await fetch(path,{headers:{'Authorization':`Bearer ${firebaseToken}`}});
-  if(res.status===401 && currentUser){ firebaseToken=await currentUser.getIdToken(true); res=await fetch(path,{headers:{'Authorization':`Bearer ${firebaseToken}`}}); }
+  const withAuth=()=>Object.assign({},opts,{headers:Object.assign({},opts.headers,{'Authorization':`Bearer ${firebaseToken}`})});
+  let res=await fetch(path,withAuth());
+  if(res.status===401 && currentUser){ firebaseToken=await currentUser.getIdToken(true); res=await fetch(path,withAuth()); }
   return res;
 }
 
@@ -403,8 +412,12 @@ function layoutJustified(wrap, items){
       } else {
         cell.className='cell';
         cell.dataset.sz='thumb'; cell.dataset.id=it.p.id;
-        cell.innerHTML=`<img alt="">${it.p.missing?'<span class="miss-tag">Not submitted yet</span>':''}<div class="name-chip">${it.p.student}</div>`;
+        cell.innerHTML=`<img alt="">${it.p.missing?'<span class="miss-tag">Not submitted yet</span>':''}`
+          +`<button class="del-btn" title="Remove this photo from the gallery" aria-label="Remove photo"><svg viewBox="0 0 24 24"><path d="M6 6l12 12M18 6L6 18"/></svg></button>`
+          +`<div class="name-chip">${it.p.student}</div>`;
         cell.onclick=()=>openViewer(it.gi+1);   // +1: slide 0 is the title card
+        const del=cell.querySelector('.del-btn');
+        del.onclick=(e)=>{ e.stopPropagation(); deletePhoto(it.gi, cell); };   // X on a tile deletes just that photo
       }
       rowEl.appendChild(cell);
     });
@@ -421,6 +434,24 @@ function layoutJustified(wrap, items){
   flush(true);
 }
 function hashStr(s){ let h=0; for(let i=0;i<s.length;i++){h=(h*31+s.charCodeAt(i))|0;} return h; }
+
+/* delete one photo from the gallery (the X on a grid tile). Confirms, calls the authed endpoint,
+   then removes it locally and re-renders so positions + the tab count stay correct. */
+async function deletePhoto(gi, cell){
+  const period=GAL.periods[activePeriod], photo=(period.photos||[])[gi];
+  if(!photo) return;
+  const who=photo.student||'this photo';
+  if(!confirm(`Remove this photo of ${who} from the gallery?\n\nIt will be deleted from the critique and cannot be undone.`)) return;
+  cell.style.pointerEvents='none'; cell.style.opacity='0.35';
+  try{
+    if(!DEV){
+      const res=await apiFetch(`/api/critique/photo/delete?g=${encodeURIComponent(GAL.slug)}&p=${encodeURIComponent(period.key)}&i=${gi}`,{method:'POST'});
+      if(!res.ok){ let msg=res.status; try{ msg=(await res.json()).error||msg; }catch(_){ } alert('Could not remove the photo: '+msg); cell.style.pointerEvents=''; cell.style.opacity=''; return; }
+    }
+    period.photos.splice(gi,1);
+    renderTabs(); renderPeriod();
+  }catch(err){ alert('Could not remove the photo: '+err.message); cell.style.pointerEvents=''; cell.style.opacity=''; }
+}
 
 /* lazy-load thumbnails as they scroll in, and correct the cell aspect to the real image */
 let io=null;

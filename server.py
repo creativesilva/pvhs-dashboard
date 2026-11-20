@@ -55,19 +55,8 @@ ALLOWED_EMAILS = [
     if e.strip()
 ]
 
-# Auto-load roster data from ROSTER_DATA env var (base64+gzip compressed)
-_roster_env = os.environ.get('ROSTER_DATA', '')
-if _roster_env:
-    _roster_path = os.path.join(SERVE_DIR, 'roster_data.json')
-    if not os.path.exists(_roster_path):
-        try:
-            raw = gzip.decompress(base64.b64decode(_roster_env))
-            with open(_roster_path, 'wb') as f:
-                f.write(raw)
-            data = json.loads(raw)
-            print(f'[roster] Auto-loaded from env: {len(data["students"])} students, {len(data["sections"])} sections')
-        except Exception as e:
-            print(f'[roster] Failed to load from env: {e}')
+# Roster data is loaded from the persistent disk (with the ROSTER_DATA env var as a cold-start
+# fallback) just below, once _data_dir() is defined. See ROSTER_PATH.
 
 # Aeries substitute-account data, same base64+gzip env pattern as the roster. Two separate CONFIDENTIAL
 # collections, both gitignored and never in the public repo: accounts (no passwords) + credentials
@@ -183,6 +172,22 @@ def _data_dir():
 
 CHECKOUTS_PATH = os.path.join(_data_dir(), 'checkouts.json')
 _checkouts_lock = threading.Lock()
+
+# Live roster for the Camera Manager / Photo Walk / Attendance. Lives on the persistent disk so an
+# authed /api/roster/upload survives redeploys AND container restarts. The ROSTER_DATA env var is a
+# COLD-START fallback only: it reseeds roster_data.json when the disk copy is absent (first boot on a
+# fresh disk, or no disk mounted). With a disk, dropped students no longer reappear after a deploy.
+ROSTER_PATH = os.path.join(_data_dir(), 'roster_data.json')
+_roster_env = os.environ.get('ROSTER_DATA', '')
+if _roster_env and not os.path.exists(ROSTER_PATH):
+    try:
+        raw = gzip.decompress(base64.b64decode(_roster_env))
+        with open(ROSTER_PATH, 'wb') as f:
+            f.write(raw)
+        data = json.loads(raw)
+        print(f'[roster] Auto-loaded from env (disk copy absent): {len(data["students"])} students, {len(data["sections"])} sections')
+    except Exception as e:
+        print(f'[roster] Failed to load from env: {e}')
 
 # Garcia camera-only roster: persistent-disk file (uploaded via camera endpoint) wins; else seed
 # from the GARCIA_ROSTER env var and persist it to disk so it survives redeploys.
@@ -734,7 +739,7 @@ def _rate_ok(ip, limit=40, window=60):
 
 def _roster_students():
     try:
-        with open(os.path.join(SERVE_DIR, 'roster_data.json')) as f:
+        with open(ROSTER_PATH) as f:
             return json.load(f).get('students', [])
     except Exception:
         return []
@@ -1463,7 +1468,7 @@ class Handler(BaseHTTPRequestHandler):
     # -- Roster data (authenticated) ----------------------------------------
 
     def handle_roster(self):
-        roster_path = os.path.join(SERVE_DIR, 'roster_data.json')
+        roster_path = ROSTER_PATH
         if not os.path.exists(roster_path):
             self.json_response(404, {'error': 'No roster data uploaded'})
             return
@@ -1485,7 +1490,7 @@ class Handler(BaseHTTPRequestHandler):
         if 'students' not in data or 'sections' not in data:
             self.json_response(400, {'error': 'Missing students or sections'})
             return
-        roster_path = os.path.join(SERVE_DIR, 'roster_data.json')
+        roster_path = ROSTER_PATH
         with open(roster_path, 'w') as f:
             json.dump(data, f)
         print(f'[roster] Uploaded: {len(data["students"])} students, {len(data["sections"])} sections')

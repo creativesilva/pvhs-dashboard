@@ -124,6 +124,8 @@
   .photo-wrap img.zoomed{cursor:grab}
   .photo-wrap.grabbing{cursor:grabbing}
   .photo-wrap.grabbing img{cursor:grabbing;transition:none}
+  .photo-wrap.zoom-mode img{cursor:zoom-in}
+  .photo-wrap.zoom-mode.grabbing img{cursor:grabbing}
   .viewer.is-zoomed .info{opacity:0;transition:opacity .2s}
   .zoom-badge{position:absolute;right:clamp(14px,2.5vw,34px);bottom:clamp(78px,12vh,124px);z-index:5;
     background:rgba(0,0,0,0.5);border:1px solid rgba(255,255,255,0.14);color:#e9f1f1;
@@ -172,6 +174,7 @@
   .v-chip{width:42px;height:42px;border-radius:999px;border:1px solid rgba(255,255,255,0.14);background:rgba(0,0,0,0.25);
     color:#e9f1f1;display:grid;place-items:center;cursor:pointer;transition:all .16s;backdrop-filter:blur(6px)}
   .v-chip:hover{background:rgba(10,154,154,0.22);border-color:rgba(10,154,154,0.6)}
+  .v-chip.active{background:rgba(10,154,154,0.34);border-color:rgba(10,154,154,0.85);color:#fff}
   .v-chip svg{width:19px;height:19px;stroke:currentColor;stroke-width:1.8;fill:none}
   .nav-arrow{position:absolute;top:50%;transform:translateY(-50%);z-index:5;width:clamp(48px,4.5vw,66px);height:clamp(48px,4.5vw,66px);
     border-radius:999px;border:1px solid rgba(255,255,255,0.12);background:rgba(0,0,0,0.22);color:#fff;display:grid;place-items:center;
@@ -230,7 +233,7 @@
     <div class="v-top">
       <button class="v-back" id="backBtn"><svg viewBox="0 0 24 24"><path d="M15 18l-6-6 6-6"/></svg> Back to gallery</button>
       <div class="v-tools">
-        <button class="v-chip" id="zoomChip" title="Zoom in (Cmd +, pinch, scroll, or double-click the photo)"><svg viewBox="0 0 24 24"><circle cx="11" cy="11" r="7"/><path d="M21 21l-4.35-4.35M11 8v6M8 11h6"/></svg></button>
+        <button class="v-chip" id="zoomChip" title="Zoom tool: turn on, then click the photo where you want to zoom in (alt-click to zoom out)"><svg viewBox="0 0 24 24"><circle cx="11" cy="11" r="7"/><path d="M21 21l-4.35-4.35M11 8v6M8 11h6"/></svg></button>
         <button class="v-chip" id="playChip" title="Auto-advance"><svg viewBox="0 0 24 24"><polygon points="7 5 19 12 7 19 7 5" fill="currentColor" stroke="none"/></svg></button>
         <button class="v-chip" id="fsChip" title="Full screen"><svg viewBox="0 0 24 24"><path d="M4 9V4h5M20 9V4h-5M4 15v5h5M20 15v5h-5"/></svg></button>
       </div>
@@ -486,11 +489,11 @@ async function showSlide(){
 }
 function nextPhoto(){ const N=currentPhotos().length; if(viewIndex<N){viewIndex++;showSlide();} else stopSlides(); }
 function prevPhoto(){ if(viewIndex>0){viewIndex--;showSlide();} }
-function closeViewer(){ stopSlides(); resetZoom(); viewer.classList.remove('open','show-photo','on-cover'); viewer.setAttribute('aria-hidden','true'); document.body.style.overflow=''; }
+function closeViewer(){ stopSlides(); setZoomMode(false); viewer.classList.remove('open','show-photo','on-cover'); viewer.setAttribute('aria-hidden','true'); document.body.style.overflow=''; }
 
 /* ---- zoom & pan on the current photo (Cmd +/-/0, trackpad pinch, scroll, double-click, drag) ---- */
 const photoWrap=document.querySelector('.photo-wrap'), zoomBadge=document.getElementById('zoomBadge');
-let zScale=1, zTx=0, zTy=0, dragging=false, dragX=0, dragY=0, movedDuringDrag=false;
+let zScale=1, zTx=0, zTy=0, dragging=false, dragX=0, dragY=0, movedDuringDrag=false, zoomMode=false;
 const ZMIN=1, ZMAX=6;
 function applyZoom(animate){
   vImg.style.transition = animate ? 'transform .22s ease' : 'transform 0s';
@@ -524,7 +527,7 @@ photoWrap.addEventListener('wheel',e=>{
   e.preventDefault();
   zoomAt(e.clientX, e.clientY, e.deltaY<0?1.12:1/1.12, false);
 },{passive:false});
-vImg.addEventListener('dblclick',e=>{ e.preventDefault();
+vImg.addEventListener('dblclick',e=>{ if(zoomMode)return; e.preventDefault();
   if(zScale>1.001) resetZoom(); else zoomAt(e.clientX, e.clientY, 2.5, true); });
 photoWrap.addEventListener('pointerdown',e=>{
   if(zScale<=1.001)return;
@@ -540,12 +543,24 @@ photoWrap.addEventListener('pointermove',e=>{
 function endDrag(e){ if(!dragging)return; dragging=false; photoWrap.classList.remove('grabbing'); try{photoWrap.releasePointerCapture(e.pointerId);}catch(_){} }
 photoWrap.addEventListener('pointerup',endDrag);
 photoWrap.addEventListener('pointercancel',endDrag);
-document.getElementById('zoomChip').onclick=()=>{
-  if(viewer.classList.contains('on-cover'))return;
-  const steps=[1,2,3.5], i=steps.findIndex(s=>Math.abs(s-zScale)<0.05);
-  const target=steps[(i+1)%steps.length]||1;
-  zoomAt(null,null, target/zScale, true);
-};
+/* Magnifier = a desktop click-to-zoom tool. Turn it on, then CLICK the spot on the photo to zoom
+   into that exact area (each click goes deeper); alt/right-click zooms back out; drag pans. */
+const zoomChip=document.getElementById('zoomChip');
+function setZoomMode(on){
+  zoomMode=on;
+  zoomChip.classList.toggle('active', on);
+  photoWrap.classList.toggle('zoom-mode', on);
+  if(!on) resetZoom();            // turning the tool off returns the photo to full-fit
+}
+zoomChip.onclick=()=>{ if(viewer.classList.contains('on-cover'))return; setZoomMode(!zoomMode); };
+vImg.addEventListener('click',e=>{
+  if(!zoomMode) return;
+  e.stopPropagation();                               // never let a zoom-click close the viewer
+  if(movedDuringDrag){ movedDuringDrag=false; return; }   // that was a pan, not a click
+  const out = e.altKey||e.shiftKey;
+  zoomAt(e.clientX, e.clientY, out?1/1.7:1.7, true); // zoom into (or out of) the clicked point
+});
+vImg.addEventListener('contextmenu',e=>{ if(!zoomMode)return; e.preventDefault(); zoomAt(e.clientX,e.clientY,1/1.7,true); });
 
 const playChip=document.getElementById('playChip');
 function startSlides(){ stopSlides(); slideTimer=setInterval(nextPhoto,4000);
@@ -559,7 +574,7 @@ prevBtn.onclick=prevPhoto; nextBtn.onclick=nextPhoto;
 document.getElementById('backBtn').onclick=closeViewer;
 viewer.addEventListener('click',e=>{
   if(movedDuringDrag){ movedDuringDrag=false; return; }   // a pan drag, not a click
-  if(zScale>1.001) return;                                 // don't close while zoomed in
+  if(zoomMode || zScale>1.001) return;                     // zoom tool on, or zoomed in -> never close
   if(e.target===viewer||e.target.classList.contains('viewer-stage')||e.target.classList.contains('photo-wrap')) closeViewer();
 });
 // Advance / go back. Presentation clickers act as a keyboard: most remotes send Page Down / Page Up,

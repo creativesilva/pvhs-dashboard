@@ -45,6 +45,11 @@
     color:var(--muted);display:grid;place-items:center;cursor:pointer;transition:all .18s}
   .icon-btn:hover{color:var(--txt);border-color:rgba(10,154,154,0.5);background:rgba(10,154,154,0.10)}
   .icon-btn svg{width:18px;height:18px;fill:none;stroke:currentColor;stroke-width:1.7}
+  .begin-btn{display:inline-flex;align-items:center;gap:9px;height:40px;padding:0 18px;border-radius:999px;
+    border:1px solid rgba(10,154,154,0.45);background:rgba(10,154,154,0.14);color:#d7f0f0;
+    font-size:14px;font-weight:600;cursor:pointer;transition:all .18s;white-space:nowrap}
+  .begin-btn:hover{background:rgba(10,154,154,0.24);border-color:rgba(10,154,154,0.7);color:#fff}
+  .begin-btn svg{width:18px;height:18px;fill:none;stroke:currentColor;stroke-width:1.7}
 
   .tabs{display:flex;gap:4px;margin-top:14px;overflow-x:auto;scrollbar-width:none}
   .tabs::-webkit-scrollbar{display:none}
@@ -102,6 +107,24 @@
   .photo-wrap img{width:100%;height:100%;object-fit:contain;
     opacity:0;transform:scale(.99);transition:opacity .3s,transform .3s}
   .viewer.show-photo .photo-wrap img{opacity:1;transform:scale(1)}
+  /* ---- Title / cover slide: branded card shown as the first slide (up for students on arrival) ---- */
+  .cover-slide{position:absolute;inset:0;z-index:3;display:none;flex-direction:column;align-items:center;justify-content:center;
+    text-align:center;padding:clamp(28px,6vh,70px) clamp(24px,6vw,90px)}
+  .viewer.on-cover .cover-slide{display:flex}
+  .viewer.on-cover .photo-wrap,.viewer.on-cover .info{display:none}
+  .cover-badge{width:clamp(150px,22vh,280px);height:clamp(150px,22vh,280px);border-radius:26px;background:rgba(255,255,255,0.96);
+    display:flex;align-items:center;justify-content:center;margin-bottom:clamp(26px,4.4vh,50px);
+    box-shadow:0 26px 76px rgba(0,0,0,0.5), inset 0 0 0 1px rgba(255,255,255,0.7)}
+  .cover-badge img{width:86%;height:86%;object-fit:contain;display:block}
+  .cover-eyebrow{font-size:clamp(12px,1.3vw,15px);font-weight:700;letter-spacing:0.34em;text-transform:uppercase;color:var(--teal-bright)}
+  .cover-title{font-size:clamp(38px,6.6vw,100px);font-weight:800;letter-spacing:-0.02em;line-height:1.02;
+    margin-top:clamp(13px,2vh,24px);color:#fff;text-shadow:0 4px 44px rgba(0,0,0,0.5)}
+  .cover-school{font-size:clamp(16px,1.9vw,26px);font-weight:600;color:#e3ecec;margin-top:clamp(12px,1.7vh,22px)}
+  .cover-period{display:inline-block;font-size:clamp(13px,1.25vw,17px);font-weight:600;letter-spacing:0.04em;color:#cdd7d7;
+    margin-top:clamp(16px,2.2vh,28px);border:1px solid rgba(255,255,255,0.16);border-radius:999px;
+    padding:9px 22px;background:rgba(255,255,255,0.05)}
+  .cover-hint{position:absolute;bottom:clamp(20px,4vh,40px);left:0;right:0;text-align:center;
+    font-size:12px;font-weight:600;letter-spacing:0.08em;color:var(--muted-dim)}
   .info{position:absolute;left:0;right:0;bottom:0;z-index:4;pointer-events:none;
     padding:78px clamp(28px,5vw,80px) clamp(20px,3.4vh,44px);
     background:linear-gradient(180deg, rgba(5,7,7,0) 0%, rgba(5,7,7,0.42) 58%, rgba(5,7,7,0.74) 100%);
@@ -163,8 +186,9 @@
         </div>
         <div class="bar-actions">
           <select class="gal-switch" id="galSwitch" style="display:none" onchange="selectGallery(this.value)"></select>
-          <button class="icon-btn" id="slideshowBtn" title="Play slideshow" aria-label="Play slideshow">
-            <svg viewBox="0 0 24 24"><polygon points="7 5 19 12 7 19 7 5" fill="currentColor" stroke="none"/></svg>
+          <button class="begin-btn" id="beginBtn" title="Open the title slide, then step through the covers">
+            <svg viewBox="0 0 24 24"><rect x="3" y="4" width="18" height="13" rx="2"/><path d="M8 20h8M12 17v3"/></svg>
+            Begin critique
           </button>
         </div>
       </div>
@@ -190,6 +214,14 @@
     <button class="nav-arrow nav-prev" id="prevBtn" aria-label="Previous"><svg viewBox="0 0 24 24"><path d="M15 18l-6-6 6-6"/></svg></button>
     <button class="nav-arrow nav-next" id="nextBtn" aria-label="Next"><svg viewBox="0 0 24 24"><path d="M9 18l6-6-6-6"/></svg></button>
     <div class="viewer-stage">
+      <div class="cover-slide" id="coverSlide">
+        <div class="cover-badge"><img src="/PV_Logo.png" alt="Pioneer Valley High School"></div>
+        <div class="cover-eyebrow">Class Critique</div>
+        <h1 class="cover-title" id="coverTitle">Critique</h1>
+        <div class="cover-school" id="coverSchool">Pioneer Valley High School</div>
+        <div class="cover-period" id="coverPeriod"></div>
+        <div class="cover-hint">Use the arrow keys to begin &rarr;</div>
+      </div>
       <div class="photo-wrap"><div class="spin" id="vSpin"></div><img id="vImg" alt=""></div>
       <div class="info">
         <div class="info-left">
@@ -336,7 +368,7 @@ function layoutJustified(wrap, items){
       cell.style.width=w+'px'; cell.style.height=h+'px';
       cell.dataset.sz='thumb'; cell.dataset.id=it.p.id;
       cell.innerHTML=`<img alt="">${it.p.missing?'<span class="miss-tag">Not submitted yet</span>':''}<div class="name-chip">${it.p.student}</div>`;
-      cell.onclick=()=>openViewer(it.gi);
+      cell.onclick=()=>openViewer(it.gi+1);   // +1: slide 0 is the title card
       rowEl.appendChild(cell);
     });
     wrap.appendChild(rowEl); row=[]; ratioSum=0;
@@ -377,17 +409,33 @@ const vName=document.getElementById('vName'), vMeta=document.getElementById('vMe
 const vIndex=document.getElementById('vIndex'), vTotal=document.getElementById('vTotal');
 const prevBtn=document.getElementById('prevBtn'), nextBtn=document.getElementById('nextBtn');
 
-function openViewer(i){ viewIndex=i; viewer.classList.add('open'); viewer.setAttribute('aria-hidden','false'); document.body.style.overflow='hidden'; showPhoto(); }
-async function showPhoto(){
-  const photos=currentPhotos(), p=photos[viewIndex]; if(!p) return;
-  viewer.classList.remove('miss','show-photo'); vSpin.style.display='block';
+/* slide model: index 0 is the branded title card, indices 1..N are the photos (photo k-1). */
+function openViewer(i){ viewIndex=i; viewer.classList.add('open'); viewer.setAttribute('aria-hidden','false'); document.body.style.overflow='hidden'; showSlide(); }
+async function showSlide(){
+  const photos=currentPhotos(), N=photos.length;
+  viewer.classList.remove('miss','show-photo','on-cover');
+  if(viewIndex===0){   // title / cover slide
+    const per=GAL.periods[activePeriod]||{};
+    const course=(per.course||'').trim();
+    document.getElementById('coverTitle').textContent=GAL.title||'Critique';
+    document.getElementById('coverSchool').textContent=GAL.subtitle||'Pioneer Valley High School';
+    document.getElementById('coverPeriod').textContent=(per.label||'')+(course?('  ·  '+course):'');
+    viewer.classList.add('on-cover');
+    vSpin.style.display='none';
+    prevBtn.classList.add('disabled');
+    nextBtn.classList.toggle('disabled', N===0);
+    if(photos[0]) photoURL('full',photos[0].id).catch(()=>{});   // warm the first cover
+    return;
+  }
+  const p=photos[viewIndex-1]; if(!p) return;
+  vSpin.style.display='block';
   vEyebrow.textContent='Photographer';
   vName.textContent=p.student;
   vMeta.textContent=`${GAL.title}  ·  ${GAL.periods[activePeriod].label}`;
   document.getElementById('vTag').style.display = p.missing ? 'inline-block' : 'none';
-  vIndex.textContent=viewIndex+1; vTotal.textContent=photos.length;
-  prevBtn.classList.toggle('disabled', viewIndex===0);
-  nextBtn.classList.toggle('disabled', viewIndex===photos.length-1);
+  vIndex.textContent=viewIndex; vTotal.textContent=N;
+  prevBtn.classList.remove('disabled');
+  nextBtn.classList.toggle('disabled', viewIndex===N);
   try{
     const url=await photoURL('full',p.id);
     const probe=new Image();
@@ -395,12 +443,11 @@ async function showPhoto(){
     probe.onerror=()=>{ vSpin.style.display='none'; };
     probe.src=url;
   }catch(e){ vSpin.style.display='none'; }
-  // preload neighbors
-  [viewIndex-1,viewIndex+1].forEach(j=>{ if(photos[j]) photoURL('full',photos[j].id).catch(()=>{}); });
+  [photos[viewIndex-2], photos[viewIndex]].forEach(q=>{ if(q) photoURL('full',q.id).catch(()=>{}); });   // preload neighbors
 }
-function nextPhoto(){ const n=currentPhotos().length; if(viewIndex<n-1){viewIndex++;showPhoto();} else stopSlides(); }
-function prevPhoto(){ if(viewIndex>0){viewIndex--;showPhoto();} }
-function closeViewer(){ stopSlides(); viewer.classList.remove('open','show-photo'); viewer.setAttribute('aria-hidden','true'); document.body.style.overflow=''; }
+function nextPhoto(){ const N=currentPhotos().length; if(viewIndex<N){viewIndex++;showSlide();} else stopSlides(); }
+function prevPhoto(){ if(viewIndex>0){viewIndex--;showSlide();} }
+function closeViewer(){ stopSlides(); viewer.classList.remove('open','show-photo','on-cover'); viewer.setAttribute('aria-hidden','true'); document.body.style.overflow=''; }
 
 const playChip=document.getElementById('playChip');
 function startSlides(){ stopSlides(); slideTimer=setInterval(nextPhoto,4000);
@@ -408,7 +455,7 @@ function startSlides(){ stopSlides(); slideTimer=setInterval(nextPhoto,4000);
 function stopSlides(){ if(slideTimer){clearInterval(slideTimer);slideTimer=null;}
   playChip.innerHTML='<svg viewBox="0 0 24 24"><polygon points="7 5 19 12 7 19 7 5" fill="currentColor" stroke="none"/></svg>'; }
 playChip.onclick=()=> slideTimer?stopSlides():startSlides();
-document.getElementById('slideshowBtn').onclick=()=>{ if(!currentPhotos().length)return; openViewer(0); startSlides(); };
+document.getElementById('beginBtn').onclick=()=>{ if(!currentPhotos().length)return; openViewer(0); };   // open the title card, paused
 document.getElementById('fsChip').onclick=()=>{ if(!document.fullscreenElement) document.documentElement.requestFullscreen?.(); else document.exitFullscreen?.(); };
 prevBtn.onclick=prevPhoto; nextBtn.onclick=nextPhoto;
 document.getElementById('backBtn').onclick=closeViewer;

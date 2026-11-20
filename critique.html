@@ -86,6 +86,19 @@
     font-size:10px;font-weight:600;letter-spacing:0.02em;padding:3px 8px;border-radius:6px;backdrop-filter:blur(4px)}
   .v-misstag{display:inline-block;margin-top:10px;background:rgba(255,255,255,0.07);border:1px solid rgba(255,255,255,0.14);
     color:#cfd6d6;font-size:12px;font-weight:600;letter-spacing:0.02em;padding:5px 12px;border-radius:999px}
+  /* first grid tile: branded title card (opens the fullscreen title slide) */
+  .cover-cell{text-align:center;
+    background:radial-gradient(120% 90% at 50% 8%, rgba(0,116,116,0.55), rgba(0,116,116,0.10) 46%, rgba(7,10,10,0) 74%),
+      linear-gradient(180deg,#0a1313,#070a0a);
+    display:flex;align-items:center;justify-content:center}
+  .cover-cell .cc-inner{display:flex;flex-direction:column;align-items:center;justify-content:center;padding:9% 11%;width:100%}
+  .cover-cell .cc-badge{width:48%;aspect-ratio:1;border-radius:20%;background:rgba(255,255,255,0.96);
+    display:flex;align-items:center;justify-content:center;margin-bottom:9%;box-shadow:0 8px 22px rgba(0,0,0,0.42)}
+  .cover-cell .cc-badge img{width:84%;height:84%;object-fit:contain;opacity:1}
+  .cover-cell .cc-eye{font-size:9px;font-weight:700;letter-spacing:0.2em;text-transform:uppercase;color:var(--teal-bright)}
+  .cover-cell .cc-title{font-size:clamp(13px,1.25vw,20px);font-weight:800;color:#fff;line-height:1.1;margin-top:5px;padding:0 4px}
+  .cover-cell .cc-per{font-size:10px;font-weight:600;color:#cdd7d7;margin-top:9px;border:1px solid rgba(255,255,255,0.18);
+    border-radius:999px;padding:3px 10px;white-space:nowrap}
   .empty{display:grid;place-items:center;min-height:50vh;text-align:center;color:var(--muted-dim);gap:10px}
   .empty svg{width:40px;height:40px;stroke:var(--muted-dim);stroke-width:1.4;fill:none}
 
@@ -376,16 +389,26 @@ function layoutJustified(wrap, items){
     row.forEach(it=>{
       const w=it.ratio*h;
       const cell=document.createElement('div');
-      cell.className='cell';
       cell.style.width=w+'px'; cell.style.height=h+'px';
-      cell.dataset.sz='thumb'; cell.dataset.id=it.p.id;
-      cell.innerHTML=`<img alt="">${it.p.missing?'<span class="miss-tag">Not submitted yet</span>':''}<div class="name-chip">${it.p.student}</div>`;
-      cell.onclick=()=>openViewer(it.gi+1);   // +1: slide 0 is the title card
+      if(it.cover){            // first tile is the branded title card; opens the fullscreen title slide
+        cell.className='cell cover-cell';
+        const per=(GAL.periods[activePeriod]||{}), course=(per.course||'').trim();
+        cell.innerHTML=`<div class="cc-inner"><div class="cc-badge"><img src="/PV_Logo.png" alt=""></div>`+
+          `<div class="cc-eye">Class Critique</div><div class="cc-title">${GAL.title||'Critique'}</div>`+
+          `<div class="cc-per">${(per.label||'')}${course?(' &middot; '+course):''}</div></div>`;
+        cell.onclick=()=>openViewer(0);
+      } else {
+        cell.className='cell';
+        cell.dataset.sz='thumb'; cell.dataset.id=it.p.id;
+        cell.innerHTML=`<img alt="">${it.p.missing?'<span class="miss-tag">Not submitted yet</span>':''}<div class="name-chip">${it.p.student}</div>`;
+        cell.onclick=()=>openViewer(it.gi+1);   // +1: slide 0 is the title card
+      }
       rowEl.appendChild(cell);
     });
     wrap.appendChild(rowEl); row=[]; ratioSum=0;
   };
   const all=currentPhotos();
+  row.push({cover:true, ratio:0.74}); ratioSum+=0.74;   // first grid tile = the title card
   items.forEach((p)=>{
     const gi=all.indexOf(p);
     const ratio=ratioOf(p);
@@ -401,18 +424,20 @@ let io=null;
 function lazyObserve(){
   if(io) io.disconnect();
   io=new IntersectionObserver((ents)=>{
-    ents.forEach(async e=>{
-      if(!e.isIntersecting) return;
-      const cell=e.target; io.unobserve(cell);
-      try{
-        const url=await photoURL('thumb',cell.dataset.id);
-        const img=cell.querySelector('img');
-        img.onload=()=>img.classList.add('loaded');
-        img.src=url;
-      }catch(err){}
-    });
+    ents.forEach(e=>{ if(!e.isIntersecting) return; const cell=e.target; io.unobserve(cell); loadThumb(cell,0); });
   },{rootMargin:'600px'});
-  document.querySelectorAll('.cell').forEach(c=>io.observe(c));
+  document.querySelectorAll('.cell[data-id]').forEach(c=>io.observe(c));   // skip the title-card tile (no thumb)
+}
+// load a tile's thumbnail, retrying a couple times so a transient fetch/decode miss never leaves a black tile
+async function loadThumb(cell, attempt){
+  const id=cell.dataset.id, img=cell.querySelector('img');
+  const retry=()=>{ if(attempt<2){ blobCache.delete(photoKey('thumb',id)); setTimeout(()=>loadThumb(cell,attempt+1), 600*(attempt+1)); } };
+  try{
+    const url=await photoURL('thumb',id);
+    img.onload=()=>img.classList.add('loaded');
+    img.onerror=retry;
+    img.src=url;
+  }catch(err){ retry(); }
 }
 
 /* ---- fullscreen critique ---- */

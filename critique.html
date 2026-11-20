@@ -77,9 +77,10 @@
     background:linear-gradient(180deg,transparent,rgba(0,0,0,0.78));opacity:0;transform:translateY(6px);transition:all .2s;text-shadow:0 1px 3px rgba(0,0,0,0.6)}
   .cell:hover .name-chip{opacity:1;transform:translateY(0)}
   .cell.miss .name-chip{opacity:1;transform:none}
-  .miss-badge{position:absolute;top:8px;left:8px;background:rgba(245,179,1,0.92);color:#231a00;
-    font-size:9px;font-weight:800;letter-spacing:0.1em;text-transform:uppercase;padding:3px 7px;border-radius:5px}
-  .cell.miss img{filter:saturate(0.6) brightness(0.82)}
+  .miss-tag{position:absolute;top:8px;left:8px;background:rgba(0,0,0,0.62);color:#d6dcdc;
+    font-size:10px;font-weight:600;letter-spacing:0.02em;padding:3px 8px;border-radius:6px;backdrop-filter:blur(4px)}
+  .v-misstag{display:inline-block;margin-top:10px;background:rgba(255,255,255,0.07);border:1px solid rgba(255,255,255,0.14);
+    color:#cfd6d6;font-size:12px;font-weight:600;letter-spacing:0.02em;padding:5px 12px;border-radius:999px}
   .empty{display:grid;place-items:center;min-height:50vh;text-align:center;color:var(--muted-dim);gap:10px}
   .empty svg{width:40px;height:40px;stroke:var(--muted-dim);stroke-width:1.4;fill:none}
 
@@ -189,6 +190,7 @@
             <div class="info-eyebrow" id="vEyebrow">Photographer</div>
             <div class="info-name" id="vName">Student Name</div>
             <div class="info-meta" id="vMeta"></div>
+            <span class="v-misstag" id="vTag" style="display:none">Not submitted yet</span>
           </div>
         </div>
         <div class="info-right"><div class="counter"><b id="vIndex">1</b> / <span id="vTotal">1</span></div></div>
@@ -325,7 +327,7 @@ function layoutJustified(wrap, items){
       cell.className='cell';
       cell.style.width=w+'px'; cell.style.height=h+'px';
       cell.dataset.sz='thumb'; cell.dataset.id=it.p.id;
-      cell.innerHTML=`<img alt=""><div class="name-chip">${it.p.student}</div>`;
+      cell.innerHTML=`<img alt="">${it.p.missing?'<span class="miss-tag">Not submitted yet</span>':''}<div class="name-chip">${it.p.student}</div>`;
       cell.onclick=()=>openViewer(it.gi);
       rowEl.appendChild(cell);
     });
@@ -374,6 +376,7 @@ async function showPhoto(){
   vEyebrow.textContent='Photographer';
   vName.textContent=p.student;
   vMeta.textContent=`${GAL.title}  ·  ${GAL.periods[activePeriod].label}`;
+  document.getElementById('vTag').style.display = p.missing ? 'inline-block' : 'none';
   vIndex.textContent=viewIndex+1; vTotal.textContent=photos.length;
   prevBtn.classList.toggle('disabled', viewIndex===0);
   nextBtn.classList.toggle('disabled', viewIndex===photos.length-1);

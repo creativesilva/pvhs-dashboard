@@ -410,7 +410,8 @@ const vIndex=document.getElementById('vIndex'), vTotal=document.getElementById('
 const prevBtn=document.getElementById('prevBtn'), nextBtn=document.getElementById('nextBtn');
 
 /* slide model: index 0 is the branded title card, indices 1..N are the photos (photo k-1). */
-function openViewer(i){ viewIndex=i; viewer.classList.add('open'); viewer.setAttribute('aria-hidden','false'); document.body.style.overflow='hidden'; showSlide(); }
+function openViewer(i){ viewIndex=i; if(document.activeElement&&document.activeElement.blur)document.activeElement.blur();   // so a clicker's Space/Enter never re-fires a focused button
+  viewer.classList.add('open'); viewer.setAttribute('aria-hidden','false'); document.body.style.overflow='hidden'; showSlide(); }
 async function showSlide(){
   const photos=currentPhotos(), N=photos.length;
   viewer.classList.remove('miss','show-photo','on-cover');
@@ -460,12 +461,16 @@ document.getElementById('fsChip').onclick=()=>{ if(!document.fullscreenElement) 
 prevBtn.onclick=prevPhoto; nextBtn.onclick=nextPhoto;
 document.getElementById('backBtn').onclick=closeViewer;
 viewer.addEventListener('click',e=>{ if(e.target===viewer||e.target.classList.contains('viewer-stage')||e.target.classList.contains('photo-wrap')) closeViewer(); });
+// Advance / go back. Presentation clickers act as a keyboard: most remotes send Page Down / Page Up,
+// some send the arrow keys; we also accept Space/Enter (next) and Backspace (prev) so any clicker works.
+const NEXT_KEYS=['ArrowRight','ArrowDown','PageDown',' ','Spacebar','Enter'];
+const PREV_KEYS=['ArrowLeft','ArrowUp','PageUp','Backspace'];
 document.addEventListener('keydown',e=>{
   if(!viewer.classList.contains('open'))return;
-  if(e.key==='ArrowRight'||e.key===' '){e.preventDefault();nextPhoto();}
-  else if(e.key==='ArrowLeft'){e.preventDefault();prevPhoto();}
+  if(NEXT_KEYS.includes(e.key)){e.preventDefault();nextPhoto();}
+  else if(PREV_KEYS.includes(e.key)){e.preventDefault();prevPhoto();}
   else if(e.key==='Escape'){closeViewer();}
-  else if(e.key==='f'||e.key==='F'){document.getElementById('fsChip').click();}
+  else if(e.key==='f'||e.key==='F'){e.preventDefault();document.getElementById('fsChip').click();}
 });
 let rsTimer=null;
 window.addEventListener('resize',()=>{ clearTimeout(rsTimer); rsTimer=setTimeout(()=>{ if(GAL) renderPeriod(); },150); });

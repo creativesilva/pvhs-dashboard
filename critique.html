@@ -104,9 +104,19 @@
     padding:clamp(12px,1.8vh,24px) clamp(14px,1.8vw,30px)}
   /* width/height 100% + object-fit:contain scales the photo UP or down to fill the box, aspect
      preserved, so even a low-resolution submission fills the screen (never capped at native size). */
-  .photo-wrap img{width:100%;height:100%;object-fit:contain;
-    opacity:0;transform:scale(.99);transition:opacity .3s,transform .3s}
-  .viewer.show-photo .photo-wrap img{opacity:1;transform:scale(1)}
+  .photo-wrap img{width:100%;height:100%;object-fit:contain;opacity:0;cursor:zoom-in;
+    transform:scale(1);transform-origin:center center;will-change:transform;
+    transition:opacity .3s ease, transform .22s ease}
+  .viewer.show-photo .photo-wrap img{opacity:1}
+  .photo-wrap img.zoomed{cursor:grab}
+  .photo-wrap.grabbing{cursor:grabbing}
+  .photo-wrap.grabbing img{cursor:grabbing;transition:none}
+  .viewer.is-zoomed .info{opacity:0;transition:opacity .2s}
+  .zoom-badge{position:absolute;right:clamp(14px,2.5vw,34px);bottom:clamp(78px,12vh,124px);z-index:5;
+    background:rgba(0,0,0,0.5);border:1px solid rgba(255,255,255,0.14);color:#e9f1f1;
+    font-size:13px;font-weight:700;padding:6px 12px;border-radius:999px;backdrop-filter:blur(6px);
+    opacity:0;transition:opacity .18s;pointer-events:none;font-variant-numeric:tabular-nums}
+  .zoom-badge.show{opacity:1}
   /* ---- Title / cover slide: branded card shown as the first slide (up for students on arrival) ---- */
   .cover-slide{position:absolute;inset:0;z-index:3;display:none;flex-direction:column;align-items:center;justify-content:center;
     text-align:center;padding:clamp(28px,6vh,70px) clamp(24px,6vw,90px)}
@@ -207,6 +217,7 @@
     <div class="v-top">
       <button class="v-back" id="backBtn"><svg viewBox="0 0 24 24"><path d="M15 18l-6-6 6-6"/></svg> Back to gallery</button>
       <div class="v-tools">
+        <button class="v-chip" id="zoomChip" title="Zoom in (Cmd +, pinch, scroll, or double-click the photo)"><svg viewBox="0 0 24 24"><circle cx="11" cy="11" r="7"/><path d="M21 21l-4.35-4.35M11 8v6M8 11h6"/></svg></button>
         <button class="v-chip" id="playChip" title="Auto-advance"><svg viewBox="0 0 24 24"><polygon points="7 5 19 12 7 19 7 5" fill="currentColor" stroke="none"/></svg></button>
         <button class="v-chip" id="fsChip" title="Full screen"><svg viewBox="0 0 24 24"><path d="M4 9V4h5M20 9V4h-5M4 15v5h5M20 15v5h-5"/></svg></button>
       </div>
@@ -235,6 +246,7 @@
         </div>
         <div class="info-right"><div class="counter"><b id="vIndex">1</b> / <span id="vTotal">1</span></div></div>
       </div>
+      <div class="zoom-badge" id="zoomBadge">100%</div>
     </div>
   </section>
 
@@ -415,6 +427,7 @@ function openViewer(i){ viewIndex=i; if(document.activeElement&&document.activeE
 async function showSlide(){
   const photos=currentPhotos(), N=photos.length;
   viewer.classList.remove('miss','show-photo','on-cover');
+  resetZoom();   // every slide starts fit-to-screen
   if(viewIndex===0){   // title / cover slide
     const per=GAL.periods[activePeriod]||{};
     const course=(per.course||'').trim();
@@ -448,7 +461,66 @@ async function showSlide(){
 }
 function nextPhoto(){ const N=currentPhotos().length; if(viewIndex<N){viewIndex++;showSlide();} else stopSlides(); }
 function prevPhoto(){ if(viewIndex>0){viewIndex--;showSlide();} }
-function closeViewer(){ stopSlides(); viewer.classList.remove('open','show-photo','on-cover'); viewer.setAttribute('aria-hidden','true'); document.body.style.overflow=''; }
+function closeViewer(){ stopSlides(); resetZoom(); viewer.classList.remove('open','show-photo','on-cover'); viewer.setAttribute('aria-hidden','true'); document.body.style.overflow=''; }
+
+/* ---- zoom & pan on the current photo (Cmd +/-/0, trackpad pinch, scroll, double-click, drag) ---- */
+const photoWrap=document.querySelector('.photo-wrap'), zoomBadge=document.getElementById('zoomBadge');
+let zScale=1, zTx=0, zTy=0, dragging=false, dragX=0, dragY=0, movedDuringDrag=false;
+const ZMIN=1, ZMAX=6;
+function applyZoom(animate){
+  vImg.style.transition = animate ? 'transform .22s ease' : 'transform 0s';
+  vImg.style.transform=`translate(${zTx}px,${zTy}px) scale(${zScale})`;
+  const on = zScale>1.001;
+  vImg.classList.toggle('zoomed', on);
+  viewer.classList.toggle('is-zoomed', on);
+  zoomBadge.textContent=Math.round(zScale*100)+'%';
+  zoomBadge.classList.toggle('show', on);
+}
+function clampPan(){
+  const r=photoWrap.getBoundingClientRect();
+  const mx=Math.max(0,(zScale-1)*r.width/2), my=Math.max(0,(zScale-1)*r.height/2);
+  zTx=Math.max(-mx,Math.min(mx,zTx)); zTy=Math.max(-my,Math.min(my,zTy));
+}
+function resetZoom(){ zScale=1; zTx=0; zTy=0; applyZoom(false); }
+function zoomAt(clientX, clientY, factor, animate){
+  if(viewer.classList.contains('on-cover'))return;
+  const r=photoWrap.getBoundingClientRect(), cx=r.left+r.width/2, cy=r.top+r.height/2;
+  const qx=(clientX==null)?0:clientX-cx, qy=(clientY==null)?0:clientY-cy;   // cursor offset from center
+  const prev=zScale;
+  zScale=Math.max(ZMIN,Math.min(ZMAX, zScale*factor));
+  const ratio=zScale/prev;
+  zTx=zTx*ratio + qx*(1-ratio);                 // keep the point under the cursor fixed
+  zTy=zTy*ratio + qy*(1-ratio);
+  if(zScale<=1.001){ zScale=1; zTx=0; zTy=0; }
+  clampPan(); applyZoom(animate);
+}
+photoWrap.addEventListener('wheel',e=>{
+  if(!viewer.classList.contains('open')||viewer.classList.contains('on-cover'))return;
+  e.preventDefault();
+  zoomAt(e.clientX, e.clientY, e.deltaY<0?1.12:1/1.12, false);
+},{passive:false});
+vImg.addEventListener('dblclick',e=>{ e.preventDefault();
+  if(zScale>1.001) resetZoom(); else zoomAt(e.clientX, e.clientY, 2.5, true); });
+photoWrap.addEventListener('pointerdown',e=>{
+  if(zScale<=1.001)return;
+  dragging=true; movedDuringDrag=false; dragX=e.clientX; dragY=e.clientY;
+  photoWrap.classList.add('grabbing'); try{photoWrap.setPointerCapture(e.pointerId);}catch(_){}
+});
+photoWrap.addEventListener('pointermove',e=>{
+  if(!dragging)return;
+  const dx=e.clientX-dragX, dy=e.clientY-dragY;
+  if(Math.abs(dx)+Math.abs(dy)>3) movedDuringDrag=true;
+  dragX=e.clientX; dragY=e.clientY; zTx+=dx; zTy+=dy; clampPan(); applyZoom(false);
+});
+function endDrag(e){ if(!dragging)return; dragging=false; photoWrap.classList.remove('grabbing'); try{photoWrap.releasePointerCapture(e.pointerId);}catch(_){} }
+photoWrap.addEventListener('pointerup',endDrag);
+photoWrap.addEventListener('pointercancel',endDrag);
+document.getElementById('zoomChip').onclick=()=>{
+  if(viewer.classList.contains('on-cover'))return;
+  const steps=[1,2,3.5], i=steps.findIndex(s=>Math.abs(s-zScale)<0.05);
+  const target=steps[(i+1)%steps.length]||1;
+  zoomAt(null,null, target/zScale, true);
+};
 
 const playChip=document.getElementById('playChip');
 function startSlides(){ stopSlides(); slideTimer=setInterval(nextPhoto,4000);
@@ -460,13 +532,23 @@ document.getElementById('beginBtn').onclick=()=>{ if(!currentPhotos().length)ret
 document.getElementById('fsChip').onclick=()=>{ if(!document.fullscreenElement) document.documentElement.requestFullscreen?.(); else document.exitFullscreen?.(); };
 prevBtn.onclick=prevPhoto; nextBtn.onclick=nextPhoto;
 document.getElementById('backBtn').onclick=closeViewer;
-viewer.addEventListener('click',e=>{ if(e.target===viewer||e.target.classList.contains('viewer-stage')||e.target.classList.contains('photo-wrap')) closeViewer(); });
+viewer.addEventListener('click',e=>{
+  if(movedDuringDrag){ movedDuringDrag=false; return; }   // a pan drag, not a click
+  if(zScale>1.001) return;                                 // don't close while zoomed in
+  if(e.target===viewer||e.target.classList.contains('viewer-stage')||e.target.classList.contains('photo-wrap')) closeViewer();
+});
 // Advance / go back. Presentation clickers act as a keyboard: most remotes send Page Down / Page Up,
 // some send the arrow keys; we also accept Space/Enter (next) and Backspace (prev) so any clicker works.
 const NEXT_KEYS=['ArrowRight','ArrowDown','PageDown',' ','Spacebar','Enter'];
 const PREV_KEYS=['ArrowLeft','ArrowUp','PageUp','Backspace'];
 document.addEventListener('keydown',e=>{
   if(!viewer.classList.contains('open'))return;
+  // Zoom the photo with Cmd/Ctrl +, -, 0 (replaces browser page zoom, which can't zoom a fit-to-screen image)
+  if((e.metaKey||e.ctrlKey) && !viewer.classList.contains('on-cover')){
+    if(e.key==='='||e.key==='+'){e.preventDefault(); zoomAt(null,null,1.4,true); return;}
+    if(e.key==='-'||e.key==='_'){e.preventDefault(); zoomAt(null,null,1/1.4,true); return;}
+    if(e.key==='0'){e.preventDefault(); resetZoom(); return;}
+  }
   if(NEXT_KEYS.includes(e.key)){e.preventDefault();nextPhoto();}
   else if(PREV_KEYS.includes(e.key)){e.preventDefault();prevPhoto();}
   else if(e.key==='Escape'){closeViewer();}

@@ -1435,6 +1435,8 @@ class Handler(BaseHTTPRequestHandler):
             self.handle_critique_upload()
         elif path == '/api/critique/delete':
             self.handle_critique_delete()
+        elif path == '/api/critique/photo/delete':
+            self.handle_critique_photo_delete()
         elif path == '/api/batch/grades':
             self.handle_batch_grades()
         elif path == '/api/batch/comments':
@@ -1752,6 +1754,54 @@ class Handler(BaseHTTPRequestHandler):
             shutil.rmtree(target, ignore_errors=True)
         self._write_critique_index()
         self.json_response(200, {'ok': True, 'deleted': slug})
+
+    def handle_critique_photo_delete(self):
+        """Remove ONE photo from a gallery (teacher clicks delete on a grid tile). Identified by the
+        period key + its index in that period's photos list. Also deletes the thumb/full files, but
+        only when no remaining entry still references that id (placeholder images are shared)."""
+        qs = parse_qs(urlparse(self.path).query)
+        slug = qs.get('g', [''])[0]
+        pkey = qs.get('p', [''])[0]
+        try:
+            idx = int(qs.get('i', ['-1'])[0])
+        except ValueError:
+            idx = -1
+        if not _SLUG_RE.match(slug) or idx < 0:
+            self.json_response(400, {'error': 'bad request'}); return
+        mpath = os.path.join(CRITIQUE_DIR, slug, 'manifest.json')
+        if not os.path.isfile(mpath):
+            self.json_response(404, {'error': 'no such gallery'}); return
+        try:
+            with open(mpath) as f:
+                manifest = json.load(f)
+            period = next((p for p in manifest.get('periods', []) if str(p.get('key')) == str(pkey)), None)
+            if period is None:
+                self.json_response(404, {'error': 'no such period'}); return
+            photos = period.get('photos', [])
+            if idx >= len(photos):
+                self.json_response(409, {'error': 'index out of range (gallery changed, reload)'}); return
+            removed = photos.pop(idx)
+            rid = removed.get('id', '')
+            period['submitted'] = sum(1 for ph in photos if not ph.get('missing'))
+            period['missing'] = sum(1 for ph in photos if ph.get('missing'))
+            manifest['updated'] = time.strftime('%Y-%m-%d %H:%M:%S')
+            with open(mpath, 'w') as f:
+                json.dump(manifest, f)
+            # delete the image files only if that id is no longer used anywhere (placeholders are shared)
+            still_used = any(ph.get('id') == rid for p in manifest.get('periods', []) for ph in p.get('photos', []))
+            if rid and not still_used and _PID_RE.match(rid):
+                base = os.path.realpath(os.path.join(CRITIQUE_DIR, slug))
+                for size in ('thumb', 'full'):
+                    fp = os.path.join(CRITIQUE_DIR, slug, size, rid + '.jpg')
+                    if os.path.realpath(fp).startswith(base + os.sep) and os.path.isfile(fp):
+                        os.remove(fp)
+            self._write_critique_index()
+            print(f'[critique] deleted photo {rid} ({removed.get("student","")}) from {slug} period {pkey}')
+            self.json_response(200, {'ok': True, 'id': rid, 'student': removed.get('student', ''),
+                                     'remaining': len(photos)})
+        except Exception as e:
+            print(f'[critique] photo delete failed: {e}')
+            self.json_response(500, {'error': 'delete failed'})
 
     # -- Aeries substitute accounts (authenticated; confidential) -----------
 
